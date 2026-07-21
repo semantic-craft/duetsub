@@ -1,0 +1,856 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DuetSub Overlay UI Prototype</title>
+    <!-- Throwaway prototype: three overlay structures, switchable via ?variant=, for ticket 05 only. -->
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family:
+          Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        background: #08090b;
+        color: #f6f7f8;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 12% 18%, rgba(48, 103, 122, 0.2), transparent 30rem),
+          #08090b;
+      }
+
+      button {
+        font: inherit;
+      }
+
+      .prototype-note {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        min-height: 2.5rem;
+        padding: 0.55rem clamp(1rem, 3vw, 2.5rem);
+        background: #f2c94c;
+        color: #191609;
+        font-size: 0.78rem;
+        font-weight: 750;
+        letter-spacing: 0.03em;
+      }
+
+      .prototype-note span:last-child {
+        font-weight: 560;
+        opacity: 0.72;
+      }
+
+      .lab {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 19rem;
+        gap: 1.25rem;
+        width: min(100% - 2rem, 96rem);
+        margin: 0 auto;
+        padding: 1.5rem 0 7rem;
+      }
+
+      .stage-column {
+        min-width: 0;
+      }
+
+      .title-row {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 0.85rem;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(1.05rem, 2vw, 1.45rem);
+        letter-spacing: -0.02em;
+      }
+
+      .title-row p {
+        margin: 0.25rem 0 0;
+        color: #aeb5bc;
+        font-size: 0.78rem;
+      }
+
+      .fake-cue-badge {
+        flex: none;
+        padding: 0.35rem 0.55rem;
+        border: 1px solid #46505a;
+        border-radius: 999px;
+        color: #cdd3d8;
+        font: 650 0.67rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+
+      .player-shell {
+        display: grid;
+        place-items: center;
+        min-height: min(68vh, 52rem);
+        padding: clamp(0.5rem, 2vw, 1.5rem);
+        border: 1px solid #262b30;
+        border-radius: 1rem;
+        background: #0d1013;
+        overflow: hidden;
+      }
+
+      .player {
+        position: relative;
+        width: min(100%, 74rem);
+        aspect-ratio: 16 / 9;
+        overflow: hidden;
+        border-radius: 0.55rem;
+        background: #132229;
+        box-shadow: 0 1.5rem 5rem rgba(0, 0, 0, 0.45);
+        container-type: size;
+        isolation: isolate;
+        transition: width 180ms ease;
+      }
+
+      .player[data-viewport="window"] {
+        width: min(78%, 58rem);
+      }
+
+      .scene,
+      .scene::before,
+      .scene::after {
+        position: absolute;
+        inset: 0;
+      }
+
+      .scene {
+        z-index: -4;
+        overflow: hidden;
+        background:
+          linear-gradient(180deg, rgba(4, 13, 19, 0.08), rgba(2, 6, 9, 0.35)),
+          radial-gradient(circle at 70% 21%, rgba(207, 226, 212, 0.54) 0 1.5%, transparent 1.8%),
+          linear-gradient(152deg, #315968 0%, #172d38 42%, #0a1217 100%);
+      }
+
+      .player[data-scene="bright"] .scene {
+        background:
+          linear-gradient(180deg, rgba(255, 252, 228, 0.04), rgba(43, 66, 73, 0.08)),
+          radial-gradient(circle at 70% 21%, #fff8cf 0 2.5%, transparent 2.8%),
+          linear-gradient(152deg, #d5e8e8 0%, #91b9c2 48%, #52747c 100%);
+      }
+
+      .player[data-scene="bright"] .scene::before {
+        opacity: 0.52;
+      }
+
+      .player[data-scene="bright"] .scene::after {
+        opacity: 0.72;
+      }
+
+      .scene::before {
+        content: "";
+        top: 56%;
+        background:
+          linear-gradient(100deg, transparent 0 13%, rgba(5, 8, 10, 0.86) 13% 18%, transparent 18% 76%, rgba(2, 5, 8, 0.78) 76% 83%, transparent 83%),
+          linear-gradient(177deg, rgba(126, 152, 157, 0.17), rgba(3, 8, 11, 0.9));
+        clip-path: polygon(0 18%, 100% 0, 100% 100%, 0 100%);
+      }
+
+      .scene::after {
+        content: "";
+        inset: 14% 8% 18% 53%;
+        border-radius: 48% 48% 16% 16%;
+        background:
+          radial-gradient(circle at 50% 14%, #111a1d 0 14%, transparent 14.5%),
+          linear-gradient(90deg, transparent 29%, rgba(8, 12, 14, 0.86) 30% 70%, transparent 71%);
+        filter: blur(0.3px);
+        opacity: 0.94;
+      }
+
+      .scene-label {
+        position: absolute;
+        top: 1rem;
+        left: 1rem;
+        z-index: -1;
+        color: rgba(255, 255, 255, 0.5);
+        font: 650 0.63rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .platform-caption {
+        position: absolute;
+        z-index: 1;
+        left: 50%;
+        bottom: 13%;
+        transform: translateX(-50%);
+        width: max-content;
+        max-width: 75%;
+        padding: 0.2em 0.45em;
+        background: rgba(0, 0, 0, 0.78);
+        color: white;
+        font-size: clamp(0.68rem, 1.35vw, 1.1rem);
+        text-align: center;
+      }
+
+      .platform-caption[hidden] {
+        display: none;
+      }
+
+      .player-controls {
+        position: absolute;
+        z-index: 4;
+        inset: auto 0 0;
+        height: 15%;
+        padding: 0 2.4% 2.2%;
+        display: flex;
+        align-items: end;
+        gap: 0.75rem;
+        background: linear-gradient(transparent, rgba(0, 0, 0, 0.86));
+        color: rgba(255, 255, 255, 0.9);
+      }
+
+      .player-controls[hidden] {
+        display: none;
+      }
+
+      .progress {
+        position: absolute;
+        left: 2.4%;
+        right: 2.4%;
+        bottom: 38%;
+        height: 3px;
+        background: rgba(255, 255, 255, 0.34);
+      }
+
+      .progress::before {
+        content: "";
+        display: block;
+        width: 37%;
+        height: 100%;
+        background: #e50914;
+      }
+
+      .control-icon {
+        font-size: clamp(0.66rem, 1vw, 0.9rem);
+        font-weight: 700;
+      }
+
+      .control-time {
+        margin-left: auto;
+        font: 600 clamp(0.55rem, 0.8vw, 0.72rem)/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+
+      .subtitle-root {
+        --bottom-rest: 8.5%;
+        --bottom-safe: 18%;
+        --bottom-offset: var(--bottom-rest);
+        --zh-size: 1;
+        --en-size: 0.82;
+        position: absolute;
+        z-index: 3;
+        inset: 0;
+        pointer-events: none;
+        color: white;
+        line-height: 1.28;
+        text-align: center;
+      }
+
+      .player[data-controls="on"][data-occlusion="lift"] .subtitle-root {
+        --bottom-offset: var(--bottom-safe);
+      }
+
+      .player[data-controls="on"][data-occlusion="hide"] .subtitle-root {
+        opacity: 0.08;
+      }
+
+      .cue-group,
+      .cue-lane {
+        position: absolute;
+        left: 50%;
+        width: min(90%, 66rem);
+        transform: translateX(-50%);
+      }
+
+      .cue-group[data-zone="bottom"],
+      .cue-lane[data-zone="bottom"] {
+        bottom: var(--bottom-offset);
+      }
+
+      .cue-group[data-zone="top"],
+      .cue-lane[data-zone="top"] {
+        top: 8%;
+      }
+
+      .cue-line {
+        width: fit-content;
+        max-width: 100%;
+        margin-inline: auto;
+        font-weight: 690;
+        letter-spacing: 0.005em;
+        text-wrap: balance;
+      }
+
+      .cue-line[data-language="zh"] {
+        font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+        font-size: calc(clamp(0.86rem, 6.2cqh, 2.5rem) * var(--zh-size));
+      }
+
+      .cue-line[data-language="en"] {
+        font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: calc(clamp(0.86rem, 6.2cqh, 2.5rem) * var(--en-size));
+      }
+
+      .cue-line + .cue-line {
+        margin-top: var(--line-gap, 0.2em);
+      }
+
+      .cue-line[data-mt-style="subtle"] {
+        color: #d7e2e7;
+        font-weight: 580;
+        opacity: 0.82;
+      }
+
+      .mt-label {
+        display: inline-flex;
+        margin-inline-end: 0.45em;
+        padding: 0.16em 0.36em;
+        transform: translateY(-0.12em);
+        border: 1px solid currentColor;
+        border-radius: 0.3em;
+        font: 760 0.43em/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+        letter-spacing: 0.06em;
+        opacity: 0.76;
+        vertical-align: middle;
+      }
+
+      /* A — a compact, outlined group. */
+      .subtitle-root[data-variant="A"] .cue-group,
+      .subtitle-root[data-variant="A"] .cue-lane {
+        width: min(88%, 62rem);
+      }
+
+      .subtitle-root[data-variant="A"] .cue-line {
+        text-shadow:
+          -1px -1px 0 rgba(0, 0, 0, 0.96),
+          1px -1px 0 rgba(0, 0, 0, 0.96),
+          -1px 1px 0 rgba(0, 0, 0, 0.96),
+          1px 1px 0 rgba(0, 0, 0, 0.96),
+          0 0.12em 0.32em rgba(0, 0, 0, 0.94);
+      }
+
+      /* B — one compact panel groups both language tracks. */
+      .subtitle-root[data-variant="B"] .cue-group,
+      .subtitle-root[data-variant="B"] .cue-lane {
+        width: max-content;
+        max-width: 90%;
+        padding: 0.34em 0.68em 0.42em;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 0.28em;
+        background: rgba(5, 8, 10, 0.7);
+        box-shadow: 0 0.2em 1em rgba(0, 0, 0, 0.34);
+        backdrop-filter: blur(2px);
+      }
+
+      /* C — a full-width safe-area band treats both tracks as one surface. */
+      .subtitle-root[data-variant="C"] .cue-group {
+        width: 100%;
+        padding: 1.1% 7% 1.35%;
+        background: linear-gradient(90deg, transparent, rgba(0, 0, 0, 0.72) 16% 84%, transparent);
+      }
+
+      .subtitle-root[data-variant="C"] .cue-lane {
+        width: 100%;
+        padding: 0.8% 7% 1%;
+        background: linear-gradient(90deg, transparent, rgba(0, 0, 0, 0.72) 16% 84%, transparent);
+      }
+
+      .subtitle-root[data-variant="C"] .cue-line {
+        width: 100%;
+        text-shadow: 0 2px 5px rgba(0, 0, 0, 0.95);
+      }
+
+      .sidebar {
+        align-self: start;
+        position: sticky;
+        top: 1rem;
+        display: grid;
+        gap: 0.75rem;
+        max-height: calc(100vh - 2rem);
+        overflow: auto;
+        padding-right: 0.2rem;
+      }
+
+      .panel {
+        padding: 0.85rem;
+        border: 1px solid #2b3137;
+        border-radius: 0.75rem;
+        background: rgba(17, 20, 24, 0.94);
+      }
+
+      .panel h2 {
+        margin: 0 0 0.7rem;
+        color: #e8ebee;
+        font-size: 0.78rem;
+      }
+
+      .control-group + .control-group {
+        margin-top: 0.72rem;
+      }
+
+      .control-group > span {
+        display: block;
+        margin-bottom: 0.3rem;
+        color: #949da6;
+        font-size: 0.65rem;
+        font-weight: 680;
+      }
+
+      .segmented {
+        display: grid;
+        grid-auto-flow: column;
+        grid-auto-columns: 1fr;
+        gap: 2px;
+        padding: 2px;
+        border-radius: 0.45rem;
+        background: #090b0d;
+      }
+
+      .segmented button {
+        min-width: 0;
+        padding: 0.38rem 0.3rem;
+        border: 0;
+        border-radius: 0.34rem;
+        background: transparent;
+        color: #98a1aa;
+        font-size: 0.62rem;
+        cursor: pointer;
+      }
+
+      .segmented button[aria-pressed="true"] {
+        background: #283139;
+        color: white;
+      }
+
+      .state-panel pre {
+        margin: 0;
+        overflow: auto;
+        color: #9dd5bd;
+        font: 0.61rem/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+        white-space: pre-wrap;
+      }
+
+      .switcher {
+        position: fixed;
+        z-index: 20;
+        left: 50%;
+        bottom: 1.25rem;
+        transform: translateX(-50%);
+        display: grid;
+        grid-template-columns: 2.5rem minmax(12rem, auto) 2.5rem;
+        align-items: center;
+        padding: 0.25rem;
+        border: 1px solid #53606b;
+        border-radius: 999px;
+        background: rgba(8, 10, 12, 0.94);
+        box-shadow: 0 0.75rem 2.5rem rgba(0, 0, 0, 0.55);
+        backdrop-filter: blur(12px);
+      }
+
+      .switcher button {
+        width: 2.5rem;
+        height: 2.5rem;
+        border: 0;
+        border-radius: 50%;
+        background: transparent;
+        color: white;
+        font-size: 1.15rem;
+        cursor: pointer;
+      }
+
+      .switcher button:hover {
+        background: #252c32;
+      }
+
+      .variant-name {
+        padding-inline: 0.65rem;
+        text-align: center;
+        font-size: 0.74rem;
+        font-weight: 720;
+      }
+
+      @media (max-width: 980px) {
+        .lab {
+          grid-template-columns: 1fr;
+        }
+
+        .sidebar {
+          position: static;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          max-height: none;
+          overflow: visible;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .prototype-note span:last-child,
+        .fake-cue-badge {
+          display: none;
+        }
+
+        .lab {
+          width: min(100% - 1rem, 96rem);
+          padding-top: 0.8rem;
+        }
+
+        .player-shell {
+          min-height: 17rem;
+          padding: 0.25rem;
+        }
+
+        .player[data-viewport="window"] {
+          width: 92%;
+        }
+
+        .sidebar {
+          grid-template-columns: 1fr;
+        }
+
+        .switcher {
+          grid-template-columns: 2.5rem minmax(10rem, auto) 2.5rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="prototype-note">
+      <span>THROWAWAY PROTOTYPE · Ticket 05 · 假 cue</span>
+      <span>所有默认值仅供观察，不代表已拍板</span>
+    </header>
+
+    <main class="lab">
+      <section class="stage-column" aria-label="播放器模拟画面">
+        <div class="title-row">
+          <div>
+            <h1>DuetSub 双字幕 overlay</h1>
+            <p>切换右侧条件，观察同一组繁体中文样本在窗口与全屏下的表现。</p>
+          </div>
+          <span class="fake-cue-badge">cue 00:42:18.200 → 00:42:21.600</span>
+        </div>
+
+        <div class="player-shell">
+          <div class="player" id="player">
+            <div class="scene"><span class="scene-label">simulated video frame · taipei rain</span></div>
+            <div class="platform-caption" id="platform-caption">I thought you said we'd meet here.</div>
+            <div class="subtitle-root" id="subtitle-root" aria-live="polite"></div>
+            <div class="player-controls" id="player-controls">
+              <span class="progress"></span>
+              <span class="control-icon">▶</span>
+              <span class="control-icon">🔊</span>
+              <span class="control-time">42:18 / 51:04</span>
+              <span class="control-icon">CC</span>
+              <span class="control-icon">⛶</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="sidebar" aria-label="原型状态控制">
+        <section class="panel">
+          <h2>观察条件</h2>
+          <div class="control-group">
+            <span>画面宽度</span>
+            <div class="segmented" data-control="viewport">
+              <button data-value="window">窗口</button>
+              <button data-value="full">全屏</button>
+            </div>
+          </div>
+          <div class="control-group">
+            <span>画面明暗</span>
+            <div class="segmented" data-control="scene">
+              <button data-value="dark">暗场</button>
+              <button data-value="bright">亮场</button>
+            </div>
+          </div>
+          <div class="control-group">
+            <span>播放器控件</span>
+            <div class="segmented" data-control="controls">
+              <button data-value="off">隐藏</button>
+              <button data-value="on">显示</button>
+            </div>
+          </div>
+          <div class="control-group">
+            <span>平台原生字幕层</span>
+            <div class="segmented" data-control="native">
+              <button data-value="hidden">隐藏</button>
+              <button data-value="visible">保留</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>双语排版</h2>
+          <div class="control-group">
+            <span>行序</span>
+            <div class="segmented" data-control="order">
+              <button data-value="zh-en">中文 / English</button>
+              <button data-value="en-zh">English / 中文</button>
+            </div>
+          </div>
+          <div class="control-group">
+            <span>两行间距</span>
+            <div class="segmented" data-control="gap">
+              <button data-value="tight">紧</button>
+              <button data-value="normal">中</button>
+              <button data-value="loose">松</button>
+            </div>
+          </div>
+          <div class="control-group">
+            <span>字号比例</span>
+            <div class="segmented" data-control="scale">
+              <button data-value="zh-large">中 100 / 英 82</button>
+              <button data-value="equal">同字号</button>
+              <button data-value="en-large">中 82 / 英 100</button>
+            </div>
+          </div>
+          <div class="control-group">
+            <span>机翻行</span>
+            <div class="segmented" data-control="machine">
+              <button data-value="none">双官方</button>
+              <button data-value="zh">中文 MT</button>
+              <button data-value="en">English MT</button>
+            </div>
+          </div>
+          <div class="control-group">
+            <span>机翻视觉区分</span>
+            <div class="segmented" data-control="mtStyle">
+              <button data-value="plain">同样式</button>
+              <button data-value="subtle">仅淡色</button>
+              <button data-value="label">加 MT 标</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>定位与遮挡</h2>
+          <div class="control-group">
+            <span>cue position 情境</span>
+            <div class="segmented" data-control="cuePosition">
+              <button data-value="bottom">均 bottom</button>
+              <button data-value="zh-top">中文 top</button>
+              <button data-value="en-top">英文 top</button>
+              <button data-value="both-top">均 top</button>
+            </div>
+          </div>
+          <div class="control-group">
+            <span>遇到 top cue</span>
+            <div class="segmented" data-control="topPolicy">
+              <button data-value="group">整组上移</button>
+              <button data-value="preserve">两轨分开</button>
+              <button data-value="bottom">仍在底部</button>
+            </div>
+          </div>
+          <div class="control-group">
+            <span>控件出现时</span>
+            <div class="segmented" data-control="occlusion">
+              <button data-value="lift">上抬避让</button>
+              <button data-value="fixed">位置不动</button>
+              <button data-value="hide">暂时隐藏</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel state-panel">
+          <h2>当前完整状态（同步 URL）</h2>
+          <pre id="state-output"></pre>
+        </section>
+      </aside>
+    </main>
+
+    <nav class="switcher" aria-label="原型方案切换">
+      <button id="previous-variant" aria-label="上一个方案">←</button>
+      <div class="variant-name" id="variant-name"></div>
+      <button id="next-variant" aria-label="下一个方案">→</button>
+    </nav>
+
+    <script>
+      const variants = {
+        A: "描边字幕组",
+        B: "紧凑背景板",
+        C: "影院安全带",
+      };
+
+      const defaults = {
+        variant: "B",
+        viewport: "window",
+        scene: "dark",
+        controls: "on",
+        native: "hidden",
+        order: "en-zh",
+        gap: "tight",
+        scale: "zh-large",
+        machine: "none",
+        mtStyle: "subtle",
+        cuePosition: "bottom",
+        topPolicy: "group",
+        occlusion: "lift",
+      };
+
+      const player = document.querySelector("#player");
+      const root = document.querySelector("#subtitle-root");
+      const nativeCaption = document.querySelector("#platform-caption");
+      const playerControls = document.querySelector("#player-controls");
+      const variantName = document.querySelector("#variant-name");
+      const stateOutput = document.querySelector("#state-output");
+
+      function readState() {
+        const params = new URLSearchParams(location.search);
+        const state = { ...defaults };
+        for (const key of Object.keys(defaults)) {
+          if (params.has(key)) state[key] = params.get(key);
+        }
+        if (!variants[state.variant]) state.variant = defaults.variant;
+        return state;
+      }
+
+      function writeState(patch) {
+        const state = { ...readState(), ...patch };
+        const params = new URLSearchParams();
+        for (const [key, value] of Object.entries(state)) params.set(key, value);
+        history.replaceState(null, "", `${location.pathname}?${params.toString()}`);
+        render();
+      }
+
+      function makeLine(language, state) {
+        const line = document.createElement("div");
+        const isZh = language === "zh";
+        const isMachine = state.machine === language;
+        line.className = "cue-line";
+        line.dataset.language = language;
+        line.dataset.machine = String(isMachine);
+        line.dataset.mtStyle = isMachine ? state.mtStyle : "none";
+        line.lang = isZh ? "zh-Hant" : "en";
+
+        if (isMachine && state.mtStyle === "label") {
+          const label = document.createElement("span");
+          label.className = "mt-label";
+          label.textContent = "MT";
+          line.append(label);
+        }
+
+        line.append(
+          document.createTextNode(
+            isZh
+              ? "記憶帶我們回到臺北的雨夜裡。"
+              : "Memory brought us back to that rainy night in Taipei.",
+          ),
+        );
+        return line;
+      }
+
+      function orderedLanguages(state) {
+        return state.order === "zh-en" ? ["zh", "en"] : ["en", "zh"];
+      }
+
+      function cueZones(state) {
+        if (state.cuePosition === "zh-top") return { zh: "top", en: "bottom" };
+        if (state.cuePosition === "en-top") return { zh: "bottom", en: "top" };
+        if (state.cuePosition === "both-top") return { zh: "top", en: "top" };
+        return { zh: "bottom", en: "bottom" };
+      }
+
+      function renderCues(state) {
+        root.replaceChildren();
+        const languages = orderedLanguages(state);
+        const zones = cueZones(state);
+        const hasTop = Object.values(zones).includes("top");
+
+        if (state.topPolicy === "preserve" && zones.zh !== zones.en) {
+          for (const zone of ["top", "bottom"]) {
+            const lane = document.createElement("div");
+            lane.className = "cue-lane";
+            lane.dataset.zone = zone;
+            for (const language of languages.filter((item) => zones[item] === zone)) {
+              lane.append(makeLine(language, state));
+            }
+            root.append(lane);
+          }
+          return;
+        }
+
+        const group = document.createElement("div");
+        group.className = "cue-group";
+        group.dataset.zone =
+          state.topPolicy === "bottom" ? "bottom" : hasTop ? "top" : "bottom";
+        for (const language of languages) group.append(makeLine(language, state));
+        root.append(group);
+      }
+
+      function render() {
+        const state = readState();
+        player.dataset.viewport = state.viewport;
+        player.dataset.scene = state.scene;
+        player.dataset.controls = state.controls;
+        player.dataset.occlusion = state.occlusion;
+        root.dataset.variant = state.variant;
+        root.style.setProperty("--line-gap", state.gap === "tight" ? "0.1em" : state.gap === "loose" ? "0.48em" : "0.24em");
+        root.style.setProperty("--zh-size", state.scale === "en-large" ? "0.82" : "1");
+        root.style.setProperty("--en-size", state.scale === "zh-large" ? "0.82" : "1");
+        nativeCaption.hidden = state.native === "hidden";
+        playerControls.hidden = state.controls === "off";
+        variantName.textContent = `${state.variant} — ${variants[state.variant]}`;
+        renderCues(state);
+
+        document.querySelectorAll("[data-control]").forEach((group) => {
+          const key = group.dataset.control;
+          group.querySelectorAll("button").forEach((button) => {
+            button.setAttribute("aria-pressed", String(button.dataset.value === state[key]));
+          });
+        });
+
+        stateOutput.textContent = JSON.stringify(
+          {
+            ...state,
+            cue: {
+              start: 2538200,
+              end: 2541600,
+              language: ["zh-Hant", "en"],
+              positionScenario: state.cuePosition,
+            },
+            zhFont: 'lang="zh-Hant" · Noto Sans TC → PingFang TC',
+          },
+          null,
+          2,
+        );
+        window.__DUETSUB_PROTOTYPE_STATE__ = state;
+      }
+
+      function cycleVariant(offset) {
+        const keys = Object.keys(variants);
+        const current = keys.indexOf(readState().variant);
+        writeState({ variant: keys[(current + offset + keys.length) % keys.length] });
+      }
+
+      document.querySelectorAll("[data-control] button").forEach((button) => {
+        button.addEventListener("click", () => {
+          writeState({ [button.closest("[data-control]").dataset.control]: button.dataset.value });
+        });
+      });
+
+      document.querySelector("#previous-variant").addEventListener("click", () => cycleVariant(-1));
+      document.querySelector("#next-variant").addEventListener("click", () => cycleVariant(1));
+      window.addEventListener("keydown", (event) => {
+        const target = event.target;
+        if (target.matches("input, textarea, [contenteditable]")) return;
+        if (event.key === "ArrowLeft") cycleVariant(-1);
+        if (event.key === "ArrowRight") cycleVariant(1);
+      });
+      window.addEventListener("popstate", render);
+      render();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,101 @@
+{
+  "capturedOn": "2026-07-22",
+  "territory": "SG",
+  "availability": {
+    "accountPlayable": true,
+    "requestedHost": "play.max.com",
+    "redirectedToHost": "play.hbomax.com",
+    "matchPattern": "https://play.hbomax.com/*"
+  },
+  "title": {
+    "localized": "龙族前传",
+    "english": "House of the Dragon",
+    "episode": "第 1 季第 1 集：龙的传人 / The Heirs of the Dragon"
+  },
+  "subtitleMenu": {
+    "labelsObserved": [
+      "英语",
+      "英语 CC",
+      "中文（简体）",
+      "中文（繁体）",
+      "印度尼西亚语",
+      "泰语",
+      "马来语"
+    ],
+    "trackIdsObserved": [
+      "en-US-subtitles",
+      "en-US-closedcaptions",
+      "zh-Hans-SG-subtitles",
+      "zh-Hant-TW-subtitles"
+    ],
+    "switchSequence": [
+      "中文（繁体）",
+      "英语"
+    ]
+  },
+  "subtitleResponse": {
+    "trackLabel": "英语",
+    "captureMethod": "PerformanceResourceTiming identified the real XHR resource; the same resource URL was fetched in the page to retain a short response sample.",
+    "urlShape": {
+      "scheme": "https",
+      "host": "akm.asia.prd.media.max.com",
+      "path": "/f67bb4c7-3d18-4730-b9d8-6160c4340689/t/6ae640/t16/1.vtt",
+      "queryKeys": [
+        "CMCD"
+      ],
+      "queryValuesStored": false
+    },
+    "initiatorType": "xmlhttprequest",
+    "status": 200,
+    "mimeType": "text/vtt",
+    "format": "WebVTT",
+    "performanceDecodedBodyBytes": 15023,
+    "fetchedTextCharacters": 15019,
+    "bodyHead": [
+      "WEBVTT",
+      "X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:0",
+      "",
+      "00:00:11.177 --> 00:00:13.847 position:50%",
+      "<i>As the first century</i>",
+      "<i>of the Targaryen dynasty</i>",
+      "",
+      "00:00:13.930 --> 00:00:15.598 position:50%",
+      "<i>came to a close,</i>"
+    ]
+  },
+  "playerSeams": {
+    "clock": "video.currentTime",
+    "videoSelector": "[data-testid=\"VideoElement\"]",
+    "videoTextTracksLength": 0,
+    "legacyCueContainer": {
+      "selector": "[data-testid=\"CueBoxContainer\"]",
+      "present": false
+    },
+    "currentCueContainer": {
+      "selector": "[data-testid=\"caption_renderer_overlay\"]",
+      "present": true
+    },
+    "controlsInsertionPoint": {
+      "selector": "[data-testid=\"playback_controls\"]",
+      "present": true
+    }
+  },
+  "timelineObservations": {
+    "seek": {
+      "action": "player control +10 seconds while paused",
+      "beforeSeconds": 81.536053,
+      "afterSeconds": 91.536,
+      "captionRendererPresentBeforeAndAfter": true
+    },
+    "episodeChange": {
+      "from": "第 1 季第 1 集：龙的传人",
+      "to": "第 1 季第 2 集：流氓王子",
+      "navigation": "in-player episode drawer / SPA URL change",
+      "videoElementReplaced": true,
+      "destinationResumedAtSeconds": 1437.989538,
+      "captionRendererPresentAfter": true,
+      "playbackControlsPresentAfter": true
+    },
+    "ads": "no ad was observed in this capture"
+  }
+}

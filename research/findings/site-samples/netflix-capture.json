@@ -1,0 +1,80 @@
+{
+  "capturedOn": "2026-07-22",
+  "territory": "SG",
+  "page": {
+    "host": "www.netflix.com",
+    "matchPattern": "https://www.netflix.com/*",
+    "watchId": "81262752"
+  },
+  "title": {
+    "localized": "魷魚遊戲",
+    "english": "Squid Game",
+    "episode": "第 1 季第 4 集：即使被困住也要選邊站"
+  },
+  "subtitleMenu": {
+    "labelsObserved": [
+      "中文（繁體）",
+      "中文（簡體）",
+      "英語 (CC)",
+      "英語",
+      "韓語 (CC)",
+      "馬來語"
+    ],
+    "switchSequence": [
+      "中文（繁體）",
+      "英語 (CC)",
+      "中文（繁體）"
+    ]
+  },
+  "subtitleResponse": {
+    "trackLabel": "英語 (CC)",
+    "requestId": "26887.530",
+    "urlShape": {
+      "scheme": "https",
+      "host": "ipv4-c110-sin001-ix.1.oca.nflxvideo.net",
+      "path": "/",
+      "queryKeys": [
+        "o",
+        "v",
+        "e",
+        "t"
+      ],
+      "queryValuesStored": false
+    },
+    "status": 200,
+    "mimeType": "text/xml",
+    "format": "TTML / IMSC 1.1 text profile",
+    "responseCharacters": 106837,
+    "bodyHead": [
+      "<?xml version=\"1.0\" encoding=\"utf-8\"?>",
+      "<tt ttp:contentProfiles=\"http://www.w3.org/ns/ttml/profile/imsc1.1/text\" xmlns=\"http://www.w3.org/ns/ttml\" xmlns:nttm=\"http://www.netflix.com/ns/ttml#metadata\" xmlns:ttp=\"http://www.w3.org/ns/ttml#parameter\" xmlns:tts=\"http://www.w3.org/ns/ttml#styling\" ttp:tickRate=\"10000000\" ttp:timeBase=\"media\" xml:lang=\"en\">",
+      "<head>",
+      "<metadata nttm:Smpte24TimingAdjusted=\"true\" nttm:schemaVersion=\"0\" nttm:textType=\"CC\" nttm:uuid=\"3e54a633-bfe9-462a-92f4-36e5f29828f8\"/>"
+    ]
+  },
+  "playerSeams": {
+    "clock": "video.currentTime",
+    "videoTextTracksLength": 0,
+    "nativeSubtitleContainer": {
+      "selector": ".player-timedtext",
+      "present": true
+    }
+  },
+  "timelineObservations": {
+    "seek": {
+      "action": "player control +10 seconds while paused",
+      "beforeSeconds": 1653.22494,
+      "afterSeconds": 1663.226,
+      "playerTimedtextPresentBeforeAndAfter": true,
+      "videoTextTracksLengthBeforeAndAfter": 0,
+      "cueAlignmentConclusion": "not asserted; the paused destination had no visible cue"
+    },
+    "episodeChange": "not exercised in this capture",
+    "ads": "no ad was observed in this capture"
+  },
+  "limitations": [
+    "No timedtexttracks manifest object was observed in the page JSON.parse seam; current parsing appears to happen earlier or in a worker.",
+    "The directly observed reliable seam was the timed-text TTML response emitted by switching tracks.",
+    "The OCA request query values are signed or expiring and are intentionally omitted from this fixture."
+  ]
+}

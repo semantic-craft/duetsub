@@ -1,0 +1,83 @@
+{
+  "capturedOn": "2026-07-22",
+  "territory": "SG",
+  "page": {
+    "host": "www.primevideo.com",
+    "storefrontPathPrefix": "/region/eu/",
+    "matchPattern": "https://www.primevideo.com/*",
+    "detailId": "0TUVXIO58IUNEPNBF8363Z7YGL"
+  },
+  "title": {
+    "localized": "指环王：力量之戒",
+    "english": "The Lord of the Rings: The Rings of Power",
+    "episode": "第 1 季第 1 集：往昔阴影"
+  },
+  "subtitleMenu": {
+    "labelsObserved": [
+      "English [CC]",
+      "中文（简体）",
+      "中文（繁體）"
+    ],
+    "switchSequence": [
+      "中文（繁體）",
+      "English [CC]"
+    ]
+  },
+  "subtitleResponse": {
+    "trackLabel": "English [CC]",
+    "requestId": "32488.1102",
+    "urlShape": {
+      "scheme": "https",
+      "host": "cf-timedtext.aux.pv-cdn.net",
+      "path": "/4fc1/fbd6/6859/47cc-a686-8f0429f9d87c/04ca1d28-6ff1-47d3-80f3-12267f525b77.ttml2",
+      "queryKeys": []
+    },
+    "status": 200,
+    "mimeType": "application/octet-stream",
+    "format": "TTML2 / EBU-TT family",
+    "responseBytes": 74664,
+    "bodyHead": [
+      "<?xml version=\"1.0\" encoding=\"utf-8\"?>",
+      "<tt xmlns=\"http://www.w3.org/ns/ttml\" xmlns:tts=\"http://www.w3.org/ns/ttml#styling\" ttp:version=\"2\" xmlns:ttm=\"http://www.w3.org/ns/ttml#metadata\" xmlns:ttp=\"http://www.w3.org/ns/ttml#parameter\" xml:lang=\"en-US\">",
+      " <head>",
+      "  <styling>",
+      "   <style xml:id=\"s0\" tts:fontFamily=\"sansSerif\" tts:fontStyle=\"italic\" tts:color=\"white\" tts:fontWeight=\"normal\" tts:fontSize=\"100%\"></style>",
+      "   <p begin=\"00:00:22.708\" end=\"00:00:24.708\" region=\"r0\">[Galadriel]<span style=\"s0\"> Nothing is evil</span>…</p>"
+    ]
+  },
+  "playerSeams": {
+    "clockSelector": "#dv-web-player video",
+    "clockSelectorPresent": true,
+    "videoTextTracksLength": 0,
+    "subtitleMenuControlAccessibleName": "Subtitles and Audio Menu"
+  },
+  "playbackApiObservation": {
+    "getPlaybackResourcesObserved": false,
+    "currentSessionEndpoint": "POST /cdp/playback/pes/StartSession",
+    "requestTopLevelKeysObserved": [
+      "sessionHandoff",
+      "playbackEnvelope",
+      "streamInfo",
+      "userWatchSessionId"
+    ],
+    "responseTopLevelKeysObserved": [
+      "callbackIntervalInSeconds",
+      "sessionToken"
+    ],
+    "implication": "The 2026 player exposes track files at request time, but the former readable subtitleUrls contract was not present; playbackEnvelope was opaque. Ticket 07 must not assume GetPlaybackResources is still the enumeration seam."
+  },
+  "timelineObservations": {
+    "clockProbe": {
+      "durationSeconds": 4022.4,
+      "videoCount": 1,
+      "videoTextTracksLength": 0
+    },
+    "seek": "not concluded because temporary parallel playback sessions hit Prime Video's stream-count limit",
+    "episodeChange": "not concluded for the same reason",
+    "ads": "no ad was triggered, so no claim is made about cue alignment across an ad break"
+  },
+  "limitations": [
+    "The subtitle response was captured from the real track-switch request; no signed credentials are stored.",
+    "The language menu is the authoritative double-track inventory for this fixture because the current session envelope is opaque."
+  ]
+}
