@@ -1,0 +1,16 @@
+{
+  "extends": "./.wxt/tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "types": ["chrome"]
+  },
+  "include": [
+    ".wxt/wxt.d.ts",
+    "entrypoints/**/*.ts",
+    "src/**/*.ts",
+    "tests/**/*.ts",
+    "vitest.config.ts",
+    "wxt.config.ts"
+  ],
+  "exclude": [".output", "node_modules", "research"]
+}

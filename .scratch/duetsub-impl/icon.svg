@@ -1,0 +1,8 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="DuetSub 图标：双字幕条">
+  <!-- 圆角深色字幕框 -->
+  <rect x="10" y="10" width="108" height="108" rx="26" fill="#232A36" stroke="#38414F" stroke-width="2"/>
+  <!-- 上：英文行（长白条） -->
+  <rect x="26" y="47" width="76" height="13" rx="6.5" fill="#F6F8FB"/>
+  <!-- 下：繁中行（短琥珀条） -->
+  <rect x="38" y="69" width="52" height="13" rx="6.5" fill="#FFC24B"/>
+</svg>
