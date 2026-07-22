@@ -26,7 +26,7 @@ Created: 2026-07-22
 
 ## Frontier
 
-- 现在可开工：**01**。之后 02；再之后 03 与 04；03 完成后 05/06/07 任意顺序。
+- 已完成：**01、02**。当前 frontier：**03** 已 claimed、**04** 可并行开工；03 完成后 05/06/07 任意顺序。
 - 纪律（沿用规划树）：一次会话一张票；开工前把票 Status 改 `claimed`；完成写 `## Answer`、Status 改 `resolved`、在本 map 勾一行。用 `/implement` 走 frontier，票间清上下文。
 
 ## Decisions so far
