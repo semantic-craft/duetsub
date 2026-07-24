@@ -78,7 +78,7 @@ class PlaybackController {
   video: HTMLVideoElement;
 
   readonly #siteId: SiteId;
-  readonly #adapterLabel: string;
+  readonly #siteLabel: string;
   readonly #adapter: SiteAdapter | undefined;
   readonly #storageKey: string;
   readonly #player: HTMLElement;
@@ -125,7 +125,7 @@ class PlaybackController {
     adapter?: SiteAdapter,
   ) {
     this.#siteId = siteId;
-    this.#adapterLabel = adapterLabel(siteId);
+    this.#siteLabel = siteLabel(siteId);
     this.#adapter = adapter;
     this.#status = adapter === undefined
       ? '關閉 · 尚未載入假軌'
@@ -219,8 +219,8 @@ class PlaybackController {
       this.#clearTrackData();
       this.#bindAdapterGeneration();
       this.#status = target.contentIdentity === undefined
-        ? `開啟 · 等待可驗證的 ${this.#adapterLabel} 內容身份`
-        : `開啟 · ${this.#adapterLabel} 內容已切換`;
+        ? `開啟 · 等待可驗證的 ${this.#siteLabel} 內容身份`
+        : `開啟 · ${this.#siteLabel} 內容已切換`;
       contentChanged = true;
     }
 
@@ -300,8 +300,7 @@ class PlaybackController {
     }
 
     if (!this.#canLoadTracks()) {
-      this.#status =
-        `開啟 · 等待可驗證的 ${this.#adapterLabel} 內容身份`;
+      this.#status = `開啟 · 等待可驗證的 ${this.#siteLabel} 內容身份`;
       this.#render();
       return;
     }
@@ -311,7 +310,7 @@ class PlaybackController {
       type: 'tracks-loading',
     });
     this.#bindAdapterGeneration();
-    this.#status = `開啟 · 枚舉 ${this.#adapterLabel} 官方字幕軌…`;
+    this.#status = `開啟 · 枚舉 ${this.#siteLabel} 官方字幕軌…`;
     this.#render();
     this.#adapter.start();
   }
@@ -413,7 +412,9 @@ class PlaybackController {
         accepted.english.source.length === 0 ||
         accepted.chinese.source.length === 0
       ) {
-        throw new Error('Adapter returned an empty official subtitle track');
+        throw new Error(
+          `${this.#siteLabel} returned an empty official subtitle track`,
+        );
       }
 
       this.#englishCues = accepted.english.kind === 'mt'
@@ -482,7 +483,7 @@ class PlaybackController {
       : reducePlaybackLifecycle(this.#state, { type: 'reset-content' });
     if (reason !== 'seek-flush') this.#clearTrackData();
     this.#bindAdapterGeneration();
-    this.#status = `開啟 · ${this.#adapterLabel} 播放狀態已重設`;
+    this.#status = `開啟 · ${this.#siteLabel} 播放狀態已重設`;
     this.#render();
   };
 
@@ -605,7 +606,7 @@ class PlaybackController {
       type: 'video-replaced',
     });
     this.#bindAdapterGeneration();
-    this.#status = `開啟 · ${this.#adapterLabel} video 時鐘已替換`;
+    this.#status = `開啟 · ${this.#siteLabel} video 時鐘已替換`;
     this.#render();
 
     if (video.readyState >= 2) this.#onVideoReady();
@@ -736,8 +737,12 @@ class PlaybackController {
   }
 
   #canLoadTracks(): boolean {
-    return (this.#siteId !== 'primevideo' && this.#siteId !== 'max') ||
-      this.#state.contentIdentity !== undefined;
+    return (
+      (this.#siteId !== 'primevideo' &&
+        this.#siteId !== 'max' &&
+        this.#siteId !== 'netflix') ||
+      this.#state.contentIdentity !== undefined
+    );
   }
 
   readonly #onControlsActivity = () => {
@@ -848,10 +853,15 @@ function openOptionsPage(): void {
   window.open(chrome.runtime.getURL('options.html'), '_blank', 'noopener');
 }
 
-function adapterLabel(siteId: SiteId): string {
-  return siteId === 'max'
-    ? 'Max'
-    : siteId === 'primevideo'
-      ? 'Prime'
-      : siteId;
+function siteLabel(siteId: SiteId): string {
+  switch (siteId) {
+    case 'netflix':
+      return 'Netflix';
+    case 'primevideo':
+      return 'Prime';
+    case 'max':
+      return 'Max';
+    case 'youtube':
+      return 'YouTube';
+  }
 }

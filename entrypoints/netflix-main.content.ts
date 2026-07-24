@@ -1,11 +1,11 @@
-import { startFakeMainStub } from '../src/main/fake-source';
+import { startNetflixMainHook } from '../src/main/netflix-hook';
 
 export default defineContentScript({
-  matches: ['https://www.netflix.com/*'],
+  matches: ['https://www.netflix.com/watch/*'],
   runAt: 'document_start',
   world: 'MAIN',
   registration: 'manifest',
   main() {
-    startFakeMainStub('netflix');
+    startNetflixMainHook();
   },
 });

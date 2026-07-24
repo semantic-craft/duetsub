@@ -62,11 +62,29 @@ export interface MaxSubtitleResponseMessage
   readonly raw: string;
 }
 
+export interface NetflixManifestMessage extends UncorrelatedMessageEnvelope {
+  readonly direction: 'main-to-isolated';
+  readonly type: 'netflix-manifest';
+  readonly siteId: 'netflix';
+  readonly manifest: unknown;
+}
+
+export interface NetflixTtmlResponseMessage
+  extends UncorrelatedMessageEnvelope {
+  readonly direction: 'main-to-isolated';
+  readonly type: 'netflix-ttml-response';
+  readonly siteId: 'netflix';
+  readonly responseId: string;
+  readonly raw: string;
+}
+
 export type MainToIsolatedMessage =
   | TracksMessage
   | CuesMessage
   | PrimeTtmlResponseMessage
-  | MaxSubtitleResponseMessage;
+  | MaxSubtitleResponseMessage
+  | NetflixManifestMessage
+  | NetflixTtmlResponseMessage;
 export type IsolatedToMainMessage = RequestFakeDataMessage;
 export type DuetSubMessage = MainToIsolatedMessage | IsolatedToMainMessage;
 
@@ -153,6 +171,34 @@ export function maxSubtitleResponseMessage(
   };
 }
 
+export function netflixManifestMessage(
+  manifest: unknown,
+): NetflixManifestMessage {
+  return {
+    channel: CHANNEL,
+    version: VERSION,
+    direction: 'main-to-isolated',
+    type: 'netflix-manifest',
+    siteId: 'netflix',
+    manifest,
+  };
+}
+
+export function netflixTtmlResponseMessage(
+  responseId: string,
+  raw: string,
+): NetflixTtmlResponseMessage {
+  return {
+    channel: CHANNEL,
+    version: VERSION,
+    direction: 'main-to-isolated',
+    type: 'netflix-ttml-response',
+    siteId: 'netflix',
+    responseId,
+    raw,
+  };
+}
+
 export function isDuetSubMessage(value: unknown): value is DuetSubMessage {
   if (typeof value !== 'object' || value === null) return false;
   const candidate = value as Record<string, unknown>;
@@ -192,6 +238,25 @@ export function isDuetSubMessage(value: unknown): value is DuetSubMessage {
       candidate.raw.length <= 5_000_000
     );
   }
+  if (candidate.type === 'netflix-manifest') {
+    return (
+      candidate.direction === 'main-to-isolated' &&
+      candidate.siteId === 'netflix' &&
+      isNetflixManifestCandidate(candidate.manifest)
+    );
+  }
+  if (candidate.type === 'netflix-ttml-response') {
+    return (
+      candidate.direction === 'main-to-isolated' &&
+      candidate.siteId === 'netflix' &&
+      typeof candidate.responseId === 'string' &&
+      candidate.responseId.length > 0 &&
+      candidate.responseId.length <= 128 &&
+      typeof candidate.raw === 'string' &&
+      candidate.raw.length > 0 &&
+      candidate.raw.length <= 2_000_000
+    );
+  }
   if (typeof candidate.requestId !== 'string') return false;
   if (candidate.direction === 'isolated-to-main') {
     return (
@@ -212,6 +277,17 @@ export function isDuetSubMessage(value: unknown): value is DuetSubMessage {
     candidate.cues.every(isCue) &&
     (candidate.translation === 'official' ||
       candidate.translation === 'mt-fallback')
+  );
+}
+
+export function isNetflixManifestCandidate(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  const identity = candidate.movieId ?? candidate.viewableId;
+  return (
+    Array.isArray(candidate.timedtexttracks) &&
+    ((typeof identity === 'string' && identity.length > 0) ||
+      (typeof identity === 'number' && Number.isFinite(identity)))
   );
 }
 

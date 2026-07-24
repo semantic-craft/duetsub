@@ -1,4 +1,5 @@
 import type { SiteId } from '../core/contracts';
+import { readNetflixWatchIdentity } from '../adapters/netflix-location';
 
 interface SiteUiBinding {
   readonly videoSelector: string;
@@ -82,6 +83,8 @@ export function findSiteUiTarget(siteId: SiteId): SiteUiTarget | undefined {
         ? readPrimeEpisodeIdentity(player)
         : siteId === 'max'
           ? readMaxContentIdentity()
+          : siteId === 'netflix'
+            ? readNetflixWatchIdentity(window.location.href)
           : undefined,
   };
 }

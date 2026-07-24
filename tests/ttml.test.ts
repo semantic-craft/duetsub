@@ -2,6 +2,7 @@ import { DOMParser } from '@xmldom/xmldom';
 import { describe, expect, it } from 'vitest';
 
 import { parseTtml } from '../src/core/ttml';
+import netflixFixture from './fixtures/netflix-minimal.ttml?raw';
 import primeVideoFixture from './fixtures/primevideo-minimal.ttml2?raw';
 
 describe('parseTtml', () => {
@@ -37,5 +38,28 @@ describe('parseTtml', () => {
         parser: new DOMParser(),
       }),
     ).toEqual([]);
+  });
+
+  it('uses the document tick rate for Netflix IMSC cue boundaries', () => {
+    const cues = parseTtml(netflixFixture, {
+      language: 'en',
+      acceptedSourceLanguages: ['en'],
+      parser: new DOMParser(),
+    });
+
+    expect(cues).toEqual([
+      {
+        start: 22_708,
+        end: 24_708,
+        text: 'Alpha & Beta Gamma\nDelta line',
+        language: 'en',
+      },
+      {
+        start: 25_000,
+        end: 27_250,
+        text: 'Millisecond boundary',
+        language: 'en',
+      },
+    ]);
   });
 });

@@ -1,6 +1,7 @@
 import type { Cue } from './contracts';
 
 const TTML_NAMESPACE = 'http://www.w3.org/ns/ttml';
+const TTML_PARAMETER_NAMESPACE = 'http://www.w3.org/ns/ttml#parameter';
 const TTML_STYLING_NAMESPACE = 'http://www.w3.org/ns/ttml#styling';
 const XML_NAMESPACE = 'http://www.w3.org/XML/1998/namespace';
 
@@ -74,6 +75,7 @@ export function parseTtml(
   }
 
   const topRegions = collectTopRegions(document);
+  const tickRate = readTickRate(root);
   const cues: Cue[] = [];
   const paragraphs = document.getElementsByTagNameNS(TTML_NAMESPACE, 'p');
 
@@ -81,8 +83,8 @@ export function parseTtml(
     const paragraph = asElement(paragraphs.item(index));
     if (paragraph === null) continue;
 
-    const start = parseClockTime(paragraph.getAttribute('begin'));
-    const end = parseClockTime(paragraph.getAttribute('end'));
+    const start = parseTime(paragraph.getAttribute('begin'), tickRate);
+    const end = parseTime(paragraph.getAttribute('end'), tickRate);
     const text = extractText(paragraph);
     if (start === undefined || end === undefined || end <= start || text === '') {
       continue;
@@ -94,6 +96,26 @@ export function parseTtml(
   }
 
   return cues;
+}
+
+function readTickRate(root: XmlElement): number | undefined {
+  const raw =
+    root.getAttributeNS(TTML_PARAMETER_NAMESPACE, 'tickRate') ||
+    root.getAttribute('ttp:tickRate');
+  if (raw === '') return undefined;
+
+  const tickRate = Number(raw);
+  return Number.isFinite(tickRate) && tickRate > 0 ? tickRate : undefined;
+}
+
+function parseTime(value: string, tickRate: number | undefined): number | undefined {
+  const clockTime = parseClockTime(value);
+  if (clockTime !== undefined) return clockTime;
+
+  const ticks = value.match(/^(\d+(?:\.\d+)?)t$/)?.[1];
+  if (ticks === undefined || tickRate === undefined) return undefined;
+  const tickValue = Number(ticks);
+  return Number.isFinite(tickValue) ? (tickValue * 1_000) / tickRate : undefined;
 }
 
 function hasXmlMagic(raw: string): boolean {
