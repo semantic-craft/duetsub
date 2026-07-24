@@ -1,4 +1,4 @@
-import { startFakeMainStub } from '../src/main/fake-source';
+import { startMaxMainHook } from '../src/main/max-hook';
 
 export default defineContentScript({
   matches: ['https://play.hbomax.com/*'],
@@ -6,6 +6,6 @@ export default defineContentScript({
   world: 'MAIN',
   registration: 'manifest',
   main() {
-    startFakeMainStub('max');
+    startMaxMainHook();
   },
 });

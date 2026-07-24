@@ -78,6 +78,7 @@ class PlaybackController {
   video: HTMLVideoElement;
 
   readonly #siteId: SiteId;
+  readonly #adapterLabel: string;
   readonly #adapter: SiteAdapter | undefined;
   readonly #storageKey: string;
   readonly #player: HTMLElement;
@@ -124,6 +125,7 @@ class PlaybackController {
     adapter?: SiteAdapter,
   ) {
     this.#siteId = siteId;
+    this.#adapterLabel = adapterLabel(siteId);
     this.#adapter = adapter;
     this.#status = adapter === undefined
       ? '關閉 · 尚未載入假軌'
@@ -179,6 +181,7 @@ class PlaybackController {
       }
       adapter.onTracks(this.#onAdapterTracks);
       adapter.onReset(this.#onAdapterReset);
+      adapter.onAdState?.(this.#onAdapterAdState);
       this.#bindAdapterGeneration();
     }
 
@@ -216,8 +219,8 @@ class PlaybackController {
       this.#clearTrackData();
       this.#bindAdapterGeneration();
       this.#status = target.contentIdentity === undefined
-        ? '開啟 · 等待可驗證的 Prime 內容身份'
-        : '開啟 · Prime 內容已切換';
+        ? `開啟 · 等待可驗證的 ${this.#adapterLabel} 內容身份`
+        : `開啟 · ${this.#adapterLabel} 內容已切換`;
       contentChanged = true;
     }
 
@@ -297,7 +300,8 @@ class PlaybackController {
     }
 
     if (!this.#canLoadTracks()) {
-      this.#status = '開啟 · 等待可驗證的 Prime 內容身份';
+      this.#status =
+        `開啟 · 等待可驗證的 ${this.#adapterLabel} 內容身份`;
       this.#render();
       return;
     }
@@ -307,7 +311,7 @@ class PlaybackController {
       type: 'tracks-loading',
     });
     this.#bindAdapterGeneration();
-    this.#status = '開啟 · 枚舉 Prime 官方字幕軌…';
+    this.#status = `開啟 · 枚舉 ${this.#adapterLabel} 官方字幕軌…`;
     this.#render();
     this.#adapter.start();
   }
@@ -409,7 +413,7 @@ class PlaybackController {
         accepted.english.source.length === 0 ||
         accepted.chinese.source.length === 0
       ) {
-        throw new Error('Prime returned an empty official subtitle track');
+        throw new Error('Adapter returned an empty official subtitle track');
       }
 
       this.#englishCues = accepted.english.kind === 'mt'
@@ -478,8 +482,37 @@ class PlaybackController {
       : reducePlaybackLifecycle(this.#state, { type: 'reset-content' });
     if (reason !== 'seek-flush') this.#clearTrackData();
     this.#bindAdapterGeneration();
-    this.#status = '開啟 · Prime 播放狀態已重設';
+    this.#status = `開啟 · ${this.#adapterLabel} 播放狀態已重設`;
     this.#render();
+  };
+
+  readonly #onAdapterAdState = (
+    active: boolean,
+    programClockContinuous: boolean,
+  ) => {
+    if (this.#destroyed) return;
+    this.#acquisitionRevision += 1;
+    this.#synchronizerState = undefined;
+    this.#state = active
+      ? reducePlaybackLifecycle(this.#state, { type: 'ad-entered' })
+      : reducePlaybackLifecycle(this.#state, {
+          type: 'ad-exited',
+          programClockContinuous,
+        });
+    this.#bindAdapterGeneration();
+    this.#status = active
+      ? '開啟 · 廣告期間暫停顯示'
+      : this.#state.suspension === 'none'
+        ? '官方英文 + 官方繁中 · 100%'
+        : '開啟 · 等待可靠的節目時鐘';
+    this.#render();
+    if (
+      !active &&
+      needsTrackAcquisition(this.#state) &&
+      this.#canLoadTracks()
+    ) {
+      this.#loadTracks();
+    }
   };
 
   readonly #onMessage = (event: MessageEvent<unknown>) => {
@@ -572,7 +605,7 @@ class PlaybackController {
       type: 'video-replaced',
     });
     this.#bindAdapterGeneration();
-    this.#status = '開啟 · Prime video 時鐘已替換';
+    this.#status = `開啟 · ${this.#adapterLabel} video 時鐘已替換`;
     this.#render();
 
     if (video.readyState >= 2) this.#onVideoReady();
@@ -703,7 +736,7 @@ class PlaybackController {
   }
 
   #canLoadTracks(): boolean {
-    return this.#siteId !== 'primevideo' ||
+    return (this.#siteId !== 'primevideo' && this.#siteId !== 'max') ||
       this.#state.contentIdentity !== undefined;
   }
 
@@ -813,4 +846,12 @@ function openOptionsPage(): void {
     return;
   }
   window.open(chrome.runtime.getURL('options.html'), '_blank', 'noopener');
+}
+
+function adapterLabel(siteId: SiteId): string {
+  return siteId === 'max'
+    ? 'Max'
+    : siteId === 'primevideo'
+      ? 'Prime'
+      : siteId;
 }

@@ -1,0 +1,18 @@
+WEBVTT
+X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:0
+
+NOTE Synthetic minimal fixture for parser behavior; not captured from Max.
+
+REGION
+id:top-band
+viewportanchor:50%,20%
+
+intro
+00:00:11.177 --> 00:00:13.847 position:50%
+<i>Alpha &amp; Beta</i><br>  Gamma&nbsp; Delta
+
+00:00:14.000 --> 00:00:15.250 region:top-band
+Top <b>region</b> cue
+
+00:00:16.000 --> 00:00:17.500 line:10%
+Top line cue
