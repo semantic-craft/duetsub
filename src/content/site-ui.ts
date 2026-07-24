@@ -1,4 +1,5 @@
 import type { SiteId } from '../core/contracts';
+import { readNetflixWatchIdentity } from '../adapters/netflix-location';
 
 interface SiteUiBinding {
   readonly videoSelector: string;
@@ -77,9 +78,12 @@ export function findSiteUiTarget(siteId: SiteId): SiteUiTarget | undefined {
     controls,
     toggleBefore,
     nativeCaptionSelector: binding.nativeCaptionSelector,
-    contentIdentity: siteId === 'primevideo'
-      ? readPrimeEpisodeIdentity(player)
-      : undefined,
+    contentIdentity:
+      siteId === 'primevideo'
+        ? readPrimeEpisodeIdentity(player)
+        : siteId === 'netflix'
+          ? readNetflixWatchIdentity(window.location.href)
+          : undefined,
   };
 }
 
