@@ -23,13 +23,14 @@
 - 配置 seam 覆盖 DeepSeek / OpenAI-compatible / 本地 provider；云端仅 HTTPS，HTTP 仅 `localhost` / `127.0.0.1` / `[::1]`，URL 禁止内嵌凭据。自定义 HTTPS host permission 仅在 Options 用户手势下按配置 hostname 请求；manifest 没有 `<all_urls>`。API key 使用 `type=password`，只存 `chrome.storage.local`，错误文本与日志不回显 key。
 - IndexedDB seam 覆盖 hit/miss 与容量 LRU；SHA-256 cache key 绑定 content、track、归一化源文本、target language、provider、完整 endpoint（含端口/路径）与 model；失败占位和凭据不入缓存。
 - 最终 `npm test`：15 files / 43 tests passed；`npm run check`、`npm run build`、`git diff --check` 全部通过。构建 manifest 已检查无 `<all_urls>`；构建产物的 secret-pattern scan 无命中。OpenCC 1.4.1 的当前 API 经 ctx7 核对，许可证为 MIT AND Apache-2.0；词典仅打入 service worker，四站 content script 保持约 28–38 kB。
+- 2026-07-24 合并验收按 DeepSeek 官方当前文档更新默认 OpenAI base URL 为 `https://api.deepseek.com`、模型为 `deepseek-v4-flash` / `deepseek-v4-pro`，并对旧 `/v1` 与已弃用模型名做无损迁移。翻译请求显式关闭 V4 默认思考模式，按官方 JSON Output 约定使用含 JSON 样例的字幕 system prompt、`response_format: {"type":"json_object"}` 与 `max_tokens`；对应 red → green 回归后，合并树全量为 26 files / 77 tests passed。
 
 ### Human evidence
 
-- `NOT RUN`：未在隔离的真实 Chrome 扩展 profile 中执行 Options 页面保存→关闭→重开、成功/失败测试连接。当前 Chrome 控制面只连接用户日常 profile；为避免干扰其他已安装 DuetSub 实例和并行会话，没有加载本 worktree。
+- **PARTIAL**：用 Computer Use 加载合并版 unpacked extension，设置页显示迁移后的 DeepSeek base URL 与 `deepseek-v4-flash`，既有 API key 仅以掩码显示。临时把表单改为 loopback 假端点与假 key：服务在线时显示「連線成功」，停止服务后显示「連線失敗（網路或 CORS）」；重新打开设置页后，真实配置恢复且未被覆盖。为避免未经明确授权重新保存或发送真实密钥，本次没有点击带真实 key 的「儲存」，也没有由代理发起真实 DeepSeek 请求。
 - `NOT RUN`：未找到并播放可用的 Prime 英文单轨、繁中单轨或简中单轨内容，因此 MT/OpenCC 真机 fallback 未验收。
 - `NOT RUN`：未在真实官方中英双轨内容上观察本构建的 service-worker 网络面，故“双轨场景零 MT 请求”只有纯来源决策与 controller 行为证据，没有真机网络证据。
 
 ### Waived / not-run gates
 
-- 无 WAIVED。以上三项为必需的真人/服务 gate，故本票保持 `Status: claimed`，不得标记 resolved；map 的 Decisions so far 也暂不追加。
+- 无 WAIVED。保存→重开、真实单轨 MT/OpenCC 与双官方轨零 MT 请求等必需 gate 仍未完整通过，故本票保持 `Status: claimed`，不得标记 resolved；map 的 Decisions so far 也不追加。

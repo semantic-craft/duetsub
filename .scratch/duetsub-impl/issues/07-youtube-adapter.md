@@ -26,16 +26,17 @@
 
 ### Human
 
-- **NOT RUN**：登录态 YouTube 官方双轨与单官方轨内容的端到端回放；仅捕获 timedtext 请求不计通过。
-- **NOT RUN**：初始字幕关闭、开启两种状态下的 POT priming、准确恢复原 track/off 及选项。
-- **NOT RUN**：真实官方/ASR 归类、真实 json3 获取、overlay、seek、SPA 换视频与广告进入/退出。
+- **FAIL CLOSED（Computer Use，2026-07-24）**：登录态合并版在两个真实 TED 视频上注入 toggle；YouTube 原生英文字幕开启且持续正常显示，但没有取得可验证的 POT/timedtext 双轨或平台翻译，因此没有双轨 overlay，也没有提前隐藏原生字幕。
+- **PARTIAL**：从 `arj7oStGLkU` 站内 SPA 切换到 `8KkKuTCFvzI` 后，URL/videoId、播放器和 DuetSub toggle 都更新，enabled 状态保持，未见旧片字幕残留。
+- **NOT RUN**：初始字幕关闭状态下的 POT priming，以及开启/关闭两种状态的原 track/off 精确恢复。
+- **NOT RUN**：真实官方/ASR 分类、真实 json3 获取、seek 与广告进入/退出。
 - **NOT RUN**：现场确认 POT 不跨 videoId/generation，以及 200 空体在真实播放器中最多 re-prime 一次。
-- **NOT RUN**：原生字幕容器和 `#movie_player` 广告信号的当前 selector。因未验证，runtime 未猜写 `.ytp-caption-window-container` 或 `ad-showing` 行为。
+- 原生字幕容器和 `#movie_player` 广告信号仍未形成可据以新增 runtime selector 的证据；没有猜写 `.ytp-caption-window-container` 或 `ad-showing` 行为。
 
 ### Waived / Not Run
 
 - **WAIVED：无。** 未获用户批准，不把任何真人 gate 写成 waiver。
-- 上述必需真人 gate 均为 **NOT RUN**，所以 Ticket 07 保持 `claimed`，`.scratch/duetsub-impl/map.md` 不追加 Ticket 07。
+- 上述必需真人 gate 未完成，所以 Ticket 07 保持 `claimed`，`.scratch/duetsub-impl/map.md` 不追加 Ticket 07。
 
 ### 修改文件
 

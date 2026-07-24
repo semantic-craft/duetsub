@@ -33,8 +33,9 @@
 
 ### 真人 gate
 
-- **NOT RUN**：当前控制面可读取登录态 Max 播放页，但不能接管 `chrome://extensions` 去加载本 sibling worktree 的 `.output/chrome-mv3`；按 stop rule 未用 AppleScript、命令行启动参数或其他浏览器面绕过。
-- 因此以下均未宣称通过：本 build 双轨播放、菜单开合与原状态恢复、完整映射实际取得两轨、顺播、seek、换集/video replacement、真实广告进入/退出。看见单条 VTT 也未记为通过。
+- **FAIL CLOSED（Computer Use，2026-07-24）**：已在登录态 Chrome 加载合并版 `.output/chrome-mv3`，并打开 `play.hbomax.com` 真实播放页。DuetSub toggle 可注入并启用；官方菜单现场同时枚举英语、英语 CC、简中、繁中等轨，播放与 seek 后原生英文字幕仍可用。
+- 未观察到双轨 overlay；原生英文没有被提前隐藏。这意味着本次没有拿到可验证的完整 `track id → VTT/segment playlist` 双轨映射，按 stop rule 正确 fail closed。官方菜单里存在两种语言不等于完整映射取得两轨，不能记为通过。
+- **NOT RUN**：换集/video replacement 与真实广告进入/退出；也未形成 adapter 自动开合菜单并恢复原状态的独立证据。
 
 ### Waived
 

@@ -22,24 +22,23 @@
 - Netflix IMSC fixture 以根元素 `ttp:tickRate="10000000"` 驱动 `t` 单位换算，覆盖 `227080000t → 22708ms`、实体、`span`、`br` 换行和毫秒边界；没有固定 `÷10^7`。
 - manifest 纯解析过滤 None、forced-only、未 hydrated、无 text downloadable 与 image-only；单条可用官方文本轨仍会作为 `TrackInfo` 暴露，未接 Ticket 04 MT。
 - response seam 只接受当前 generation 的 pending owner，或唯一当前 `TrackInfo`；非 TTML 根、语言不符、歧义 owner 与旧 generation 均不能产出可消费 cue。pending 与 `onCues` 是互斥交付路径。
-- 生成 manifest 中 Netflix MAIN/ISOLATED 均只匹配 `https://www.netflix.com/watch/*`、`run_at: document_start`；运行时再次校验精确 `/watch/<id>`。MAIN 不按 host、扩展名或 `?o=` 过滤响应，不保存业务状态或 URL。
+- 合并验收发现从 `/browse` SPA 进入 `/watch` 时，原来的 `https://www.netflix.com/watch/*` manifest match 不会重新执行 `document_start`。已按 SPEC 修为 MAIN/ISOLATED 匹配 `https://www.netflix.com/*`，MAIN 提前安装薄 hook，ISOLATED 在运行时仍只接受精确 `/watch/<id>`；Computer Use 复测站内导航无需重载即可出现 DuetSub toggle。
 - 禁止项扫描未发现 Netflix runtime 引入 Worker、debugger、DRM 绕过、OCR、Ticket 04 MT、专有提取物或 GPL runtime 代码。
 
 ### Human
 
-- 静态 MAIN 是否命中 manifest：**NOT RUN**。
-- 自动切轨时 MAIN 是否看见 OCA TTML，且 ISOLATED 完成 TTML 根/owner 校验：**NOT RUN**。
-- 原字幕选项与菜单开闭状态是否恢复：**NOT RUN**。
-- 官方双轨 overlay 与原生 `.player-timedtext` 双轨 ready 后隐藏/关闭或失败后恢复：**NOT RUN**。
-- 正常顺播：**NOT RUN**。
+- 登录态 Computer Use 已加载合并版并在《魷魚遊戲》真实播放页验证：直接加载 `/watch` 与修复后的 `/browse`→`/watch` SPA 两条路径都能注入 toggle；真实菜单可枚举繁中、英文/英文 CC、简中等文本轨。
+- 程序化枚举期间字幕菜单打开，并在获取超时后恢复关闭；原先选择的繁中原生字幕继续显示。
+- 静态 MAIN 是否命中可消费 manifest：**未证实**；自动切轨时 MAIN 是否看见 OCA TTML 且 ISOLATED 完成 TTML 根/owner 校验：**未证实**。
+- 官方双轨 overlay 未出现，原生 `.player-timedtext` 没有被提前隐藏，表现为正确 fail closed 而非端到端 PASS。
+- 正常顺播：**PARTIAL**（真实内容持续播放并保留原生字幕，但无双轨 overlay）。
 - seek：**NOT RUN**。
 - 换集与 video replacement：**NOT RUN**。
 - 真实广告进入/退出：**NOT RUN**。
-- 原因：现有 `chrome://extensions/` 页面属于受保护的 Chrome 内部页，当前验收控制面不能接管；因此本 worktree 的 `.output/chrome-mv3` 未被加载。没有改用 debugger、CDP、Worker 或其他绕过手段。仅见 manifest 或响应也不会被计作端到端通过。
 
 ### Waived / not-run decision
 
-- 用户未批准任何 waiver；上述真人 gate 全部保持 **NOT RUN**。必需 gate 未完成，因此本票保持 `claimed`，不更新 map、不宣称端到端 PASS。
+- 用户未批准任何 waiver；manifest/OCA owner、双轨 overlay、seek、换集与广告等必需 gate 未完成，因此本票保持 `claimed`，不更新 map、不宣称端到端 PASS。
 
 ### Modified files
 
