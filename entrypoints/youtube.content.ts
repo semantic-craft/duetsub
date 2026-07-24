@@ -1,3 +1,4 @@
+import { createYoutubeAdapter } from '../src/adapters/youtube';
 import { startDuetSubContent } from '../src/content/controller';
 
 export default defineContentScript({
@@ -6,6 +7,6 @@ export default defineContentScript({
   world: 'ISOLATED',
   registration: 'manifest',
   main() {
-    startDuetSubContent('youtube');
+    startDuetSubContent('youtube', createYoutubeAdapter());
   },
 });

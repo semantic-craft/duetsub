@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { TrackInfo } from '../src/core/contracts';
 import {
   decideSubtitleSources,
+  selectBilingualTracks,
   selectOfficialDualTracks,
 } from '../src/core/track-selection';
 
@@ -148,6 +149,51 @@ describe('decideSubtitleSources', () => {
         source: simplifiedChinese,
         targetLanguage: 'zh-Hant',
       },
+    });
+  });
+});
+
+describe('selectBilingualTracks', () => {
+  it('prefers creator tracks, then ASR, then platform tlang candidates', () => {
+    const asrEnglish: TrackInfo = {
+      ...officialEnglish,
+      id: 'asr-en',
+      source: 'asr',
+    };
+    const translatedEnglish: TrackInfo = {
+      ...officialEnglish,
+      id: 'tlang-en',
+      source: 'platform-mt',
+    };
+    const translatedChinese: TrackInfo = {
+      ...officialTraditionalChinese,
+      id: 'tlang-zh-Hant',
+      source: 'platform-mt',
+    };
+
+    expect(
+      selectBilingualTracks([
+        translatedEnglish,
+        asrEnglish,
+        officialEnglish,
+        translatedChinese,
+        officialTraditionalChinese,
+      ]),
+    ).toMatchObject({
+      english: officialEnglish,
+      chinese: officialTraditionalChinese,
+      missing: [],
+    });
+    expect(
+      selectBilingualTracks([
+        translatedEnglish,
+        asrEnglish,
+        translatedChinese,
+      ]),
+    ).toMatchObject({
+      english: asrEnglish,
+      chinese: translatedChinese,
+      missing: [],
     });
   });
 });
