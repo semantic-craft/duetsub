@@ -1,3 +1,4 @@
+import { createMaxAdapter } from '../src/adapters/max';
 import { startDuetSubContent } from '../src/content/controller';
 
 export default defineContentScript({
@@ -6,6 +7,6 @@ export default defineContentScript({
   world: 'ISOLATED',
   registration: 'manifest',
   main() {
-    startDuetSubContent('max');
+    startDuetSubContent('max', createMaxAdapter());
   },
 });

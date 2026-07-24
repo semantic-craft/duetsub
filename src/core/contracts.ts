@@ -22,6 +22,9 @@ export interface SiteAdapter {
   onCues(cb: (trackId: string, cues: Cue[]) => void): void;
   fetchTrack(track: TrackInfo): Promise<Cue[]>;
   bindGeneration?(generation: PlaybackGeneration): void;
+  onAdState?(
+    cb: (active: boolean, programClockContinuous: boolean) => void,
+  ): void;
   onReset(
     cb: (reason: 'navigation' | 'episode' | 'seek-flush') => void,
   ): void;

@@ -46,10 +46,27 @@ export interface PrimeTtmlResponseMessage extends UncorrelatedMessageEnvelope {
   readonly raw: string;
 }
 
+export type MaxSubtitleResponseKind =
+  | 'playback-info'
+  | 'manifest'
+  | 'vtt';
+
+export interface MaxSubtitleResponseMessage
+  extends UncorrelatedMessageEnvelope {
+  readonly direction: 'main-to-isolated';
+  readonly type: 'max-subtitle-response';
+  readonly siteId: 'max';
+  readonly responseId: string;
+  readonly kind: MaxSubtitleResponseKind;
+  readonly url: string;
+  readonly raw: string;
+}
+
 export type MainToIsolatedMessage =
   | TracksMessage
   | CuesMessage
-  | PrimeTtmlResponseMessage;
+  | PrimeTtmlResponseMessage
+  | MaxSubtitleResponseMessage;
 export type IsolatedToMainMessage = RequestFakeDataMessage;
 export type DuetSubMessage = MainToIsolatedMessage | IsolatedToMainMessage;
 
@@ -117,6 +134,25 @@ export function primeTtmlResponseMessage(
   };
 }
 
+export function maxSubtitleResponseMessage(
+  responseId: string,
+  kind: MaxSubtitleResponseKind,
+  url: string,
+  raw: string,
+): MaxSubtitleResponseMessage {
+  return {
+    channel: CHANNEL,
+    version: VERSION,
+    direction: 'main-to-isolated',
+    type: 'max-subtitle-response',
+    siteId: 'max',
+    responseId,
+    kind,
+    url,
+    raw,
+  };
+}
+
 export function isDuetSubMessage(value: unknown): value is DuetSubMessage {
   if (typeof value !== 'object' || value === null) return false;
   const candidate = value as Record<string, unknown>;
@@ -139,6 +175,21 @@ export function isDuetSubMessage(value: unknown): value is DuetSubMessage {
       typeof candidate.raw === 'string' &&
       candidate.raw.length > 0 &&
       candidate.raw.length <= 2_000_000
+    );
+  }
+  if (candidate.type === 'max-subtitle-response') {
+    return (
+      candidate.direction === 'main-to-isolated' &&
+      candidate.siteId === 'max' &&
+      typeof candidate.responseId === 'string' &&
+      candidate.responseId.length > 0 &&
+      candidate.responseId.length <= 128 &&
+      isMaxSubtitleResponseKind(candidate.kind) &&
+      typeof candidate.url === 'string' &&
+      isMaxSubtitleObservationUrl(candidate.url, candidate.kind) &&
+      typeof candidate.raw === 'string' &&
+      candidate.raw.length > 0 &&
+      candidate.raw.length <= 5_000_000
     );
   }
   if (typeof candidate.requestId !== 'string') return false;
@@ -179,6 +230,32 @@ export function isPrimeTtmlUrl(value: string): boolean {
   }
 }
 
+export function isMaxSubtitleObservationUrl(
+  value: string,
+  kind: MaxSubtitleResponseKind,
+): boolean {
+  try {
+    const url = new URL(value);
+    if (
+      url.protocol !== 'https:' ||
+      url.username !== '' ||
+      url.password !== '' ||
+      !isMaxHost(url.hostname)
+    ) {
+      return false;
+    }
+    if (kind === 'playback-info') {
+      return url.pathname.endsWith('/playback/v1/playbackInfo');
+    }
+    if (kind === 'manifest') {
+      return /\.(?:mpd|m3u8)$/i.test(url.pathname);
+    }
+    return /\.vtt$/i.test(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
 export function postDuetSubMessage(message: DuetSubMessage): void {
   window.postMessage(message, window.location.origin);
 }
@@ -189,6 +266,24 @@ function isSiteId(value: unknown): value is SiteId {
     value === 'primevideo' ||
     value === 'max' ||
     value === 'youtube'
+  );
+}
+
+function isMaxSubtitleResponseKind(
+  value: unknown,
+): value is MaxSubtitleResponseKind {
+  return (
+    value === 'playback-info' ||
+    value === 'manifest' ||
+    value === 'vtt'
+  );
+}
+
+function isMaxHost(hostname: string): boolean {
+  return (
+    hostname === 'play.hbomax.com' ||
+    hostname.endsWith('.hbomax.com') ||
+    hostname.endsWith('.max.com')
   );
 }
 
