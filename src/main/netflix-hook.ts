@@ -7,7 +7,6 @@ import {
 } from '../core/messages';
 
 export function startNetflixMainHook(): void {
-  if (!isNetflixWatchUrl(window.location.href)) return;
   patchJsonParse();
   patchFetchAndXmlHttpRequest();
 }

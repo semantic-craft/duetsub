@@ -57,6 +57,12 @@ export function findSiteUiTarget(siteId: SiteId): SiteUiTarget | undefined {
   ) {
     return undefined;
   }
+  if (
+    siteId === 'netflix' &&
+    readNetflixWatchIdentity(window.location.href) === undefined
+  ) {
+    return undefined;
+  }
   const binding = SITE_UI[siteId];
   const video = document.querySelector<HTMLVideoElement>(binding.videoSelector);
   if (video === null) return undefined;
