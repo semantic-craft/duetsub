@@ -20,7 +20,11 @@ import {
   synchronizeCues,
   type SynchronizerState,
 } from '../core/synchronizer';
-import { selectOfficialDualTracks } from '../core/track-selection';
+import {
+  decideSubtitleSources,
+  type SubtitleSource,
+} from '../core/track-selection';
+import { scheduleTranslationBatches } from '../mt/scheduling';
 import { NativeCaptionVisibility } from './native-captions';
 import { createOverlayView, type OverlayView } from './overlay-view';
 import { findSiteUiTarget, type SiteUiTarget } from './site-ui';
@@ -96,6 +100,17 @@ class PlaybackController {
   #requestSequence = 0;
   #interactionRevision = 0;
   #acquisitionRevision = 0;
+  #translationSequence = 0;
+  #translationRequestIds = new Set<string>();
+  #translationHintShown = false;
+  #translationPlan:
+    | {
+        readonly source: readonly Cue[];
+        readonly trackId: string;
+        readonly target: 'english' | 'chinese';
+        readonly targetLanguage: 'en' | 'zh-Hant';
+      }
+    | undefined;
   #synchronizerState: SynchronizerState | undefined;
   #controlsVisible = false;
   #controlsTimer: number | undefined;
@@ -135,8 +150,23 @@ class PlaybackController {
       {
         onToggle: () => this.#toggle(),
         onRetranslate: () => {
-          this.#status = '重新翻譯將在 ticket 04 提供';
+          if (this.#translationPlan === undefined) {
+            this.#status = '目前使用官方雙軌，無需重新翻譯';
+            this.#render();
+            return;
+          }
+          this.#cancelTranslations();
+          const revision = ++this.#acquisitionRevision;
+          this.#status = '正在跳過快取重新翻譯…';
           this.#render();
+          void this.#translatePlan(
+            {
+              contentGeneration: this.#state.contentGeneration,
+              clockGeneration: this.#state.clockGeneration,
+            },
+            revision,
+            true,
+          );
         },
         onOpenSettings: openOptionsPage,
       },
@@ -208,6 +238,7 @@ class PlaybackController {
     this.#destroyed = true;
     this.#interactionRevision += 1;
     this.#acquisitionRevision += 1;
+    this.#cancelTranslations();
     window.clearInterval(this.#updateTimer);
     if (this.#controlsTimer !== undefined) {
       window.clearTimeout(this.#controlsTimer);
@@ -305,6 +336,7 @@ class PlaybackController {
   }
 
   #clearTrackData(): void {
+    this.#cancelTranslations();
     this.#tracks = [];
     this.#englishCues = [];
     this.#chineseCues = [];
@@ -313,6 +345,7 @@ class PlaybackController {
     this.#receivedEnglish = false;
     this.#receivedChinese = false;
     this.#synchronizerState = undefined;
+    this.#translationPlan = undefined;
   }
 
   readonly #onAdapterTracks = (tracks: TrackInfo[]) => {
@@ -333,27 +366,34 @@ class PlaybackController {
     const tracks = acceptPlaybackGeneration(this.#state, generatedTracks);
     if (tracks === undefined) return;
 
-    const selected = selectOfficialDualTracks(tracks);
-    if (selected.english === undefined || selected.chinese === undefined) {
-      this.#status = `開啟 · 缺少官方 ${selected.missing.join(' + ')} 軌`;
+    const decision = decideSubtitleSources(tracks);
+    if (decision.english === undefined || decision.chinese === undefined) {
+      this.#status = '開啟 · 沒有可用的官方英文或中文軌';
       this.#render();
       return;
     }
 
     const acquisitionRevision = ++this.#acquisitionRevision;
-    this.#status = '開啟 · 正在取得官方英文 + 繁中…';
+    this.#status = '開啟 · 正在取得官方字幕…';
     this.#render();
 
     try {
-      const [english, chinese] = await Promise.all([
-        adapter.fetchTrack(selected.english),
-        adapter.fetchTrack(selected.chinese),
+      const requiredTracks = uniqueSourceTracks(decision.english, decision.chinese);
+      const fetched = await Promise.all(
+        requiredTracks.map(async (track) =>
+          [track.id, await adapter.fetchTrack(track)] as const
+        ),
+      );
+      const cuesByTrack = new Map(fetched);
+      const [resolvedEnglish, resolvedChinese] = await Promise.all([
+        cuesForSource(decision.english, cuesByTrack),
+        cuesForSource(decision.chinese, cuesByTrack),
       ]);
       const accepted = acceptPlaybackGeneration(
         this.#state,
         bindPlaybackGeneration(generatedTracks.generation, {
-          english,
-          chinese,
+          english: resolvedEnglish,
+          chinese: resolvedChinese,
         }),
       );
       if (
@@ -365,19 +405,47 @@ class PlaybackController {
       ) {
         return;
       }
-      if (accepted.english.length === 0 || accepted.chinese.length === 0) {
+      if (
+        accepted.english.source.length === 0 ||
+        accepted.chinese.source.length === 0
+      ) {
         throw new Error('Prime returned an empty official subtitle track');
       }
 
-      this.#englishCues = accepted.english;
-      this.#chineseCues = accepted.chinese;
-      this.#englishMachineTranslated = false;
-      this.#chineseMachineTranslated = false;
+      this.#englishCues = accepted.english.kind === 'mt'
+        ? []
+        : accepted.english.cues;
+      this.#chineseCues = accepted.chinese.kind === 'mt'
+        ? []
+        : accepted.chinese.cues;
+      this.#englishMachineTranslated = accepted.english.kind === 'mt';
+      this.#chineseMachineTranslated = accepted.chinese.kind === 'mt';
       this.#synchronizerState = undefined;
       this.#state = reducePlaybackLifecycle(this.#state, {
         type: 'tracks-ready',
       });
-      this.#status = '官方英文 + 官方繁中 · 100%';
+      const mt = accepted.english.kind === 'mt'
+        ? { side: 'english' as const, value: accepted.english }
+        : accepted.chinese.kind === 'mt'
+        ? { side: 'chinese' as const, value: accepted.chinese }
+        : undefined;
+      if (mt === undefined) {
+        this.#status = accepted.chinese.kind === 'opencc'
+          ? '官方簡中 + OpenCC 繁中 · 100%'
+          : '官方英文 + 官方繁中 · 100%';
+      } else {
+        this.#translationPlan = {
+          source: mt.value.source,
+          trackId: mt.value.trackId,
+          target: mt.side,
+          targetLanguage: mt.value.targetLanguage,
+        };
+        this.#status = '官方字幕已顯示 · 翻譯中…';
+        void this.#translatePlan(
+          generatedTracks.generation,
+          acquisitionRevision,
+        );
+      }
       this.#render();
     } catch (error) {
       if (
@@ -404,6 +472,7 @@ class PlaybackController {
     if (this.#destroyed) return;
     this.#interactionRevision += 1;
     this.#acquisitionRevision += 1;
+    this.#cancelTranslations();
     this.#state = reason === 'seek-flush'
       ? reducePlaybackLifecycle(this.#state, { type: 'seeking' })
       : reducePlaybackLifecycle(this.#state, { type: 'reset-content' });
@@ -455,6 +524,7 @@ class PlaybackController {
     if (!this.#state.enabled) return;
     this.#synchronizerState = undefined;
     this.#acquisitionRevision += 1;
+    this.#cancelTranslations();
     this.#state = reducePlaybackLifecycle(this.#state, { type: 'seeking' });
     this.#bindAdapterGeneration();
     this.#status = '開啟 · 拖動中暫停顯示';
@@ -473,6 +543,15 @@ class PlaybackController {
         ? '官方英文 + 官方繁中 · 100%'
         : '開啟 · 尚未取得雙軌';
       this.#render();
+      if (this.#translationPlan !== undefined) {
+        void this.#translatePlan(
+          {
+            contentGeneration: this.#state.contentGeneration,
+            clockGeneration: this.#state.clockGeneration,
+          },
+          this.#acquisitionRevision,
+        );
+      }
       if (needsTrackAcquisition(this.#state)) this.#loadTracks();
     }
   };
@@ -488,6 +567,7 @@ class PlaybackController {
     this.video.addEventListener('seeked', this.#onSeeked);
     this.#synchronizerState = undefined;
     this.#acquisitionRevision += 1;
+    this.#cancelTranslations();
     this.#state = reducePlaybackLifecycle(this.#state, {
       type: 'video-replaced',
     });
@@ -514,6 +594,112 @@ class PlaybackController {
       contentGeneration: this.#state.contentGeneration,
       clockGeneration: this.#state.clockGeneration,
     });
+  }
+
+  async #translatePlan(
+    generation: {
+      readonly contentGeneration: number;
+      readonly clockGeneration: number;
+    },
+    acquisitionRevision: number,
+    skipCache = false,
+  ): Promise<void> {
+    const plan = this.#translationPlan;
+    if (plan === undefined) return;
+    const batches = scheduleTranslationBatches(
+      plan.source,
+      this.video.currentTime * 1_000,
+    );
+    let hadFailure = false;
+    for (const batch of batches) {
+      if (
+        this.#destroyed ||
+        acquisitionRevision !== this.#acquisitionRevision
+      ) return;
+      const requestId = `mt-${Date.now()}-${++this.#translationSequence}`;
+      this.#translationRequestIds.add(requestId);
+      const response = await chrome.runtime.sendMessage({
+        channel: 'duetsub-mt',
+        version: 1,
+        type: 'translate',
+        requestId,
+        generation,
+        contentId: this.#state.contentIdentity ?? `${this.#siteId}:unknown`,
+        trackId: plan.trackId,
+        targetLanguage: plan.targetLanguage,
+        cues: batch,
+        skipCache,
+      }) as {
+        readonly status: 'ok' | 'failed' | 'missing-key' | 'aborted';
+        readonly cues: readonly Cue[];
+        readonly generation: typeof generation;
+      };
+      this.#translationRequestIds.delete(requestId);
+      if (
+        acceptPlaybackGeneration(
+          this.#state,
+          bindPlaybackGeneration(response.generation, true),
+        ) !== true ||
+        acquisitionRevision !== this.#acquisitionRevision
+      ) return;
+      if (response.status === 'missing-key') {
+        if (!this.#translationHintShown) {
+          this.#translationHintShown = true;
+          this.#status = '官方字幕照常顯示 · 請到設定頁配置翻譯服務';
+          this.#render();
+        }
+        return;
+      }
+      if (response.status === 'aborted') return;
+      hadFailure ||= response.status === 'failed';
+      this.#mergeTranslatedCues(plan.target, response.cues);
+      this.#status = response.status === 'ok'
+        ? '官方字幕 + MT · 翻譯中…'
+        : '官方字幕照常顯示 · 部分翻譯失敗';
+      this.#render();
+    }
+    this.#status = hadFailure
+      ? '官方字幕照常顯示 · 部分翻譯失敗'
+      : '官方字幕 + MT · 100%';
+    this.#render();
+  }
+
+  #mergeTranslatedCues(
+    target: 'english' | 'chinese',
+    cues: readonly Cue[],
+  ): void {
+    const current = target === 'english'
+      ? this.#englishCues
+      : this.#chineseCues;
+    const merged = new Map(
+      current.map((cue) => [`${cue.start}:${cue.end}:${cue.text}`, cue]),
+    );
+    for (const cue of cues) {
+      for (const [key, existing] of merged) {
+        if (existing.start === cue.start && existing.end === cue.end) {
+          merged.delete(key);
+        }
+      }
+      merged.set(`${cue.start}:${cue.end}:${cue.text}`, cue);
+    }
+    const result = [...merged.values()].sort((a, b) =>
+      a.start - b.start || a.end - b.end
+    );
+    if (target === 'english') this.#englishCues = result;
+    else this.#chineseCues = result;
+    this.#synchronizerState = undefined;
+  }
+
+  #cancelTranslations(): void {
+    for (const requestId of this.#translationRequestIds) {
+      void chrome.runtime.sendMessage({
+        channel: 'duetsub-mt',
+        version: 1,
+        type: 'cancel',
+        requestId,
+      });
+    }
+    this.#translationRequestIds.clear();
   }
 
   #canLoadTracks(): boolean {
@@ -565,6 +751,60 @@ function ensurePositioned(player: HTMLElement): string | undefined {
   const previous = player.style.position;
   player.style.position = 'relative';
   return previous;
+}
+
+type ResolvedSubtitleSource =
+  | {
+      readonly kind: 'official' | 'opencc';
+      readonly cues: readonly Cue[];
+      readonly source: readonly Cue[];
+    }
+  | {
+      readonly kind: 'mt';
+      readonly cues: readonly [];
+      readonly source: readonly Cue[];
+      readonly trackId: string;
+      readonly targetLanguage: 'en' | 'zh-Hant';
+    };
+
+function uniqueSourceTracks(
+  ...sources: readonly SubtitleSource[]
+): TrackInfo[] {
+  const tracks = sources.map((source) =>
+    source.kind === 'official' ? source.track : source.source
+  );
+  return [...new Map(tracks.map((track) => [track.id, track])).values()];
+}
+
+async function cuesForSource(
+  source: SubtitleSource,
+  cuesByTrack: ReadonlyMap<string, readonly Cue[]>,
+): Promise<ResolvedSubtitleSource> {
+  const track = source.kind === 'official' ? source.track : source.source;
+  const cues = cuesByTrack.get(track.id) ?? [];
+  if (source.kind === 'official') {
+    return { kind: 'official', cues, source: cues };
+  }
+  if (source.kind === 'opencc') {
+    const response = await chrome.runtime.sendMessage({
+      channel: 'duetsub-mt',
+      version: 1,
+      type: 'opencc',
+      cues,
+    }) as { readonly cues: readonly Cue[] };
+    return {
+      kind: 'opencc',
+      cues: response.cues,
+      source: cues,
+    };
+  }
+  return {
+    kind: 'mt',
+    cues: [],
+    source: cues,
+    trackId: track.id,
+    targetLanguage: source.targetLanguage,
+  };
 }
 
 function openOptionsPage(): void {
