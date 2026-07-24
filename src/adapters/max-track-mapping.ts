@@ -11,6 +11,7 @@ interface XmlNodeList {
 
 interface XmlNode {
   readonly nodeType: number;
+  readonly parentNode: XmlNode | null;
 }
 
 interface XmlElement extends XmlNode {
@@ -42,6 +43,40 @@ export interface MaxTrackResource {
   readonly segments: readonly MaxTrackSegment[];
 }
 
+export function selectMaxSegmentsAt(
+  segments: readonly MaxTrackSegment[],
+  presentationTimeMs: number,
+): readonly MaxTrackSegment[] {
+  if (
+    segments.length === 0 ||
+    !Number.isFinite(presentationTimeMs) ||
+    presentationTimeMs < 0
+  ) {
+    return [];
+  }
+
+  let selectedIndex = 0;
+  let previousStartMs = -1;
+  for (let index = 0; index < segments.length; index += 1) {
+    const startMs = segments[index].presentationAnchor.presentationTimeMs;
+    if (!Number.isFinite(startMs) || startMs < previousStartMs) return [];
+    if (startMs <= presentationTimeMs) selectedIndex = index;
+    previousStartMs = startMs;
+  }
+  return segments.slice(selectedIndex);
+}
+
+export function selectMaxSegmentsAfterFailure(
+  segments: readonly MaxTrackSegment[],
+  failedUrl: string,
+): readonly MaxTrackSegment[] {
+  const failedIndexes = segments.flatMap((segment, index) =>
+    segment.url === failedUrl ? [index] : []
+  );
+  if (failedIndexes.length !== 1) return [];
+  return segments.slice(failedIndexes[0] + 1);
+}
+
 export type MaxTrackResourceMap = Readonly<
   Record<string, MaxTrackResource>
 >;
@@ -60,7 +95,7 @@ export function mapMaxTrackResources(
   const playback = parsePlaybackInfo(input.playbackInfoRaw);
   if (
     playback === undefined ||
-    !sameUrlWithoutQuery(playback.manifestUrl, input.manifestUrl)
+    !sameMaxManifestUrl(playback.manifestUrl, input.manifestUrl)
   ) {
     return {};
   }
@@ -84,8 +119,9 @@ export function mapMaxTrackResources(
         adaptation.language === declared[0].language &&
         adaptation.role === roleForType(declared[0].type),
     );
-    if (matches.length !== 1) continue;
-    result[track.id] = { track, segments: matches[0].segments };
+    const segments = mergePeriodAdaptations(matches);
+    if (segments === undefined) continue;
+    result[track.id] = { track, segments };
   }
 
   return result;
@@ -132,6 +168,12 @@ function parsePlaybackInfo(raw: string): PlaybackInfo | undefined {
   }
 
   return { manifestUrl, textTracks };
+}
+
+export function readMaxPlaybackManifestUrl(
+  raw: string,
+): string | undefined {
+  return parsePlaybackInfo(raw)?.manifestUrl;
 }
 
 function parsePlaybackTextTrack(
@@ -185,6 +227,8 @@ function parseDashManifest(
 interface TextAdaptation {
   readonly language: string;
   readonly role: 'subtitle' | 'caption';
+  readonly periodStartMs: number;
+  readonly periodDurationMs?: number;
   readonly segments: readonly MaxTrackSegment[];
 }
 
@@ -215,13 +259,49 @@ function readTextAdaptations(
     );
     if (language === undefined || role === undefined || !hasWebVtt) continue;
 
+    const period = asElement(adaptation.parentNode);
+    if (
+      period?.localName !== 'Period' ||
+      period.namespaceURI !== DASH_NAMESPACE
+    ) {
+      continue;
+    }
+    const rawPeriodStart = period.getAttribute('start');
+    const periodStartMs =
+      rawPeriodStart === null || rawPeriodStart === ''
+        ? 0
+        : parseDashDurationMs(rawPeriodStart);
+    const rawPeriodDuration = period.getAttribute('duration');
+    const periodDurationMs =
+      rawPeriodDuration === null || rawPeriodDuration === ''
+        ? undefined
+        : parseDashDurationMs(rawPeriodDuration);
+    if (
+      periodStartMs === undefined ||
+      (rawPeriodDuration !== null &&
+        rawPeriodDuration !== '' &&
+        periodDurationMs === undefined)
+    ) {
+      continue;
+    }
+
     const templates = elements(
       adaptation.getElementsByTagNameNS(DASH_NAMESPACE, 'SegmentTemplate'),
     );
     if (templates.length !== 1) continue;
-    const segments = expandSegments(templates[0], manifestUrl);
+    const segments = expandSegments(
+      templates[0],
+      manifestUrl,
+      periodStartMs,
+    );
     if (segments.length === 0) continue;
-    result.push({ language, role, segments });
+    result.push({
+      language,
+      role,
+      periodStartMs,
+      periodDurationMs,
+      segments,
+    });
   }
 
   return result;
@@ -246,6 +326,7 @@ function readRole(
 function expandSegments(
   template: XmlElement,
   manifestUrl: string,
+  periodStartMs: number,
 ): MaxTrackSegment[] {
   const media = template.getAttribute('media') ?? '';
   const timescale = Number(template.getAttribute('timescale') ?? '');
@@ -288,8 +369,14 @@ function expandSegments(
 
     for (let repeated = 0; repeated <= repeat; repeated += 1) {
       if (currentTime === undefined) return [];
-      const presentationTimeMs = currentTime / timescale * 1_000;
-      if (!Number.isFinite(presentationTimeMs)) return [];
+      const mediaTimeMs = currentTime / timescale * 1_000;
+      const presentationTimeMs = periodStartMs + mediaTimeMs;
+      if (
+        !Number.isFinite(mediaTimeMs) ||
+        !Number.isFinite(presentationTimeMs)
+      ) {
+        return [];
+      }
       const url = resolveSegmentUrl(
         media.replace('$Number$', String(number)),
         manifestUrl,
@@ -298,8 +385,7 @@ function expandSegments(
       result.push({
         url,
         presentationAnchor: {
-          mpegTs:
-            Math.round(presentationTimeMs * 90) % MPEG_TS_WRAP,
+          mpegTs: Math.round(mediaTimeMs * 90) % MPEG_TS_WRAP,
           presentationTimeMs,
         },
       });
@@ -309,6 +395,49 @@ function expandSegments(
   }
 
   return result;
+}
+
+function mergePeriodAdaptations(
+  adaptations: readonly TextAdaptation[],
+): readonly MaxTrackSegment[] | undefined {
+  if (adaptations.length === 0) return undefined;
+  const ordered = [...adaptations].sort(
+    (left, right) => left.periodStartMs - right.periodStartMs,
+  );
+
+  for (let index = 1; index < ordered.length; index += 1) {
+    const previous = ordered[index - 1];
+    const current = ordered[index];
+    if (
+      previous.periodStartMs >= current.periodStartMs ||
+      previous.periodDurationMs === undefined ||
+      previous.periodStartMs + previous.periodDurationMs >
+        current.periodStartMs
+    ) {
+      return undefined;
+    }
+  }
+
+  return ordered.flatMap((adaptation) => adaptation.segments);
+}
+
+function parseDashDurationMs(value: string): number | undefined {
+  const match = value.match(
+    /^P(?:(\d+(?:\.\d+)?)D)?(?:T(?:(\d+(?:\.\d+)?)H)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)S)?)?$/,
+  );
+  if (match === null || match.slice(1).every((part) => part === undefined)) {
+    return undefined;
+  }
+  const days = Number(match[1] ?? 0);
+  const hours = Number(match[2] ?? 0);
+  const minutes = Number(match[3] ?? 0);
+  const seconds = Number(match[4] ?? 0);
+  const milliseconds = Math.round(
+    (((days * 24 + hours) * 60 + minutes) * 60 + seconds) * 1_000,
+  );
+  return Number.isSafeInteger(milliseconds) && milliseconds >= 0
+    ? milliseconds
+    : undefined;
 }
 
 function resolveSegmentUrl(
@@ -359,19 +488,36 @@ function optionalInteger(value: string | null): number | undefined {
   return Number.isSafeInteger(parsed) ? parsed : undefined;
 }
 
-function sameUrlWithoutQuery(left: string, right: string): boolean {
+export function sameMaxManifestUrl(left: string, right: string): boolean {
   try {
     const leftUrl = new URL(left);
     const rightUrl = new URL(right);
+    if (
+      leftUrl.username !== '' ||
+      leftUrl.password !== '' ||
+      rightUrl.username !== '' ||
+      rightUrl.password !== '' ||
+      leftUrl.protocol !== 'https:' ||
+      rightUrl.protocol !== 'https:'
+    ) {
+      return false;
+    }
+    if (leftUrl.pathname !== rightUrl.pathname) return false;
+    if (leftUrl.origin === rightUrl.origin) return true;
     return (
-      leftUrl.protocol === 'https:' &&
-      rightUrl.protocol === 'https:' &&
-      leftUrl.origin === rightUrl.origin &&
-      leftUrl.pathname === rightUrl.pathname
+      isMaxMediaHost(leftUrl.hostname) &&
+      isMaxMediaHost(rightUrl.hostname)
     );
   } catch {
     return false;
   }
+}
+
+function isMaxMediaHost(hostname: string): boolean {
+  return (
+    hostname === 'prd.media.max.com' ||
+    hostname.endsWith('.prd.media.max.com')
+  );
 }
 
 function isHttpsUrl(value: string): boolean {

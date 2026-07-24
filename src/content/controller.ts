@@ -1,5 +1,9 @@
 import type { Cue, SiteAdapter, SiteId, TrackInfo } from '../core/contracts';
 import {
+  alignMaxChineseCuesToEnglish,
+  selectMaxEnglishPrimaryTrack,
+} from '../adapters/max-cue-alignment';
+import {
   acceptPlaybackGeneration,
   bindPlaybackGeneration,
   INITIAL_PLAYBACK_LIFECYCLE,
@@ -287,8 +291,14 @@ class PlaybackController {
       [this.#storageKey]: this.#state.enabled,
     });
 
-    if (this.#state.enabled) this.#loadTracks();
-    else {
+    if (this.#state.enabled) {
+      if (needsTrackAcquisition(this.#state)) {
+        this.#loadTracks();
+      } else {
+        this.#status = this.#readyStatus;
+        this.#render();
+      }
+    } else {
       this.#status = this.#adapter === undefined
         ? '關閉 · 點擊即可載入假軌'
         : '關閉 · 點擊即可載入官方軌';
@@ -375,6 +385,8 @@ class PlaybackController {
 
     const decision = this.#siteId === 'youtube'
       ? decideYouTubeSources(tracks)
+      : this.#siteId === 'max'
+      ? decideMaxSources(tracks)
       : decideSubtitleSources(tracks);
     if (decision.english === undefined || decision.chinese === undefined) {
       this.#status = '開啟 · 沒有可用的英文或中文來源';
@@ -423,12 +435,25 @@ class PlaybackController {
         );
       }
 
-      this.#englishCues = accepted.english.kind === 'mt'
+      const englishCues = accepted.english.kind === 'mt'
         ? []
         : accepted.english.cues;
-      this.#chineseCues = accepted.chinese.kind === 'mt'
+      const chineseCues = accepted.chinese.kind === 'mt'
         ? []
         : accepted.chinese.cues;
+      const maxEnglishPrimaryAligned =
+        this.#siteId === 'max' &&
+        accepted.english.kind === 'official' &&
+        accepted.chinese.kind !== 'mt';
+      const displayedChineseCues = maxEnglishPrimaryAligned
+        ? alignMaxChineseCuesToEnglish(englishCues, chineseCues)
+        : chineseCues;
+      if (maxEnglishPrimaryAligned && displayedChineseCues.length === 0) {
+        throw new Error('Max English-primary cue alignment unavailable');
+      }
+
+      this.#englishCues = englishCues;
+      this.#chineseCues = displayedChineseCues;
       this.#englishMachineTranslated = accepted.english.kind === 'mt' ||
         (accepted.english.kind === 'official' &&
           accepted.english.trackSource === 'platform-mt');
@@ -445,7 +470,11 @@ class PlaybackController {
         ? { side: 'chinese' as const, value: accepted.chinese }
         : undefined;
       if (mt === undefined) {
-        this.#readyStatus = accepted.chinese.kind === 'opencc'
+        this.#readyStatus = maxEnglishPrimaryAligned
+          ? accepted.chinese.kind === 'opencc'
+            ? '官方英文主軌 + OpenCC 繁中對齊 · 100%'
+            : '官方英文主軌 + 官方繁中對齊 · 100%'
+          : accepted.chinese.kind === 'opencc'
           ? '官方簡中 + OpenCC 繁中 · 100%'
           : accepted.english.kind === 'official' &&
               accepted.chinese.kind === 'official'
@@ -893,6 +922,21 @@ function decideYouTubeSources(
     };
   }
   return decideSubtitleSources(tracks);
+}
+
+function decideMaxSources(
+  tracks: readonly TrackInfo[],
+): SubtitleSourceDecision {
+  const decision = decideSubtitleSources(tracks);
+  const english = selectMaxEnglishPrimaryTrack(tracks);
+  if (english === undefined) return decision;
+
+  return {
+    english: { kind: 'official', track: english },
+    chinese: decision.chinese?.kind === 'mt'
+      ? { ...decision.chinese, source: english }
+      : decision.chinese,
+  };
 }
 
 function selectedTrackStatus(

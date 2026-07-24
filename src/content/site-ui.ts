@@ -1,5 +1,6 @@
 import type { SiteId } from '../core/contracts';
 import { readNetflixWatchIdentity } from '../adapters/netflix-location';
+import { readMaxContentIdentity } from '../adapters/max-location';
 import { youtubeVideoIdFromUrl } from '../adapters/youtube-url';
 
 interface SiteUiBinding {
@@ -95,7 +96,7 @@ export function findSiteUiTarget(siteId: SiteId): SiteUiTarget | undefined {
       siteId === 'primevideo'
         ? readPrimeEpisodeIdentity(player)
         : siteId === 'max'
-          ? readMaxContentIdentity()
+          ? readMaxContentIdentity(window.location.href)
           : siteId === 'netflix'
             ? readNetflixWatchIdentity(window.location.href)
           : undefined,
@@ -110,13 +111,6 @@ function readPrimeEpisodeIdentity(player: HTMLElement): string | undefined {
     .querySelector<HTMLElement>('.atvwebplayersdk-subtitle-text')
     ?.textContent?.trim();
   return title && episode ? `${title}\n${episode}` : undefined;
-}
-
-function readMaxContentIdentity(): string | undefined {
-  const match = window.location.pathname.match(
-    /^\/video\/watch\/[^/]+\/[^/]+/,
-  );
-  return match?.[0];
 }
 
 function isVisible(element: HTMLElement): boolean {

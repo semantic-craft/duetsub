@@ -36,6 +36,8 @@ Created: 2026-07-22
 - **01 walking skeleton**：采用 WXT 每站一对静态 MAIN/ISOLATED entrypoint；MAIN 仅通过版本化消息协议转发假 `TrackInfo`/`Cue`，核心时钟、纯 synchronizer、overlay model/renderer、站点 toggle storage 与 UI 全在 ISOLATED；四站登录态真机 pass 保留为 HITL。
 - **02 Prime official dual**：保留静态 MAIN `document_start` 薄 fetch/XHR 观测；ISOLATED 以 live accessible menu 枚举并串行 acquisition、pending DOM handle + TTML 根语言认领响应、finally 恢复用户状态；共享 TTML parser 与官方 en/zh-Hant 选择接回 ticket 01 overlay，登录态明确点击 happy path 已过双轨 gate。
 - **03 Prime lifecycle robustness**：共享纯 lifecycle reducer 统一 seek/ad/native/generation 决策；Prime 仅用 live 标题+集标题 identity 驱动 content reset，并以 generation-bound track/TTML + 有界预取 inbox 处理 seek、换集和 video replacement；顺播/seek/换集/重绑真机通过，真实广告 gate 按用户批准记环境性 WAIVED、未猜 selector。
+- **05 HBO Max adapter**：完整 `playbackInfo + MPD` 映射官方轨，优先英文 CC 并以唯一 active 英文 cue 对齐繁中显示副本；低于 95% 整轨 fail closed，顺播、seek、菜单恢复、开关/原生层与 SPA 换集真机通过，广告 gate 按用户明确指示 WAIVED。
+- **06 Netflix adapter**：MAIN 以请求发起时的 `/watch/<id>` 绑定 OCA TTML 原文，ISOLATED 用内容 ID + generation + pending/唯一轨归属 fail closed；manifest 未观察时菜单 fallback 可枚举并恢复繁中，登录态双轨、顺播、seek、同页换集/video replacement 真机通过，广告 gate 按用户明确指示 WAIVED。
 
 ## UI 决策（2026-07-22 已拍板，已回填 spec + 票）
 

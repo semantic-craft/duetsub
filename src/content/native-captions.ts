@@ -18,11 +18,12 @@ export class NativeCaptionVisibility {
     }
 
     for (const element of document.querySelectorAll<HTMLElement>(this.#selector)) {
-      if (this.#hidden.some((entry) => entry.element === element)) continue;
-      this.#hidden.push({
-        element,
-        previousVisibility: element.style.visibility,
-      });
+      if (!this.#hidden.some((entry) => entry.element === element)) {
+        this.#hidden.push({
+          element,
+          previousVisibility: element.style.visibility,
+        });
+      }
       element.style.visibility = 'hidden';
     }
   }

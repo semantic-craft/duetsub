@@ -39,6 +39,25 @@ export function resolveNetflixResponseOwner(
     : undefined;
 }
 
+export function resolveNetflixUnownedResponseGeneration(
+  observedContentIdentity: string | undefined,
+  _observedGeneration: PlaybackGeneration,
+  currentContentIdentity: string | undefined,
+  currentGeneration: PlaybackGeneration,
+): PlaybackGeneration | undefined {
+  if (
+    observedContentIdentity === undefined ||
+    currentContentIdentity === undefined ||
+    observedContentIdentity !== currentContentIdentity
+  ) {
+    return undefined;
+  }
+  return {
+    contentGeneration: currentGeneration.contentGeneration,
+    clockGeneration: currentGeneration.clockGeneration,
+  };
+}
+
 export function recordNetflixTtmlResponse(
   inbox: NetflixTtmlResponseInbox,
   response: {
@@ -69,6 +88,79 @@ export function recordNetflixTtmlResponse(
       generation: response.owner.generation,
     },
   ].slice(-MAX_BUFFERED_RESPONSES);
+}
+
+export function recordNetflixTtmlResponseForUniqueTrack(
+  inbox: NetflixTtmlResponseInbox,
+  response: {
+    readonly responseId: string;
+    readonly raw: string;
+    readonly generation: PlaybackGeneration;
+    readonly candidates: readonly TrackInfo[];
+  },
+  parser?: NonNullable<TtmlParserOptions['parser']>,
+): NetflixTtmlResponseInbox {
+  const candidates = response.candidates.filter(
+    (track, index) =>
+      response.candidates.findIndex(({ id }) => id === track.id) === index,
+  );
+  const matches = candidates.flatMap((track) =>
+    recordNetflixTtmlResponse(
+      EMPTY_NETFLIX_TTML_INBOX,
+      {
+        responseId: response.responseId,
+        raw: response.raw,
+        owner: { track, generation: response.generation },
+      },
+      parser,
+    ),
+  );
+  if (matches.length !== 1) return inbox;
+
+  return [
+    ...inbox.filter(
+      ({ responseId }) => responseId !== response.responseId,
+    ),
+    matches[0],
+  ].slice(-MAX_BUFFERED_RESPONSES);
+}
+
+export function claimNetflixTtmlResponseForPending(
+  inbox: NetflixTtmlResponseInbox,
+  responses: readonly {
+    readonly responseId: string;
+    readonly raw: string;
+  }[],
+  owner: NetflixResponseOwner,
+  parser?: NonNullable<TtmlParserOptions['parser']>,
+): {
+  readonly inbox: NetflixTtmlResponseInbox;
+  readonly claimedResponseId: string | undefined;
+} {
+  const matches = responses.flatMap((response) =>
+    recordNetflixTtmlResponse(
+      EMPTY_NETFLIX_TTML_INBOX,
+      {
+        ...response,
+        owner,
+      },
+      parser,
+    ),
+  );
+  if (matches.length !== 1) {
+    return { inbox, claimedResponseId: undefined };
+  }
+
+  const claimed = matches[0];
+  return {
+    inbox: [
+      ...inbox.filter(
+        ({ responseId }) => responseId !== claimed.responseId,
+      ),
+      claimed,
+    ].slice(-MAX_BUFFERED_RESPONSES),
+    claimedResponseId: claimed.responseId,
+  };
 }
 
 export function retainNetflixTtmlResponsesForGeneration(

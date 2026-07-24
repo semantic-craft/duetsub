@@ -5,17 +5,22 @@ import { parseWebVtt } from '../core/webvtt';
 import {
   EMPTY_MAX_RESPONSE_INBOX,
   recordMaxResponse,
-  resolveMaxTrackResources,
+  resolveMaxTrackResourceSelection,
   retainMaxResponsesForGeneration,
   type MaxResponseInbox,
 } from './max-responses';
-import type {
-  MaxTrackResource,
-  MaxTrackSegment,
+import {
+  selectMaxSegmentsAfterFailure,
+  selectMaxSegmentsAt,
+  type MaxTrackResource,
+  type MaxTrackSegment,
 } from './max-track-mapping';
+import { readMaxContentIdentity } from './max-location';
 
 const VIDEO_SELECTOR = '[data-testid="VideoElement"]';
+const PLAYER_SELECTOR = '[data-testid="playerContainer"]';
 const MENU_BUTTON_SELECTOR =
+  '[data-testid="playback_controls"] ' +
   '[data-testid="player-ux-track-selector-button"]';
 const MENU_DISMISS_SELECTOR =
   '[data-testid="player-ux-track-dismiss-button"]';
@@ -58,6 +63,7 @@ class MaxAdapter implements SiteAdapter {
   };
   #inbox: MaxResponseInbox = EMPTY_MAX_RESPONSE_INBOX;
   #tracks: readonly TrackInfo[] = [];
+  #activeManifestUrl: string | undefined;
   #adBreaks: readonly AdBreak[] = [];
   #adActive: boolean | undefined;
   #adExitPending = false;
@@ -144,10 +150,7 @@ class MaxAdapter implements SiteAdapter {
     if (!this.#generationBound) {
       this.#generationBound = true;
       this.#generation = generation;
-      this.#inbox = this.#inbox.map((response) => ({
-        ...response,
-        generation,
-      }));
+      this.#retainCurrentContentResponses(generation);
       this.#wakeMappingWaiters();
       return;
     }
@@ -155,10 +158,14 @@ class MaxAdapter implements SiteAdapter {
 
     const contentChanged =
       this.#generation.contentGeneration !== generation.contentGeneration;
+    const previousManifestUrl = contentChanged
+      ? this.#activeManifestUrl
+      : undefined;
     this.#generation = generation;
-    this.#inbox = retainMaxResponsesForGeneration(this.#inbox, generation);
+    this.#retainCurrentContentResponses(generation, previousManifestUrl);
     this.#tracks = [];
     if (contentChanged) {
+      this.#activeManifestUrl = undefined;
       this.#adBreaks = [];
       this.#adActive = undefined;
       this.#adExitPending = false;
@@ -189,10 +196,13 @@ class MaxAdapter implements SiteAdapter {
     ) {
       return;
     }
+    const contentIdentity = readMaxContentIdentity(window.location.href);
+    if (contentIdentity !== message.contentIdentity) return;
 
     this.#inbox = recordMaxResponse(this.#inbox, {
       responseId: message.responseId,
       kind: message.kind,
+      contentIdentity: message.contentIdentity,
       url: message.url,
       raw: message.raw,
       generation: this.#generation,
@@ -204,6 +214,21 @@ class MaxAdapter implements SiteAdapter {
     this.#wakeMappingWaiters();
   };
 
+  #retainCurrentContentResponses(
+    generation: PlaybackGeneration,
+    previousManifestUrl?: string,
+  ): void {
+    const contentIdentity = readMaxContentIdentity(window.location.href);
+    this.#inbox = contentIdentity === undefined
+      ? EMPTY_MAX_RESPONSE_INBOX
+      : retainMaxResponsesForGeneration(
+          this.#inbox,
+          generation,
+          contentIdentity,
+          previousManifestUrl,
+        );
+  }
+
   async #waitForTrackResource(
     track: TrackInfo,
     generation: PlaybackGeneration,
@@ -214,13 +239,16 @@ class MaxAdapter implements SiteAdapter {
       if (!sameGeneration(this.#generation, generation)) {
         throw new Error('Max track mapping became stale');
       }
-      const mapping = resolveMaxTrackResources(
+      const resolution = resolveMaxTrackResourceSelection(
         this.#inbox,
         this.#tracks,
         generation,
       );
-      const resource = mapping[track.id];
-      if (resource !== undefined) return resource;
+      const resource = resolution?.resources[track.id];
+      if (resource !== undefined && resolution !== undefined) {
+        this.#activeManifestUrl = resolution.manifestUrl;
+        return resource;
+      }
       await this.#waitForMappingChange();
     }
 
@@ -250,14 +278,44 @@ class MaxAdapter implements SiteAdapter {
     generation: PlaybackGeneration,
     signal: AbortSignal,
   ): Promise<Cue[]> {
+    const video = currentMaxPlayer()?.video;
+    if (video === undefined || !Number.isFinite(video.currentTime)) {
+      throw new Error('Max video clock unavailable');
+    }
+    let pending = [...selectMaxSegmentsAt(
+      resource.segments,
+      video.currentTime * 1_000,
+    )];
+    if (pending.length === 0) {
+      throw new Error('Max subtitle segment timeline unavailable');
+    }
+
     const cues: Cue[] = [];
-    for (const segment of resource.segments) {
+    while (pending.length > 0) {
+      const segment = pending[0];
       if (!sameGeneration(this.#generation, generation)) {
         throw new Error('Max track response became stale');
       }
-      const raw =
-        this.#observedVtt(segment, generation) ??
-        await fetchVtt(segment.url, signal);
+      let raw = this.#observedVtt(segment, generation);
+      if (raw === undefined) {
+        try {
+          raw = await fetchVtt(segment.url, signal);
+        } catch (error) {
+          const recovery = error instanceof MaxVttRequestError &&
+              error.status === 404
+            ? selectMaxSegmentsAfterFailure(resource.segments, segment.url)
+            : [];
+          if (recovery.length === 0) throw error;
+          await this.#waitForPresentationTime(
+            video,
+            recovery[0].presentationAnchor.presentationTimeMs,
+            generation,
+            signal,
+          );
+          pending = [...recovery];
+          continue;
+        }
+      }
       const parsed = parseWebVtt(raw, {
         language: resource.track.language,
         presentationAnchor: segment.presentationAnchor,
@@ -266,8 +324,28 @@ class MaxAdapter implements SiteAdapter {
         throw new Error(`Max VTT segment could not be normalized: ${segment.url}`);
       }
       cues.push(...parsed);
+      pending.shift();
     }
     return normalizeCues(cues);
+  }
+
+  async #waitForPresentationTime(
+    video: HTMLVideoElement,
+    presentationTimeMs: number,
+    generation: PlaybackGeneration,
+    signal: AbortSignal,
+  ): Promise<void> {
+    while (video.currentTime * 1_000 < presentationTimeMs) {
+      if (
+        signal.aborted ||
+        !sameGeneration(this.#generation, generation) ||
+        !video.isConnected ||
+        video.ended
+      ) {
+        throw new Error('Max VTT recovery became stale');
+      }
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 100));
+    }
   }
 
   #observedVtt(
@@ -318,34 +396,40 @@ class MaxAdapter implements SiteAdapter {
 }
 
 async function enumerateMaxTracks(): Promise<TrackInfo[]> {
-  await waitForMaxPlayerReady();
-  const menuWasOpen = isTrackMenuOpen();
+  const player = await waitForMaxPlayerReady();
+  const menuWasOpen = isTrackMenuOpen(player);
   let operationError: unknown;
   let tracks: TrackInfo[] = [];
 
   try {
-    if (!menuWasOpen) await openTrackMenu();
+    if (!menuWasOpen) await openTrackMenu(player);
     await waitUntil(
-      () => visibleElements<HTMLButtonElement>(TRACK_BUTTON_SELECTOR).length > 1,
+      () =>
+        player.isConnected &&
+        visibleElements<HTMLButtonElement>(
+          TRACK_BUTTON_SELECTOR,
+          player,
+        ).length > 1,
       DOM_TIMEOUT_MS,
     );
-    tracks = readOfficialTracks();
+    tracks = readOfficialTracks(player);
     if (tracks.length === 0) throw new Error('No Max subtitle tracks');
   } catch (error) {
     operationError = error;
   }
 
-  if (!menuWasOpen && !(await closeTrackMenu())) {
+  if (!menuWasOpen && !(await closeTrackMenu(player))) {
     operationError = new Error('Could not restore Max subtitle menu state');
   }
   if (operationError !== undefined) throw asError(operationError);
   return tracks;
 }
 
-function readOfficialTracks(): TrackInfo[] {
+function readOfficialTracks(player: HTMLElement): TrackInfo[] {
   const tracks: TrackInfo[] = [];
   for (const button of visibleElements<HTMLButtonElement>(
     TRACK_BUTTON_SELECTOR,
+    player,
   )) {
     const track = trackFromButton(button);
     if (track !== undefined && !tracks.some(({ id }) => id === track.id)) {
@@ -391,41 +475,83 @@ function languageFromTrackId(id: string): string | undefined {
   }
 }
 
-async function waitForMaxPlayerReady(): Promise<void> {
+async function waitForMaxPlayerReady(): Promise<HTMLElement> {
   await waitUntil(() => {
-    const videos = visibleElements<HTMLVideoElement>(VIDEO_SELECTOR);
-    return videos.length === 1 && videos[0].readyState >= 2;
+    const current = currentMaxPlayer();
+    return current !== undefined && current.video.readyState >= 2;
   }, DOM_TIMEOUT_MS);
+  const current = currentMaxPlayer();
+  if (current === undefined) throw new Error('Max video player is ambiguous');
+  return current.player;
 }
 
-async function openTrackMenu(): Promise<void> {
-  const buttons = visibleElements<HTMLButtonElement>(MENU_BUTTON_SELECTOR);
+async function openTrackMenu(player: HTMLElement): Promise<void> {
+  await waitUntil(
+    () =>
+      player.isConnected &&
+      player.querySelectorAll<HTMLButtonElement>(MENU_BUTTON_SELECTOR).length ===
+        1,
+    DOM_TIMEOUT_MS,
+  );
+  const buttons =
+    player.querySelectorAll<HTMLButtonElement>(MENU_BUTTON_SELECTOR);
   if (buttons.length !== 1) {
     throw new Error('Max subtitle menu button is ambiguous');
   }
   buttons[0].click();
-  await waitUntil(isTrackMenuOpen, DOM_TIMEOUT_MS);
+  await waitUntil(() => isTrackMenuOpen(player), DOM_TIMEOUT_MS);
 }
 
-async function closeTrackMenu(): Promise<boolean> {
-  if (!isTrackMenuOpen()) return true;
-  const buttons = visibleElements<HTMLButtonElement>(MENU_DISMISS_SELECTOR);
-  if (buttons.length !== 1) return false;
+async function closeTrackMenu(player: HTMLElement): Promise<boolean> {
+  if (!isTrackMenuOpen(player)) return true;
+  let buttons: HTMLButtonElement[];
+  try {
+    await waitUntil(
+      () =>
+        player.isConnected &&
+        visibleElements<HTMLButtonElement>(
+          MENU_DISMISS_SELECTOR,
+          player,
+        ).length === 1,
+      DOM_TIMEOUT_MS,
+    );
+    buttons = visibleElements<HTMLButtonElement>(
+      MENU_DISMISS_SELECTOR,
+      player,
+    );
+  } catch {
+    return false;
+  }
   buttons[0].click();
   try {
-    await waitUntil(() => !isTrackMenuOpen(), DOM_TIMEOUT_MS);
+    await waitUntil(() => !isTrackMenuOpen(player), DOM_TIMEOUT_MS);
     return true;
   } catch {
     return false;
   }
 }
 
-function isTrackMenuOpen(): boolean {
-  return visibleElements<HTMLElement>(MENU_DISMISS_SELECTOR).length === 1;
+function isTrackMenuOpen(player: HTMLElement): boolean {
+  return visibleElements<HTMLElement>(
+    MENU_DISMISS_SELECTOR,
+    player,
+  ).length > 0;
 }
 
-function visibleElements<T extends HTMLElement>(selector: string): T[] {
-  return Array.from(document.querySelectorAll<T>(selector)).filter(isVisible);
+function currentMaxPlayer():
+  | { readonly video: HTMLVideoElement; readonly player: HTMLElement }
+  | undefined {
+  const videos = visibleElements<HTMLVideoElement>(VIDEO_SELECTOR);
+  if (videos.length !== 1) return undefined;
+  const player = videos[0].closest<HTMLElement>(PLAYER_SELECTOR);
+  return player === null ? undefined : { video: videos[0], player };
+}
+
+function visibleElements<T extends HTMLElement>(
+  selector: string,
+  root: ParentNode = document,
+): T[] {
+  return Array.from(root.querySelectorAll<T>(selector)).filter(isVisible);
 }
 
 function isVisible(element: HTMLElement): boolean {
@@ -443,7 +569,7 @@ async function fetchVtt(url: string, signal: AbortSignal): Promise<string> {
     signal,
   });
   if (!response.ok) {
-    throw new Error(`Max VTT request failed: ${response.status}`);
+    throw new MaxVttRequestError(response.status);
   }
   const raw = await response.text();
   if (
@@ -454,6 +580,12 @@ async function fetchVtt(url: string, signal: AbortSignal): Promise<string> {
     throw new Error('Max VTT response failed format validation');
   }
   return raw;
+}
+
+class MaxVttRequestError extends Error {
+  constructor(readonly status: number) {
+    super(`Max VTT request failed: ${status}`);
+  }
 }
 
 function normalizeCues(cues: readonly Cue[]): Cue[] {

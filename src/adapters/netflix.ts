@@ -4,10 +4,13 @@ import { isDuetSubMessage } from '../core/messages';
 import { readNetflixWatchIdentity } from './netflix-location';
 import { parseNetflixManifest, type NetflixManifest } from './netflix-manifest';
 import {
+  claimNetflixTtmlResponseForPending,
   consumeNetflixTtmlResponse,
   EMPTY_NETFLIX_TTML_INBOX,
   recordNetflixTtmlResponse,
+  recordNetflixTtmlResponseForUniqueTrack,
   resolveNetflixResponseOwner,
+  resolveNetflixUnownedResponseGeneration,
   retainNetflixTtmlResponsesForGeneration,
   type NetflixResponseOwner,
   type NetflixTtmlResponseInbox,
@@ -19,6 +22,7 @@ const SUBTITLE_MENU_SELECTOR = 'div[data-uia="selector-audio-subtitle"]';
 const SUBTITLE_OPTION_SELECTOR = 'li[data-uia*="subtitle"]';
 const DOM_TIMEOUT_MS = 8_000;
 const RESPONSE_TIMEOUT_MS = 15_000;
+const MAX_UNOWNED_RESPONSES = 8;
 
 interface TrackRequest {
   readonly track: TrackInfo;
@@ -36,6 +40,13 @@ interface PendingResponse extends NetflixResponseOwner {
 interface GenerationBoundManifest {
   readonly generation: PlaybackGeneration;
   readonly manifest: NetflixManifest;
+}
+
+interface UnownedTtmlResponse {
+  readonly responseId: string;
+  readonly raw: string;
+  readonly contentIdentity: string;
+  readonly generation: PlaybackGeneration;
 }
 
 interface SubtitleMenuOption {
@@ -67,12 +78,15 @@ class NetflixAdapter implements SiteAdapter {
   #enumerating = false;
   #batchScheduled = false;
   #batchRunning = false;
+  #retryOnControlsInteraction = false;
+  #retryTimer: number | undefined;
   #manifest: GenerationBoundManifest | undefined;
   #tracks: readonly TrackInfo[] = [];
   #lastEmittedSignature: string | undefined;
   #currentTrack: TrackInfo | undefined;
   #pending: PendingResponse | undefined;
   #responseInbox: NetflixTtmlResponseInbox = EMPTY_NETFLIX_TTML_INBOX;
+  #unownedResponses: readonly UnownedTtmlResponse[] = [];
   #generation: PlaybackGeneration = {
     contentGeneration: 0,
     clockGeneration: 0,
@@ -80,14 +94,22 @@ class NetflixAdapter implements SiteAdapter {
 
   constructor() {
     window.addEventListener('message', this.#onMessage);
+    window.addEventListener('pointermove', this.#onControlsInteraction);
+    window.addEventListener('click', this.#onControlsInteraction);
   }
 
   start(): void {
     this.#started = true;
+    this.#retryOnControlsInteraction = false;
+    this.#lastEmittedSignature = undefined;
     const generation = this.#generation;
     const manifest = this.#currentManifest();
     if (manifest !== undefined) {
       this.#emitTracks(manifest.tracks, generation);
+      return;
+    }
+    if (this.#tracks.length > 0) {
+      this.#emitTracks(this.#tracks, generation);
       return;
     }
     if (this.#enumerating) return;
@@ -100,6 +122,9 @@ class NetflixAdapter implements SiteAdapter {
       },
       (error) => {
         console.warn('[DuetSub] Netflix track enumeration failed', error);
+        if (sameGeneration(this.#generation, generation)) {
+          this.#retryOnControlsInteraction = true;
+        }
         this.#emitTracks([], generation);
       },
     ).finally(() => {
@@ -153,6 +178,16 @@ class NetflixAdapter implements SiteAdapter {
     this.#responseInbox = retainNetflixTtmlResponsesForGeneration(
       this.#responseInbox,
       generation,
+    );
+    const currentIdentity = readNetflixWatchIdentity(window.location.href);
+    this.#unownedResponses = this.#unownedResponses.filter(
+      (response) =>
+        resolveNetflixUnownedResponseGeneration(
+          response.contentIdentity,
+          response.generation,
+          currentIdentity,
+          generation,
+        ) !== undefined,
     );
     this.#rejectPending(new Error('Netflix TTML response became stale'));
 
@@ -340,6 +375,7 @@ class NetflixAdapter implements SiteAdapter {
       }, RESPONSE_TIMEOUT_MS);
       this.#pending = { track, generation, resolve, reject, timeout };
     });
+    this.#claimUnownedResponses();
     this.#resolvePendingFromInbox();
     return response;
   }
@@ -422,8 +458,27 @@ class NetflixAdapter implements SiteAdapter {
     if (message.type === 'netflix-manifest') {
       this.#observeManifest(message.manifest);
     } else if (message.type === 'netflix-ttml-response') {
-      this.#observeTtmlResponse(message.responseId, message.raw);
+      this.#observeTtmlResponse(
+        message.responseId,
+        message.contentIdentity,
+        message.raw,
+      );
     }
+  };
+
+  readonly #onControlsInteraction = () => {
+    if (
+      !this.#retryOnControlsInteraction ||
+      this.#retryTimer !== undefined
+    ) {
+      return;
+    }
+    this.#retryOnControlsInteraction = false;
+    this.#retryTimer = window.setTimeout(() => {
+      this.#retryTimer = undefined;
+      if (!this.#started || this.#enumerating) return;
+      this.start();
+    }, 100);
   };
 
   #observeManifest(value: unknown): void {
@@ -441,13 +496,34 @@ class NetflixAdapter implements SiteAdapter {
     if (this.#started) this.#emitTracks(manifest.tracks, this.#generation);
   }
 
-  #observeTtmlResponse(responseId: string, raw: string): void {
+  #observeTtmlResponse(
+    responseId: string,
+    contentIdentity: string,
+    raw: string,
+  ): void {
+    if (
+      contentIdentity !== readNetflixWatchIdentity(window.location.href)
+    ) {
+      return;
+    }
     const owner = resolveNetflixResponseOwner(
       this.#generation,
       this.#pending,
       this.#currentTrack === undefined ? [] : [this.#currentTrack],
     );
-    if (owner === undefined) return;
+    if (owner === undefined) {
+      this.#unownedResponses = [
+        ...this.#unownedResponses,
+        {
+          responseId,
+          raw,
+          contentIdentity,
+          generation: this.#generation,
+        },
+      ].slice(-MAX_UNOWNED_RESPONSES);
+      this.#claimUnownedResponses();
+      return;
+    }
 
     const before = this.#responseInbox;
     this.#responseInbox = recordNetflixTtmlResponse(before, {
@@ -522,7 +598,60 @@ class NetflixAdapter implements SiteAdapter {
 
     this.#lastEmittedSignature = signature;
     this.#tracks = tracks;
+    this.#claimUnownedResponses();
     for (const callback of this.#trackCallbacks) callback([...tracks]);
+  }
+
+  #claimUnownedResponses(): void {
+    if (this.#tracks.length === 0 || this.#unownedResponses.length === 0) {
+      return;
+    }
+
+    const currentIdentity = readNetflixWatchIdentity(window.location.href);
+    const currentResponses = this.#unownedResponses.flatMap((response) => {
+      const generation = resolveNetflixUnownedResponseGeneration(
+        response.contentIdentity,
+        response.generation,
+        currentIdentity,
+        this.#generation,
+      );
+      return generation === undefined
+        ? []
+        : [{ ...response, generation }];
+    });
+
+    const pending = this.#pending;
+    let claimedResponseId: string | undefined;
+    if (
+      pending !== undefined &&
+      sameGeneration(pending.generation, this.#generation)
+    ) {
+      const claimed = claimNetflixTtmlResponseForPending(
+        this.#responseInbox,
+        currentResponses,
+        pending,
+      );
+      this.#responseInbox = claimed.inbox;
+      claimedResponseId = claimed.claimedResponseId;
+    }
+
+    const remaining: UnownedTtmlResponse[] = [];
+    for (const response of currentResponses) {
+      if (response.responseId === claimedResponseId) continue;
+      const nextInbox = recordNetflixTtmlResponseForUniqueTrack(
+        this.#responseInbox,
+        {
+          ...response,
+          candidates: this.#tracks,
+        },
+      );
+      const recorded = nextInbox.some(
+        ({ responseId }) => responseId === response.responseId,
+      );
+      this.#responseInbox = nextInbox;
+      if (!recorded) remaining.push(response);
+    }
+    this.#unownedResponses = remaining.slice(-MAX_UNOWNED_RESPONSES);
   }
 }
 
@@ -739,7 +868,18 @@ async function restoreMenuState(
     if (menuWasOpen) {
       await ensureSubtitleMenuOpen(button);
     } else if (isSubtitleMenuOpen()) {
-      button.click();
+      const menu = currentSubtitleMenu();
+      menu?.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Escape',
+          code: 'Escape',
+          keyCode: 27,
+          which: 27,
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+        }),
+      );
       await waitUntil(() => !isSubtitleMenuOpen(), DOM_TIMEOUT_MS);
     }
     return isSubtitleMenuOpen() === menuWasOpen;

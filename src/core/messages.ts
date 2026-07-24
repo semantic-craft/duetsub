@@ -58,6 +58,7 @@ export interface MaxSubtitleResponseMessage
   readonly siteId: 'max';
   readonly responseId: string;
   readonly kind: MaxSubtitleResponseKind;
+  readonly contentIdentity: string;
   readonly url: string;
   readonly raw: string;
 }
@@ -75,6 +76,7 @@ export interface NetflixTtmlResponseMessage
   readonly type: 'netflix-ttml-response';
   readonly siteId: 'netflix';
   readonly responseId: string;
+  readonly contentIdentity: string;
   readonly raw: string;
 }
 
@@ -227,6 +229,7 @@ export function maxSubtitleResponseMessage(
   kind: MaxSubtitleResponseKind,
   url: string,
   raw: string,
+  contentIdentity: string,
 ): MaxSubtitleResponseMessage {
   return {
     channel: CHANNEL,
@@ -236,6 +239,7 @@ export function maxSubtitleResponseMessage(
     siteId: 'max',
     responseId,
     kind,
+    contentIdentity,
     url,
     raw,
   };
@@ -256,6 +260,7 @@ export function netflixManifestMessage(
 
 export function netflixTtmlResponseMessage(
   responseId: string,
+  contentIdentity: string,
   raw: string,
 ): NetflixTtmlResponseMessage {
   return {
@@ -265,6 +270,7 @@ export function netflixTtmlResponseMessage(
     type: 'netflix-ttml-response',
     siteId: 'netflix',
     responseId,
+    contentIdentity,
     raw,
   };
 }
@@ -373,6 +379,7 @@ export function isDuetSubMessage(value: unknown): value is DuetSubMessage {
       candidate.responseId.length > 0 &&
       candidate.responseId.length <= 128 &&
       isMaxSubtitleResponseKind(candidate.kind) &&
+      isMaxContentIdentity(candidate.contentIdentity) &&
       typeof candidate.url === 'string' &&
       isMaxSubtitleObservationUrl(candidate.url, candidate.kind) &&
       typeof candidate.raw === 'string' &&
@@ -394,6 +401,8 @@ export function isDuetSubMessage(value: unknown): value is DuetSubMessage {
       typeof candidate.responseId === 'string' &&
       candidate.responseId.length > 0 &&
       candidate.responseId.length <= 128 &&
+      typeof candidate.contentIdentity === 'string' &&
+      /^[A-Za-z0-9._-]{1,128}$/.test(candidate.contentIdentity) &&
       typeof candidate.raw === 'string' &&
       candidate.raw.length > 0 &&
       candidate.raw.length <= 2_000_000
@@ -560,6 +569,11 @@ function isMaxSubtitleResponseKind(
     value === 'manifest' ||
     value === 'vtt'
   );
+}
+
+function isMaxContentIdentity(value: unknown): value is string {
+  return typeof value === 'string' &&
+    /^\/video\/watch\/[A-Za-z0-9-]{1,128}\/[A-Za-z0-9-]{1,128}$/.test(value);
 }
 
 function isMaxHost(hostname: string): boolean {

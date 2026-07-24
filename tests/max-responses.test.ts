@@ -19,6 +19,10 @@ const CURRENT_GENERATION = {
   contentGeneration: 1,
   clockGeneration: 1,
 };
+const EPISODE_ONE =
+  '/video/watch/b8a64f23-c654-4be6-829a-1cb5fb0b7c8e/c6728d9b-86a7-45cd-97a9-4ac7380aa4c6';
+const EPISODE_TWO =
+  '/video/watch/41c7eddd-2eea-4ed3-a299-474d693063f4/35a8260d-3bc6-4b91-b370-a5f3c72ad6d5';
 const SYNTHETIC_PLAYBACK_INFO = JSON.stringify({
   manifest: { url: 'https://media.example.invalid/title/dash.mpd' },
   videos: [
@@ -54,6 +58,7 @@ describe('Max response inbox', () => {
       url: 'https://media.example.invalid/title/t/en/1.vtt',
       raw: 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nOne cue',
       generation: CURRENT_GENERATION,
+      contentIdentity: EPISODE_ONE,
     });
 
     expect(
@@ -72,6 +77,7 @@ describe('Max response inbox', () => {
       url: 'https://api.example.invalid/playbackInfo',
       raw: SYNTHETIC_PLAYBACK_INFO,
       generation: CURRENT_GENERATION,
+      contentIdentity: EPISODE_ONE,
     });
     const episodeOne = recordMaxResponse(withPlayback, {
       responseId: 'episode-one-mpd',
@@ -79,6 +85,7 @@ describe('Max response inbox', () => {
       url: 'https://media.example.invalid/title/dash.mpd',
       raw: SYNTHETIC_MPD,
       generation: CURRENT_GENERATION,
+      contentIdentity: EPISODE_ONE,
     });
     expect(
       Object.keys(
@@ -98,6 +105,7 @@ describe('Max response inbox', () => {
     const episodeTwo = retainMaxResponsesForGeneration(
       episodeOne,
       episodeTwoGeneration,
+      EPISODE_TWO,
     );
 
     expect(episodeTwo).toEqual([]);
@@ -111,6 +119,147 @@ describe('Max response inbox', () => {
     ).toEqual({});
   });
 
+  it('promotes only the new episode metadata that arrived before generation advanced', () => {
+    const episodeTwoPlaybackInfo = SYNTHETIC_PLAYBACK_INFO.replaceAll(
+      '/title/',
+      '/title-two/',
+    );
+    const withOldPlayback = recordMaxResponse(EMPTY_MAX_RESPONSE_INBOX, {
+      responseId: 'episode-one-playback',
+      kind: 'playback-info',
+      url: 'https://api.example.invalid/playbackInfo',
+      raw: SYNTHETIC_PLAYBACK_INFO,
+      generation: CURRENT_GENERATION,
+      contentIdentity: EPISODE_ONE,
+    });
+    const withNewPlayback = recordMaxResponse(withOldPlayback, {
+      responseId: 'episode-two-playback',
+      kind: 'playback-info',
+      url: 'https://api.example.invalid/playbackInfo',
+      raw: episodeTwoPlaybackInfo,
+      generation: CURRENT_GENERATION,
+      contentIdentity: EPISODE_TWO,
+    });
+    const raced = recordMaxResponse(withNewPlayback, {
+      responseId: 'episode-two-mpd',
+      kind: 'manifest',
+      url: 'https://media.example.invalid/title-two/dash.mpd',
+      raw: SYNTHETIC_MPD,
+      generation: CURRENT_GENERATION,
+      contentIdentity: EPISODE_TWO,
+    });
+    const episodeTwoGeneration = {
+      contentGeneration: 2,
+      clockGeneration: 2,
+    };
+
+    const retained = retainMaxResponsesForGeneration(
+      raced,
+      episodeTwoGeneration,
+      EPISODE_TWO,
+    );
+
+    expect(
+      retained.map(({ responseId, contentIdentity, generation }) => ({
+        responseId,
+        contentIdentity,
+        generation,
+      })),
+    ).toEqual([
+      {
+        responseId: 'episode-two-playback',
+        contentIdentity: EPISODE_TWO,
+        generation: episodeTwoGeneration,
+      },
+      {
+        responseId: 'episode-two-mpd',
+        contentIdentity: EPISODE_TWO,
+        generation: episodeTwoGeneration,
+      },
+    ]);
+    expect(
+      Object.keys(
+        resolveMaxTrackResources(
+          retained,
+          [ENGLISH],
+          episodeTwoGeneration,
+          new DOMParser(),
+        ),
+      ),
+    ).toEqual([ENGLISH.id]);
+  });
+
+  it('promotes a prefetched next-episode playlist only when it differs from the active manifest', () => {
+    const nextPlaybackInfo = SYNTHETIC_PLAYBACK_INFO.replaceAll(
+      '/title/',
+      '/title-two/',
+    );
+    const activePlayback = recordMaxResponse(EMPTY_MAX_RESPONSE_INBOX, {
+      responseId: 'active-playback',
+      kind: 'playback-info',
+      url: 'https://api.example.invalid/playbackInfo',
+      raw: SYNTHETIC_PLAYBACK_INFO,
+      generation: CURRENT_GENERATION,
+      contentIdentity: EPISODE_ONE,
+    });
+    const activeManifest = recordMaxResponse(activePlayback, {
+      responseId: 'active-manifest',
+      kind: 'manifest',
+      url: 'https://media.example.invalid/title/dash.mpd',
+      raw: SYNTHETIC_MPD,
+      generation: CURRENT_GENERATION,
+      contentIdentity: EPISODE_ONE,
+    });
+    const prefetched = recordMaxResponse(activeManifest, {
+      responseId: 'prefetched-next-playback',
+      kind: 'playback-info',
+      url: 'https://api.example.invalid/playbackInfo',
+      raw: nextPlaybackInfo,
+      generation: CURRENT_GENERATION,
+      contentIdentity: EPISODE_ONE,
+    });
+    const episodeTwoGeneration = {
+      contentGeneration: 2,
+      clockGeneration: 2,
+    };
+
+    const retained = retainMaxResponsesForGeneration(
+      prefetched,
+      episodeTwoGeneration,
+      EPISODE_TWO,
+      'https://media.example.invalid/title/dash.mpd',
+    );
+
+    expect(retained.map(({ responseId, contentIdentity }) => ({
+      responseId,
+      contentIdentity,
+    }))).toEqual([
+      {
+        responseId: 'prefetched-next-playback',
+        contentIdentity: EPISODE_TWO,
+      },
+    ]);
+
+    const withNextManifest = recordMaxResponse(retained, {
+      responseId: 'episode-two-manifest',
+      kind: 'manifest',
+      url: 'https://media.example.invalid/title-two/dash.mpd',
+      raw: SYNTHETIC_MPD,
+      generation: episodeTwoGeneration,
+      contentIdentity: EPISODE_TWO,
+    });
+    expect(
+      Object.keys(
+        resolveMaxTrackResources(
+          withNextManifest,
+          [ENGLISH],
+          episodeTwoGeneration,
+          new DOMParser(),
+        ),
+      ),
+    ).toEqual([ENGLISH.id]);
+  });
+
   it('rebinds same-content mapping metadata across a clock reset but drops old VTT', () => {
     const withPlayback = recordMaxResponse(EMPTY_MAX_RESPONSE_INBOX, {
       responseId: 'same-content-playback',
@@ -118,6 +267,7 @@ describe('Max response inbox', () => {
       url: 'https://api.example.invalid/playbackInfo',
       raw: SYNTHETIC_PLAYBACK_INFO,
       generation: CURRENT_GENERATION,
+      contentIdentity: EPISODE_ONE,
     });
     const withManifest = recordMaxResponse(withPlayback, {
       responseId: 'same-content-mpd',
@@ -125,6 +275,7 @@ describe('Max response inbox', () => {
       url: 'https://media.example.invalid/title/dash.mpd',
       raw: SYNTHETIC_MPD,
       generation: CURRENT_GENERATION,
+      contentIdentity: EPISODE_ONE,
     });
     const withVtt = recordMaxResponse(withManifest, {
       responseId: 'old-clock-vtt',
@@ -132,13 +283,18 @@ describe('Max response inbox', () => {
       url: 'https://media.example.invalid/title/t/en/1.vtt',
       raw: 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nOld clock',
       generation: CURRENT_GENERATION,
+      contentIdentity: EPISODE_ONE,
     });
     const nextClock = {
       contentGeneration: 1,
       clockGeneration: 2,
     };
 
-    const retained = retainMaxResponsesForGeneration(withVtt, nextClock);
+    const retained = retainMaxResponsesForGeneration(
+      withVtt,
+      nextClock,
+      EPISODE_ONE,
+    );
 
     expect(retained.map(({ kind, generation }) => ({
       kind,

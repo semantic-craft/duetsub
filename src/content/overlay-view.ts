@@ -1,5 +1,7 @@
 import type { OverlayModel } from '../core/overlay-model';
 
+export const OVERLAY_FONT_SIZE = 'clamp(13.76px, 6.2cqh, 40px)';
+
 export interface OverlayView {
   render(model: OverlayModel): void;
   destroy(): void;
@@ -96,7 +98,7 @@ const OVERLAY_CSS = `
     box-shadow: 0 0.12em 0.4em rgb(0 0 0 / 35%);
     backdrop-filter: blur(2px);
     color: #fff;
-    font-size: clamp(0.86rem, 6.2cqh, 2.5rem);
+    font-size: ${OVERLAY_FONT_SIZE};
     font-style: normal;
     font-weight: 400;
     text-align: center;

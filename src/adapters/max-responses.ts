@@ -2,6 +2,8 @@ import type { TrackInfo } from '../core/contracts';
 import type { PlaybackGeneration } from '../core/lifecycle';
 import {
   mapMaxTrackResources,
+  readMaxPlaybackManifestUrl,
+  sameMaxManifestUrl,
   type MaxTrackMappingInput,
   type MaxTrackResourceMap,
 } from './max-track-mapping';
@@ -13,6 +15,7 @@ export type MaxResponseKind = 'playback-info' | 'manifest' | 'vtt';
 export interface MaxResponseObservation {
   readonly responseId: string;
   readonly kind: MaxResponseKind;
+  readonly contentIdentity: string;
   readonly url: string;
   readonly raw: string;
   readonly generation: PlaybackGeneration;
@@ -35,17 +38,32 @@ export function recordMaxResponse(
 export function retainMaxResponsesForGeneration(
   inbox: MaxResponseInbox,
   generation: PlaybackGeneration,
+  contentIdentity: string,
+  previousManifestUrl?: string,
 ): MaxResponseInbox {
   return inbox.flatMap((response) => {
-    if (sameGeneration(response.generation, generation)) return [response];
+    if (response.contentIdentity === contentIdentity) {
+      if (sameGeneration(response.generation, generation)) return [response];
+      if (response.kind !== 'vtt') {
+        return [{ ...response, generation }];
+      }
+      return [];
+    }
+    const candidateManifestUrl = manifestUrlForResponse(response);
     if (
-      response.kind !== 'vtt' &&
-      response.generation.contentGeneration === generation.contentGeneration
+      previousManifestUrl !== undefined &&
+      candidateManifestUrl !== undefined &&
+      !sameMaxManifestUrl(candidateManifestUrl, previousManifestUrl)
     ) {
-      return [{ ...response, generation }];
+      return [{ ...response, contentIdentity, generation }];
     }
     return [];
   });
+}
+
+export interface MaxTrackResourceResolution {
+  readonly resources: MaxTrackResourceMap;
+  readonly manifestUrl: string;
 }
 
 export function resolveMaxTrackResources(
@@ -54,6 +72,20 @@ export function resolveMaxTrackResources(
   generation: PlaybackGeneration,
   parser?: MaxTrackMappingInput['parser'],
 ): MaxTrackResourceMap {
+  return resolveMaxTrackResourceSelection(
+    inbox,
+    tracks,
+    generation,
+    parser,
+  )?.resources ?? {};
+}
+
+export function resolveMaxTrackResourceSelection(
+  inbox: MaxResponseInbox,
+  tracks: readonly TrackInfo[],
+  generation: PlaybackGeneration,
+  parser?: MaxTrackMappingInput['parser'],
+): MaxTrackResourceResolution | undefined {
   const current = inbox.filter((response) =>
     sameGeneration(response.generation, generation),
   );
@@ -73,11 +105,23 @@ export function resolveMaxTrackResources(
         manifestRaw: manifest.raw,
         parser,
       });
-      if (Object.keys(mapped).length > 0) return mapped;
+      if (Object.keys(mapped).length > 0) {
+        return { resources: mapped, manifestUrl: manifest.url };
+      }
     }
   }
 
-  return {};
+  return undefined;
+}
+
+function manifestUrlForResponse(
+  response: MaxResponseObservation,
+): string | undefined {
+  if (response.kind === 'manifest') return response.url;
+  if (response.kind === 'playback-info') {
+    return readMaxPlaybackManifestUrl(response.raw);
+  }
+  return undefined;
 }
 
 function sameGeneration(

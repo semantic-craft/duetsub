@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   isDuetSubMessage,
+  maxSubtitleResponseMessage,
   netflixManifestMessage,
   netflixTtmlResponseMessage,
   primeTtmlResponseMessage,
@@ -13,6 +14,8 @@ import {
 
 const PRIME_TTML_URL =
   'https://cf-timedtext.aux.pv-cdn.net/example/subtitle.ttml2';
+const MAX_CONTENT_IDENTITY =
+  '/video/watch/41c7eddd-2eea-4ed3-a299-474d693063f4/35a8260d-3bc6-4b91-b370-a5f3c72ad6d5';
 
 describe('Prime MAIN to ISOLATED messages', () => {
   it('accepts a validated Prime TTML response envelope', () => {
@@ -41,6 +44,27 @@ describe('Prime MAIN to ISOLATED messages', () => {
   });
 });
 
+describe('Max MAIN to ISOLATED messages', () => {
+  it('binds raw subtitle candidates to the requesting Max content identity', () => {
+    const message = maxSubtitleResponseMessage(
+      'response-1',
+      'manifest',
+      'https://media.max.com/title/dash.mpd',
+      '<MPD/>',
+      MAX_CONTENT_IDENTITY,
+    );
+
+    expect(isDuetSubMessage(message)).toBe(true);
+    expect(
+      isDuetSubMessage({
+        ...message,
+        contentIdentity:
+          '/video/watch/other-title/other-episode/forged-suffix',
+      }),
+    ).toBe(false);
+  });
+});
+
 describe('Netflix MAIN to ISOLATED messages', () => {
   it('preserves the observed manifest object and raw XML candidate', () => {
     const manifest = {
@@ -50,6 +74,7 @@ describe('Netflix MAIN to ISOLATED messages', () => {
     const manifestMessage = netflixManifestMessage(manifest);
     const ttmlMessage = netflixTtmlResponseMessage(
       'response-1',
+      '81262752',
       '<?xml version="1.0"?><tt xmlns="http://www.w3.org/ns/ttml"/>',
     );
 
@@ -66,8 +91,14 @@ describe('Netflix MAIN to ISOLATED messages', () => {
     ).toBe(false);
     expect(
       isDuetSubMessage({
-        ...netflixTtmlResponseMessage('response-1', '<tt/>'),
+        ...netflixTtmlResponseMessage('response-1', '81262752', '<tt/>'),
         raw: '',
+      }),
+    ).toBe(false);
+    expect(
+      isDuetSubMessage({
+        ...netflixTtmlResponseMessage('response-1', '81262752', '<tt/>'),
+        contentIdentity: '../other-title',
       }),
     ).toBe(false);
   });

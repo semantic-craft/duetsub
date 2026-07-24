@@ -1,4 +1,7 @@
-import { isNetflixWatchUrl } from '../adapters/netflix-location';
+import {
+  isNetflixWatchUrl,
+  readNetflixWatchIdentity,
+} from '../adapters/netflix-location';
 import {
   isNetflixManifestCandidate,
   netflixManifestMessage,
@@ -43,9 +46,13 @@ function patchFetchAndXmlHttpRequest(): void {
     input: RequestInfo | URL,
     init?: RequestInit,
   ): Promise<Response> {
+    const contentIdentity = readNetflixWatchIdentity(window.location.href);
     const response = originalFetch.call(this, input, init);
-    if (isNetflixWatchUrl(window.location.href)) {
-      void response.then(observeFetchResponse, () => undefined);
+    if (contentIdentity !== undefined) {
+      void response.then(
+        (value) => observeFetchResponse(value, contentIdentity),
+        () => undefined,
+      );
     }
     return response;
   };
@@ -53,11 +60,12 @@ function patchFetchAndXmlHttpRequest(): void {
   XMLHttpRequest.prototype.send = function duetSubNetflixSend(
     body?: Document | XMLHttpRequestBodyInit | null,
   ): void {
-    if (isNetflixWatchUrl(window.location.href)) {
+    const contentIdentity = readNetflixWatchIdentity(window.location.href);
+    if (contentIdentity !== undefined) {
       this.addEventListener(
         'load',
         () => {
-          void observeXhrResponse(this);
+          void observeXhrResponse(this, contentIdentity);
         },
         { once: true },
       );
@@ -74,25 +82,29 @@ function manifestCandidate(value: unknown): unknown | undefined {
   return isNetflixManifestCandidate(result) ? result : undefined;
 }
 
-async function observeFetchResponse(response: Response): Promise<void> {
+async function observeFetchResponse(
+  response: Response,
+  contentIdentity: string,
+): Promise<void> {
   try {
     if (
-      !isNetflixWatchUrl(window.location.href) ||
       !response.ok ||
       !isXmlMimeType(response.headers.get('content-type'))
     ) {
       return;
     }
-    forwardXmlCandidate(await response.clone().text());
+    forwardXmlCandidate(await response.clone().text(), contentIdentity);
   } catch {
     // Reading a clone must never affect the page's original response.
   }
 }
 
-async function observeXhrResponse(xhr: XMLHttpRequest): Promise<void> {
+async function observeXhrResponse(
+  xhr: XMLHttpRequest,
+  contentIdentity: string,
+): Promise<void> {
   try {
     if (
-      !isNetflixWatchUrl(window.location.href) ||
       xhr.status < 200 ||
       xhr.status >= 300 ||
       !isXmlMimeType(xhr.getResponseHeader('content-type'))
@@ -101,7 +113,7 @@ async function observeXhrResponse(xhr: XMLHttpRequest): Promise<void> {
     }
 
     const raw = await readXhrBody(xhr);
-    if (raw !== undefined) forwardXmlCandidate(raw);
+    if (raw !== undefined) forwardXmlCandidate(raw, contentIdentity);
   } catch {
     // Observing must never affect the page's original response.
   }
@@ -116,10 +128,10 @@ function readXhrBody(xhr: XMLHttpRequest): string | Promise<string> | undefined 
   return undefined;
 }
 
-function forwardXmlCandidate(raw: string): void {
+function forwardXmlCandidate(raw: string, contentIdentity: string): void {
   if (raw.length === 0 || raw.length > 2_000_000 || !hasXmlMagic(raw)) return;
   postDuetSubMessage(
-    netflixTtmlResponseMessage(crypto.randomUUID(), raw),
+    netflixTtmlResponseMessage(crypto.randomUUID(), contentIdentity, raw),
   );
   console.debug('[DuetSub] Netflix MAIN observed XML timed-text candidate');
 }
