@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TrackInfo } from '../src/core/contracts';
-import { selectOfficialDualTracks } from '../src/core/track-selection';
+import {
+  decideSubtitleSources,
+  selectOfficialDualTracks,
+} from '../src/core/track-selection';
 
 const officialEnglish: TrackInfo = {
   id: 'en-us_Sdh_Dialog_3',
@@ -73,6 +76,78 @@ describe('selectOfficialDualTracks', () => {
       english: undefined,
       chinese: officialTraditionalChinese,
       missing: ['english'],
+    });
+  });
+});
+
+describe('decideSubtitleSources', () => {
+  const simplifiedChinese: TrackInfo = {
+    ...officialTraditionalChinese,
+    id: 'zh-hans',
+    language: 'zh-Hans',
+    label: '中文（简体）',
+  };
+
+  it('uses two official tracks without machine translation', () => {
+    expect(
+      decideSubtitleSources([officialEnglish, officialTraditionalChinese]),
+    ).toEqual({
+      english: { kind: 'official', track: officialEnglish },
+      chinese: {
+        kind: 'official',
+        track: officialTraditionalChinese,
+      },
+    });
+  });
+
+  it('uses English as the source for zh-Hant machine translation', () => {
+    expect(decideSubtitleSources([officialEnglish])).toEqual({
+      english: { kind: 'official', track: officialEnglish },
+      chinese: {
+        kind: 'mt',
+        source: officialEnglish,
+        targetLanguage: 'zh-Hant',
+      },
+    });
+  });
+
+  it('uses OpenCC rather than MT when official English and Simplified Chinese both exist', () => {
+    expect(decideSubtitleSources([officialEnglish, simplifiedChinese])).toEqual({
+      english: { kind: 'official', track: officialEnglish },
+      chinese: {
+        kind: 'opencc',
+        source: simplifiedChinese,
+        targetLanguage: 'zh-Hant',
+      },
+    });
+  });
+
+  it('uses Traditional Chinese as the source for English machine translation', () => {
+    expect(decideSubtitleSources([officialTraditionalChinese])).toEqual({
+      english: {
+        kind: 'mt',
+        source: officialTraditionalChinese,
+        targetLanguage: 'en',
+      },
+      chinese: {
+        kind: 'official',
+        track: officialTraditionalChinese,
+      },
+    });
+  });
+
+  it('converts a lone Simplified Chinese track with OpenCC and never marks it as MT', () => {
+    expect(decideSubtitleSources([simplifiedChinese])).toEqual({
+      english: {
+        kind: 'mt',
+        source: simplifiedChinese,
+        targetLanguage: 'en',
+      },
+      chinese: {
+        kind: 'opencc',
+        source: simplifiedChinese,
+        targetLanguage: 'zh-Hant',
+      },
     });
   });
 });

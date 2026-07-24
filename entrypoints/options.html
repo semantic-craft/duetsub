@@ -5,11 +5,49 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="manifest.open_in_tab" content="true" />
     <title>DuetSub 設定</title>
+    <style>
+      :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+      body { margin: 0; background: Canvas; color: CanvasText; }
+      main { max-width: 42rem; margin: 3rem auto; padding: 0 1.5rem; }
+      form { display: grid; gap: 1rem; }
+      .field { display: grid; gap: .35rem; }
+      input, select, button { box-sizing: border-box; min-height: 2.5rem; padding: .55rem .7rem; font: inherit; }
+      .actions { display: flex; gap: .75rem; }
+      output { display: block; min-height: 1.5rem; margin-top: 1rem; }
+      output[data-state="success"] { color: #218739; }
+      output[data-state="error"] { color: #c43b36; }
+      .fixed { opacity: .75; }
+    </style>
   </head>
   <body>
     <main>
       <h1>DuetSub 設定</h1>
-      <p>翻譯供應商設定將在 ticket 04 提供。</p>
+      <p>字幕只會傳送到你在此設定並授權的端點。</p>
+      <form>
+        <label class="field">供應商
+          <select id="provider">
+            <option value="deepseek">DeepSeek</option>
+            <option value="openai-compatible">OpenAI 兼容</option>
+            <option value="local">本地 OpenAI 兼容</option>
+          </select>
+        </label>
+        <label class="field">Base URL
+          <input id="base-url" type="url" required autocomplete="url">
+        </label>
+        <label class="field">API key
+          <input id="api-key" type="password" autocomplete="off" spellcheck="false">
+        </label>
+        <label class="field">模型
+          <input id="model" required autocomplete="off" spellcheck="false">
+        </label>
+        <p class="fixed">目標語言：繁體中文 / 英文（依缺失官方軌自動選擇）</p>
+        <div class="actions">
+          <button type="submit">儲存</button>
+          <button id="test" type="button">測試連線</button>
+        </div>
+      </form>
+      <output id="status" role="status">尚未測試</output>
     </main>
+    <script type="module" src="../src/options/page.ts"></script>
   </body>
 </html>
