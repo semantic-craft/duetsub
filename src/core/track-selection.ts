@@ -21,6 +21,31 @@ export function selectOfficialDualTracks(
   return { english, chinese, missing };
 }
 
+export function selectBilingualTracks(
+  tracks: readonly TrackInfo[],
+): OfficialDualTrackSelection {
+  const english = bestAvailableLanguageMatch(tracks, 'en');
+  const chinese = bestAvailableLanguageMatch(tracks, 'zh-Hant');
+  const missing: MissingOfficialSide[] = [];
+  if (english === undefined) missing.push('english');
+  if (chinese === undefined) missing.push('zh-Hant');
+  return { english, chinese, missing };
+}
+
+function bestAvailableLanguageMatch(
+  tracks: readonly TrackInfo[],
+  target: 'en' | 'zh-Hant',
+): TrackInfo | undefined {
+  for (const source of ['official', 'asr', 'platform-mt'] as const) {
+    const match = bestLanguageMatch(
+      tracks.filter((track) => track.source === source),
+      target,
+    );
+    if (match !== undefined) return match;
+  }
+  return undefined;
+}
+
 function bestLanguageMatch(
   tracks: readonly TrackInfo[],
   target: 'en' | 'zh-Hant',

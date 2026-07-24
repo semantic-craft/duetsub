@@ -1,4 +1,4 @@
-import { startFakeMainStub } from '../src/main/fake-source';
+import { startYoutubeMainHook } from '../src/main/youtube-hook';
 
 export default defineContentScript({
   matches: ['https://www.youtube.com/*'],
@@ -6,6 +6,6 @@ export default defineContentScript({
   world: 'MAIN',
   registration: 'manifest',
   main() {
-    startFakeMainStub('youtube');
+    startYoutubeMainHook();
   },
 });

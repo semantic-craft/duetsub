@@ -1,4 +1,5 @@
 import type { SiteId } from '../core/contracts';
+import { youtubeVideoIdFromUrl } from '../adapters/youtube-url';
 
 interface SiteUiBinding {
   readonly videoSelector: string;
@@ -49,6 +50,12 @@ export interface SiteUiTarget {
 }
 
 export function findSiteUiTarget(siteId: SiteId): SiteUiTarget | undefined {
+  if (
+    siteId === 'youtube' &&
+    youtubeVideoIdFromUrl(window.location.href) === undefined
+  ) {
+    return undefined;
+  }
   const binding = SITE_UI[siteId];
   const video = document.querySelector<HTMLVideoElement>(binding.videoSelector);
   if (video === null) return undefined;

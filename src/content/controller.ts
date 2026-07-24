@@ -20,7 +20,7 @@ import {
   synchronizeCues,
   type SynchronizerState,
 } from '../core/synchronizer';
-import { selectOfficialDualTracks } from '../core/track-selection';
+import { selectBilingualTracks } from '../core/track-selection';
 import { NativeCaptionVisibility } from './native-captions';
 import { createOverlayView, type OverlayView } from './overlay-view';
 import { findSiteUiTarget, type SiteUiTarget } from './site-ui';
@@ -89,6 +89,8 @@ class PlaybackController {
   #chineseCues: readonly Cue[] = [];
   #englishMachineTranslated = false;
   #chineseMachineTranslated = false;
+  #englishSource: TrackInfo['source'] | undefined;
+  #chineseSource: TrackInfo['source'] | undefined;
   #tracks: readonly TrackInfo[] = [];
   #receivedEnglish = false;
   #receivedChinese = false;
@@ -276,7 +278,7 @@ class PlaybackController {
       type: 'tracks-loading',
     });
     this.#bindAdapterGeneration();
-    this.#status = '開啟 · 枚舉 Prime 官方字幕軌…';
+    this.#status = `開啟 · 枚舉 ${siteName(this.#siteId)} 字幕軌…`;
     this.#render();
     this.#adapter.start();
   }
@@ -310,6 +312,8 @@ class PlaybackController {
     this.#chineseCues = [];
     this.#englishMachineTranslated = false;
     this.#chineseMachineTranslated = false;
+    this.#englishSource = undefined;
+    this.#chineseSource = undefined;
     this.#receivedEnglish = false;
     this.#receivedChinese = false;
     this.#synchronizerState = undefined;
@@ -333,15 +337,15 @@ class PlaybackController {
     const tracks = acceptPlaybackGeneration(this.#state, generatedTracks);
     if (tracks === undefined) return;
 
-    const selected = selectOfficialDualTracks(tracks);
+    const selected = selectBilingualTracks(tracks);
     if (selected.english === undefined || selected.chinese === undefined) {
-      this.#status = `開啟 · 缺少官方 ${selected.missing.join(' + ')} 軌`;
+      this.#status = `開啟 · 缺少 ${selected.missing.join(' + ')} 可用來源`;
       this.#render();
       return;
     }
 
     const acquisitionRevision = ++this.#acquisitionRevision;
-    this.#status = '開啟 · 正在取得官方英文 + 繁中…';
+    this.#status = '開啟 · 正在取得英文 + 繁中…';
     this.#render();
 
     try {
@@ -366,18 +370,25 @@ class PlaybackController {
         return;
       }
       if (accepted.english.length === 0 || accepted.chinese.length === 0) {
-        throw new Error('Prime returned an empty official subtitle track');
+        throw new Error('Subtitle provider returned an empty selected track');
       }
 
       this.#englishCues = accepted.english;
       this.#chineseCues = accepted.chinese;
-      this.#englishMachineTranslated = false;
-      this.#chineseMachineTranslated = false;
+      this.#englishSource = selected.english.source;
+      this.#chineseSource = selected.chinese.source;
+      this.#englishMachineTranslated =
+        selected.english.source === 'platform-mt';
+      this.#chineseMachineTranslated =
+        selected.chinese.source === 'platform-mt';
       this.#synchronizerState = undefined;
       this.#state = reducePlaybackLifecycle(this.#state, {
         type: 'tracks-ready',
       });
-      this.#status = '官方英文 + 官方繁中 · 100%';
+      this.#status = selectedTrackStatus(
+        selected.english.source,
+        selected.chinese.source,
+      );
       this.#render();
     } catch (error) {
       if (
@@ -391,9 +402,9 @@ class PlaybackController {
       ) {
         return;
       }
-      console.warn('[DuetSub] Official dual-track acquisition failed', error);
+      console.warn('[DuetSub] Dual-track acquisition failed', error);
       this.#clearTrackData();
-      this.#status = '開啟 · 無法可靠取得並恢復雙軌';
+      this.#status = acquisitionErrorStatus(error);
       this.#render();
     }
   }
@@ -409,7 +420,7 @@ class PlaybackController {
       : reducePlaybackLifecycle(this.#state, { type: 'reset-content' });
     if (reason !== 'seek-flush') this.#clearTrackData();
     this.#bindAdapterGeneration();
-    this.#status = '開啟 · Prime 播放狀態已重設';
+    this.#status = `開啟 · ${siteName(this.#siteId)} 播放狀態已重設`;
     this.#render();
   };
 
@@ -469,8 +480,11 @@ class PlaybackController {
       this.#synchronizerState = undefined;
       this.#state = reducePlaybackLifecycle(this.#state, { type: 'seeked' });
       this.#bindAdapterGeneration();
-      this.#status = this.#englishCues.length > 0 && this.#chineseCues.length > 0
-        ? '官方英文 + 官方繁中 · 100%'
+      this.#status = this.#englishCues.length > 0 &&
+          this.#chineseCues.length > 0 &&
+          this.#englishSource !== undefined &&
+          this.#chineseSource !== undefined
+        ? selectedTrackStatus(this.#englishSource, this.#chineseSource)
         : '開啟 · 尚未取得雙軌';
       this.#render();
       if (needsTrackAcquisition(this.#state)) this.#loadTracks();
@@ -492,7 +506,7 @@ class PlaybackController {
       type: 'video-replaced',
     });
     this.#bindAdapterGeneration();
-    this.#status = '開啟 · Prime video 時鐘已替換';
+    this.#status = `開啟 · ${siteName(this.#siteId)} video 時鐘已替換`;
     this.#render();
 
     if (video.readyState >= 2) this.#onVideoReady();
@@ -573,4 +587,48 @@ function openOptionsPage(): void {
     return;
   }
   window.open(chrome.runtime.getURL('options.html'), '_blank', 'noopener');
+}
+
+function siteName(siteId: SiteId): string {
+  switch (siteId) {
+    case 'netflix':
+      return 'Netflix';
+    case 'primevideo':
+      return 'Prime';
+    case 'max':
+      return 'Max';
+    case 'youtube':
+      return 'YouTube';
+  }
+}
+
+function selectedTrackStatus(
+  english: TrackInfo['source'],
+  chinese: TrackInfo['source'],
+): string {
+  return `${sourceLabel(english, '英文')} + ${sourceLabel(chinese, '繁中')} · 100%`;
+}
+
+function sourceLabel(
+  source: TrackInfo['source'],
+  language: '英文' | '繁中',
+): string {
+  switch (source) {
+    case 'official':
+      return `官方${language}`;
+    case 'asr':
+      return `ASR ${language}`;
+    case 'platform-mt':
+      return `平台 MT ${language}`;
+  }
+}
+
+function acquisitionErrorStatus(error: unknown): string {
+  if (
+    error instanceof Error &&
+    error.message.includes('手動開啟一次 YouTube 字幕')
+  ) {
+    return `開啟 · ${error.message}`;
+  }
+  return '開啟 · 無法可靠取得並恢復雙軌';
 }

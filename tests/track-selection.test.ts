@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TrackInfo } from '../src/core/contracts';
-import { selectOfficialDualTracks } from '../src/core/track-selection';
+import {
+  selectBilingualTracks,
+  selectOfficialDualTracks,
+} from '../src/core/track-selection';
 
 const officialEnglish: TrackInfo = {
   id: 'en-us_Sdh_Dialog_3',
@@ -73,6 +76,51 @@ describe('selectOfficialDualTracks', () => {
       english: undefined,
       chinese: officialTraditionalChinese,
       missing: ['english'],
+    });
+  });
+});
+
+describe('selectBilingualTracks', () => {
+  it('prefers creator tracks, then ASR, then platform tlang candidates', () => {
+    const asrEnglish: TrackInfo = {
+      ...officialEnglish,
+      id: 'asr-en',
+      source: 'asr',
+    };
+    const translatedEnglish: TrackInfo = {
+      ...officialEnglish,
+      id: 'tlang-en',
+      source: 'platform-mt',
+    };
+    const translatedChinese: TrackInfo = {
+      ...officialTraditionalChinese,
+      id: 'tlang-zh-Hant',
+      source: 'platform-mt',
+    };
+
+    expect(
+      selectBilingualTracks([
+        translatedEnglish,
+        asrEnglish,
+        officialEnglish,
+        translatedChinese,
+        officialTraditionalChinese,
+      ]),
+    ).toMatchObject({
+      english: officialEnglish,
+      chinese: officialTraditionalChinese,
+      missing: [],
+    });
+    expect(
+      selectBilingualTracks([
+        translatedEnglish,
+        asrEnglish,
+        translatedChinese,
+      ]),
+    ).toMatchObject({
+      english: asrEnglish,
+      chinese: translatedChinese,
+      missing: [],
     });
   });
 });
