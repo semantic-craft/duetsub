@@ -14,7 +14,9 @@ export async function loadTranslationConfig(
 ): Promise<TranslationConfig> {
   const stored = await storage.get(TRANSLATION_CONFIG_STORAGE_KEY);
   const value = stored[TRANSLATION_CONFIG_STORAGE_KEY];
-  return isTranslationConfig(value) ? value : DEFAULT_TRANSLATION_CONFIG;
+  return isTranslationConfig(value)
+    ? migrateRetiredDeepSeekDefaults(value)
+    : DEFAULT_TRANSLATION_CONFIG;
 }
 
 export async function saveTranslationConfig(
@@ -22,6 +24,22 @@ export async function saveTranslationConfig(
   config: TranslationConfig,
 ): Promise<void> {
   await storage.set({ [TRANSLATION_CONFIG_STORAGE_KEY]: config });
+}
+
+function migrateRetiredDeepSeekDefaults(
+  config: TranslationConfig,
+): TranslationConfig {
+  if (config.provider !== 'deepseek') return config;
+  return {
+    ...config,
+    baseUrl: config.baseUrl === 'https://api.deepseek.com/v1'
+      ? DEFAULT_TRANSLATION_CONFIG.baseUrl
+      : config.baseUrl,
+    model: config.model === 'deepseek-chat' ||
+        config.model === 'deepseek-reasoner'
+      ? DEFAULT_TRANSLATION_CONFIG.model
+      : config.model,
+  };
 }
 
 function isTranslationConfig(value: unknown): value is TranslationConfig {

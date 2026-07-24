@@ -70,6 +70,11 @@ function renderConfig(config: TranslationConfig): void {
   baseUrl.value = config.baseUrl;
   apiKey.value = config.apiKey;
   model.value = config.model;
+  if (config.provider === 'deepseek') {
+    model.setAttribute('list', 'deepseek-models');
+  } else {
+    model.removeAttribute('list');
+  }
   baseUrl.closest<HTMLElement>('.field')!.hidden = config.provider === 'deepseek';
 }
 

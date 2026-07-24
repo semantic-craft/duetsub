@@ -1,11 +1,25 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  chatCompletionsUrl,
   configPermissionOrigin,
+  DEFAULT_TRANSLATION_CONFIG,
   validateTranslationConfig,
 } from '../src/mt/config';
 
 describe('translation config', () => {
+  it('uses the current DeepSeek OpenAI-compatible endpoint and V4 Flash default', () => {
+    expect(DEFAULT_TRANSLATION_CONFIG).toEqual({
+      provider: 'deepseek',
+      baseUrl: 'https://api.deepseek.com',
+      apiKey: '',
+      model: 'deepseek-v4-flash',
+    });
+    expect(chatCompletionsUrl(DEFAULT_TRANSLATION_CONFIG)).toBe(
+      'https://api.deepseek.com/chat/completions',
+    );
+  });
+
   it('accepts cloud HTTPS and explicit loopback HTTP endpoints', () => {
     expect(
       validateTranslationConfig({
@@ -41,9 +55,9 @@ describe('translation config', () => {
       },
       {
         provider: 'deepseek' as const,
-        baseUrl: 'https://api.deepseek.com/v1',
+        baseUrl: 'https://api.deepseek.com',
         apiKey: '',
-        model: 'deepseek-chat',
+        model: 'deepseek-v4-flash',
       },
     ]) {
       expect(validateTranslationConfig(config).ok).toBe(false);

@@ -11,8 +11,8 @@ describe('translation cache', () => {
       sourceText: '  Hello   world ',
       targetLanguage: 'zh-Hant',
       provider: 'deepseek',
-      endpoint: 'https://api.deepseek.com/v1',
-      model: 'deepseek-chat',
+      endpoint: 'https://api.deepseek.com',
+      model: 'deepseek-v4-flash',
     };
     const key = await translationCacheKey(base);
     expect(key).toBe(await translationCacheKey({ ...base }));

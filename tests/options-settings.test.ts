@@ -24,4 +24,25 @@ describe('options storage seam', () => {
     await saveTranslationConfig(storage, config);
     expect(await loadTranslationConfig(storage)).toEqual(config);
   });
+
+  it('migrates the retired DeepSeek defaults while preserving the API key', async () => {
+    const storage = {
+      get: vi.fn(async (key: string) => ({
+        [key]: {
+          provider: 'deepseek',
+          baseUrl: 'https://api.deepseek.com/v1',
+          apiKey: 'preserve-this-key',
+          model: 'deepseek-chat',
+        },
+      })),
+      set: vi.fn(async () => undefined),
+    };
+
+    expect(await loadTranslationConfig(storage)).toEqual({
+      provider: 'deepseek',
+      baseUrl: 'https://api.deepseek.com',
+      apiKey: 'preserve-this-key',
+      model: 'deepseek-v4-flash',
+    });
+  });
 });

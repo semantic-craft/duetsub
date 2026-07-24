@@ -38,7 +38,11 @@
           <input id="api-key" type="password" autocomplete="off" spellcheck="false">
         </label>
         <label class="field">模型
-          <input id="model" required autocomplete="off" spellcheck="false">
+          <input id="model" required autocomplete="off" spellcheck="false" list="deepseek-models">
+          <datalist id="deepseek-models">
+            <option value="deepseek-v4-flash"></option>
+            <option value="deepseek-v4-pro"></option>
+          </datalist>
         </label>
         <p class="fixed">目標語言：繁體中文 / 英文（依缺失官方軌自動選擇）</p>
         <div class="actions">

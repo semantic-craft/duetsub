@@ -9,9 +9,9 @@ const source: Cue[] = [
 ];
 const config = {
   provider: 'deepseek' as const,
-  baseUrl: 'https://api.deepseek.com/v1',
+  baseUrl: 'https://api.deepseek.com',
   apiKey: 'test-only-token',
-  model: 'deepseek-chat',
+  model: 'deepseek-v4-flash',
 };
 
 describe('translation HTTP seam', () => {
@@ -19,7 +19,11 @@ describe('translation HTTP seam', () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
       new Response(
         JSON.stringify({
-          choices: [{ message: { content: '["你好","世界"]' } }],
+          choices: [{
+            message: {
+              content: '{"translations":["你好","世界"]}',
+            },
+          }],
         }),
         { status: 200 },
       ),
@@ -45,6 +49,32 @@ describe('translation HTTP seam', () => {
       { ...source[0], text: '你好', language: 'zh-Hant' },
       { ...source[1], text: '世界', language: 'zh-Hant' },
     ]);
+
+    const request = JSON.parse(
+      String(fetch.mock.calls[0]?.[1]?.body),
+    ) as {
+      thinking?: { type?: string };
+      response_format?: { type?: string };
+      max_tokens?: number;
+      messages?: Array<{ role?: string; content?: string }>;
+    };
+    expect(request.thinking).toEqual({ type: 'disabled' });
+    expect(request.response_format).toEqual({ type: 'json_object' });
+    expect(request.max_tokens).toBe(4_096);
+    expect(request.messages?.[0]?.role).toBe('system');
+    expect(request.messages?.[0]?.content).toContain(
+      'Traditional Chinese (zh-Hant)',
+    );
+    expect(request.messages?.[0]?.content).toContain(
+      'JSON OUTPUT EXAMPLE',
+    );
+    expect(request.messages?.[0]?.content).toContain(
+      '{"translations":["translated item 1","translated item 2"]}',
+    );
+    expect(request.messages?.[1]).toEqual({
+      role: 'user',
+      content: '{"texts":["Hello","World"]}',
+    });
   });
 
   it('fails soft when a cloud key is absent', async () => {

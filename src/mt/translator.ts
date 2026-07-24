@@ -115,6 +115,13 @@ async function requestTranslations(
   for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt += 1) {
     if (dependencies.signal?.aborted) return 'aborted';
     try {
+      const deepSeekOptions = config.provider === 'deepseek'
+        ? {
+            thinking: { type: 'disabled' },
+            response_format: { type: 'json_object' },
+            max_tokens: 4_096,
+          }
+        : {};
       const response = await fetcher(chatCompletionsUrl(config), {
         method: 'POST',
         headers: {
@@ -124,14 +131,16 @@ async function requestTranslations(
         body: JSON.stringify({
           model: config.model,
           temperature: 0,
+          ...deepSeekOptions,
           messages: [
             {
               role: 'system',
-              content: targetLanguage === 'zh-Hant'
-                ? 'Translate each JSON array item to Traditional Chinese. Return only a JSON array of strings in the same order.'
-                : 'Translate each JSON array item to English. Return only a JSON array of strings in the same order.',
+              content: translationSystemPrompt(targetLanguage),
             },
-            { role: 'user', content: JSON.stringify(texts) },
+            {
+              role: 'user',
+              content: JSON.stringify({ texts }),
+            },
           ],
         }),
         signal: dependencies.signal,
@@ -143,9 +152,8 @@ async function requestTranslations(
         const content = payload.choices?.[0]?.message?.content;
         if (typeof content !== 'string') return undefined;
         const parsed = JSON.parse(content) as unknown;
-        return Array.isArray(parsed) && parsed.every((item) => typeof item === 'string')
-          ? parsed
-          : undefined;
+        const translations = readTranslations(parsed);
+        return translations?.length === texts.length ? translations : undefined;
       }
       if (response.status !== 429 && response.status < 500) return undefined;
     } catch (error) {
@@ -160,6 +168,39 @@ async function requestTranslations(
     }
   }
   return undefined;
+}
+
+function translationSystemPrompt(
+  targetLanguage: 'en' | 'zh-Hant',
+): string {
+  const target = targetLanguage === 'zh-Hant'
+    ? 'natural Traditional Chinese (zh-Hant), never Simplified Chinese'
+    : 'natural English';
+  return [
+    'You are a professional audiovisual subtitle translator.',
+    `Translate every item in the input JSON object's "texts" array into ${target}.`,
+    'Preserve meaning, tone, proper nouns, punctuation, and line breaks.',
+    'Write concise subtitles. Do not merge, split, omit, annotate, or reorder items.',
+    'Return only valid JSON. Do not add Markdown or explanations.',
+    'The "translations" array must contain exactly one string for each input item, in the same order.',
+    'JSON OUTPUT EXAMPLE:',
+    '{"translations":["translated item 1","translated item 2"]}',
+  ].join('\n');
+}
+
+function readTranslations(value: unknown): readonly string[] | undefined {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !('translations' in value)
+  ) {
+    return undefined;
+  }
+  const translations = value.translations;
+  return Array.isArray(translations) &&
+      translations.every((item) => typeof item === 'string')
+    ? translations
+    : undefined;
 }
 
 function failed(input: TranslateBatchInput): TranslateBatchResult {

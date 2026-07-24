@@ -11,11 +11,15 @@ export interface TranslationConfig {
 }
 
 export const TRANSLATION_CONFIG_STORAGE_KEY = 'duetsub:translation-config';
+export const DEEPSEEK_MODELS = [
+  'deepseek-v4-flash',
+  'deepseek-v4-pro',
+] as const;
 export const DEFAULT_TRANSLATION_CONFIG: TranslationConfig = {
   provider: 'deepseek',
-  baseUrl: 'https://api.deepseek.com/v1',
+  baseUrl: 'https://api.deepseek.com',
   apiKey: '',
-  model: 'deepseek-chat',
+  model: DEEPSEEK_MODELS[0],
 };
 
 export type ConfigValidation =

@@ -150,8 +150,9 @@ interface SiteAdapter {
 
 ### D. 机翻兜底细则（ticket 06 就地拍板）
 
-- **引擎/模型/key**（2026-07-22 更新为统一 OpenAI 兼容端点）：默认 DeepSeek `deepseek-chat`（用户自备 key）；同时支持任意 OpenAI 兼容端点，含**本机模型**（Ollama / LM Studio 等）。供应商 / Base URL / key / 模型在 options page 配置、存 `chrome.storage.local`（详见 §I）；SW 统一按 OpenAI 兼容 chat/completions 协议调用，屏蔽云端/本地差异。
+- **引擎/模型/key**（2026-07-24 更新为当前 DeepSeek V4 参数）：默认 DeepSeek `deepseek-v4-flash`，可选 `deepseek-v4-pro`（用户自备 key，OpenAI 兼容 base URL 为 `https://api.deepseek.com`）；同时支持任意 OpenAI 兼容端点，含**本机模型**（Ollama / LM Studio 等）。供应商 / Base URL / key / 模型在 options page 配置、存 `chrome.storage.local`（详见 §I）；SW 统一按 OpenAI 兼容 chat/completions 协议调用，屏蔽云端/本地差异。
 - **繁体产出**：prompt 指定输出繁体中文；对 DeepSeek 输出再过一遍 OpenCC(s2t) 作保险，避免偶发简体混入。
+- **DeepSeek 请求约束**：字幕翻译使用明确的 system prompt，锁定目标语言、逐项保序、不增删拆并、保留语气/专名/标点/换行，并给出 `{"translations":[...]}` JSON 输出样例。按 DeepSeek 官方 JSON Output 约定发送 `response_format: {"type":"json_object"}` 与足够的 `max_tokens`；V4 默认思考模式对该确定性任务显式关闭。
 - **批处理**：整轨 **warmup 预热 + 沿播放位置滚动补翻**（承 ticket 02 的 Read Frog 模板）。按播放头优先级分批（当前 cue 最高、其后若干条次高），每次 DeepSeek 请求限定 N 条 cue（避免单请求过长超时；一集 ~35k 字符分多批完成，成本量级 ~$0.015/集）。快进/跳转用 AbortController 取消在途请求。
 - **翻译保时轴**：机翻**逐 cue 翻译、沿用官方源轨的 `start/end`**，不重新拆句、不做时间轴再对齐。译文写回对应 cue 的 `text`，时轴不变。
 - **缓存**：service worker 侧 IndexedDB 持久化；key = `hash(contentId + trackId + 归一化源文本 + 目标语言 + 模型)`，内容寻址，重看/回拖命中。失效按内容 identity + 模型（换 key/模型自然 miss）；容量上限 + LRU 淘汰。
@@ -207,7 +208,7 @@ zhActive = Chinese cues where start <= t < end
   - **供应商**下拉：`DeepSeek`（默认，云端）/ `OpenAI 兼容`（自定义云端）/ `本地`（Ollama、LM Studio 等本机 OpenAI 兼容端点）。
   - **Base URL**：DeepSeek 预设并隐藏；自定义/本地时显示（本地默认形如 `http://localhost:11434/v1`）。
   - **API Key**（掩码）：云端必填；本地无鉴权时可留空。
-  - **模型**：DeepSeek 默认 `deepseek-chat`；自定义/本地可填或从端点发现列表中选。
+  - **模型**：DeepSeek 默认 `deepseek-v4-flash`，可选 `deepseek-v4-pro`；自定义/本地可填或从端点发现列表中选。
   - **测试连接**按钮 + 状态徽标（未配置 / 已配置 / 测试通过）。
   - 目标语言 `zh-Hant`、选轨链 §C、机翻方向自动——只读展示、不可改。
 - 持久化 `chrome.storage.local`；SW 读取供翻译调用。key 不写日志、除发往用户所配端点外不外发。
