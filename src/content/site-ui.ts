@@ -45,6 +45,7 @@ export interface SiteUiTarget {
   readonly controls?: HTMLElement;
   readonly toggleBefore?: HTMLElement;
   readonly nativeCaptionSelector: string;
+  readonly contentIdentity?: string;
 }
 
 export function findSiteUiTarget(siteId: SiteId): SiteUiTarget | undefined {
@@ -76,7 +77,20 @@ export function findSiteUiTarget(siteId: SiteId): SiteUiTarget | undefined {
     controls,
     toggleBefore,
     nativeCaptionSelector: binding.nativeCaptionSelector,
+    contentIdentity: siteId === 'primevideo'
+      ? readPrimeEpisodeIdentity(player)
+      : undefined,
   };
+}
+
+function readPrimeEpisodeIdentity(player: HTMLElement): string | undefined {
+  const title = player
+    .querySelector<HTMLElement>('.atvwebplayersdk-title-text')
+    ?.textContent?.trim();
+  const episode = player
+    .querySelector<HTMLElement>('.atvwebplayersdk-subtitle-text')
+    ?.textContent?.trim();
+  return title && episode ? `${title}\n${episode}` : undefined;
 }
 
 function isVisible(element: HTMLElement): boolean {

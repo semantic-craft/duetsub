@@ -1,5 +1,16 @@
 import type { Cue, SiteAdapter, SiteId, TrackInfo } from '../core/contracts';
 import {
+  acceptPlaybackGeneration,
+  bindPlaybackGeneration,
+  INITIAL_PLAYBACK_LIFECYCLE,
+  isPlaybackOverlayActive,
+  needsTrackAcquisition,
+  reducePlaybackLifecycle,
+  shouldHideNativeCaptions,
+  type GenerationBound,
+  type PlaybackLifecycleState,
+} from '../core/lifecycle';
+import {
   isDuetSubMessage,
   postDuetSubMessage,
   requestFakeData,
@@ -10,12 +21,6 @@ import {
   type SynchronizerState,
 } from '../core/synchronizer';
 import { selectOfficialDualTracks } from '../core/track-selection';
-import {
-  INITIAL_TOGGLE_STATE,
-  isOverlayActive,
-  reduceToggle,
-  type ToggleState,
-} from '../core/toggle';
 import { NativeCaptionVisibility } from './native-captions';
 import { createOverlayView, type OverlayView } from './overlay-view';
 import { findSiteUiTarget, type SiteUiTarget } from './site-ui';
@@ -39,7 +44,7 @@ export function startDuetSubContent(
       }
       return;
     }
-    if (controller?.matches(target)) return;
+    if (controller?.reconcile(target)) return;
 
     controller?.destroy();
     controller = new PlaybackController(siteId, target, adapter);
@@ -47,7 +52,13 @@ export function startDuetSubContent(
 
   bind();
   const observer = new MutationObserver(bind);
-  observer.observe(document.documentElement, { childList: true, subtree: true });
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['aria-hidden', 'class'],
+    characterData: true,
+    childList: true,
+    subtree: true,
+  });
   window.addEventListener(
     'pagehide',
     () => {
@@ -60,7 +71,7 @@ export function startDuetSubContent(
 }
 
 class PlaybackController {
-  readonly video: HTMLVideoElement;
+  video: HTMLVideoElement;
 
   readonly #siteId: SiteId;
   readonly #adapter: SiteAdapter | undefined;
@@ -73,7 +84,7 @@ class PlaybackController {
   readonly #toggleView: ToggleView;
   readonly #restoredPlayerPosition: string | undefined;
 
-  #state: ToggleState = INITIAL_TOGGLE_STATE;
+  #state: PlaybackLifecycleState = INITIAL_PLAYBACK_LIFECYCLE;
   #englishCues: readonly Cue[] = [];
   #chineseCues: readonly Cue[] = [];
   #englishMachineTranslated = false;
@@ -107,6 +118,12 @@ class PlaybackController {
     this.#player = target.player;
     this.#toggleAnchor = target.controls ?? target.player;
     this.#toggleBefore = target.toggleBefore;
+    if (target.contentIdentity !== undefined) {
+      this.#state = reducePlaybackLifecycle(this.#state, {
+        type: 'content-observed',
+        identity: target.contentIdentity,
+      });
+    }
     this.#restoredPlayerPosition = ensurePositioned(this.#player);
     this.#nativeCaptions = new NativeCaptionVisibility(
       target.nativeCaptionSelector,
@@ -132,6 +149,7 @@ class PlaybackController {
       }
       adapter.onTracks(this.#onAdapterTracks);
       adapter.onReset(this.#onAdapterReset);
+      this.#bindAdapterGeneration();
     }
 
     window.addEventListener('message', this.#onMessage);
@@ -147,12 +165,42 @@ class PlaybackController {
     void this.#hydrate();
   }
 
-  matches(target: SiteUiTarget): boolean {
-    return (
-      this.video === target.video &&
-      this.#toggleAnchor === (target.controls ?? target.player) &&
-      this.#toggleBefore === target.toggleBefore
-    );
+  reconcile(target: SiteUiTarget): boolean {
+    if (
+      this.#destroyed ||
+      this.#player !== target.player ||
+      this.#toggleAnchor !== (target.controls ?? target.player) ||
+      this.#toggleBefore !== target.toggleBefore
+    ) {
+      return false;
+    }
+
+    let contentChanged = false;
+    if (target.contentIdentity !== this.#state.contentIdentity) {
+      this.#state = target.contentIdentity === undefined
+        ? reducePlaybackLifecycle(this.#state, { type: 'reset-content' })
+        : reducePlaybackLifecycle(this.#state, {
+            type: 'content-observed',
+            identity: target.contentIdentity,
+          });
+      this.#clearTrackData();
+      this.#bindAdapterGeneration();
+      this.#status = target.contentIdentity === undefined
+        ? '開啟 · 等待可驗證的 Prime 內容身份'
+        : '開啟 · Prime 內容已切換';
+      contentChanged = true;
+    }
+
+    if (this.video !== target.video) {
+      this.#rebindVideo(target.video);
+      return true;
+    }
+
+    if (contentChanged) {
+      this.#render();
+      if (this.#state.enabled && this.#canLoadTracks()) this.#loadTracks();
+    }
+    return true;
   }
 
   destroy(): void {
@@ -167,9 +215,13 @@ class PlaybackController {
     window.removeEventListener('message', this.#onMessage);
     this.video.removeEventListener('seeking', this.#onSeeking);
     this.video.removeEventListener('seeked', this.#onSeeked);
+    this.video.removeEventListener('loadeddata', this.#onVideoReady);
     this.#player.removeEventListener('pointermove', this.#onControlsActivity);
     this.#player.removeEventListener('focusin', this.#onControlsActivity);
-    this.#state = reduceToggle(this.#state, { type: 'reset' });
+    this.#state = reducePlaybackLifecycle(this.#state, {
+      type: 'reset-content',
+    });
+    this.#bindAdapterGeneration();
     this.#nativeCaptions.restore();
     this.#overlayView.destroy();
     this.#toggleView.destroy();
@@ -183,7 +235,7 @@ class PlaybackController {
     const stored = await chrome.storage.local.get(this.#storageKey);
     if (this.#destroyed || revision !== this.#interactionRevision) return;
 
-    this.#state = reduceToggle(this.#state, {
+    this.#state = reducePlaybackLifecycle(this.#state, {
       type: 'hydrate',
       enabled: stored[this.#storageKey] === true,
     });
@@ -193,7 +245,7 @@ class PlaybackController {
 
   #toggle(): void {
     this.#interactionRevision += 1;
-    this.#state = reduceToggle(this.#state, { type: 'toggle' });
+    this.#state = reducePlaybackLifecycle(this.#state, { type: 'toggle' });
     void chrome.storage.local.set({
       [this.#storageKey]: this.#state.enabled,
     });
@@ -213,7 +265,17 @@ class PlaybackController {
       return;
     }
 
+    if (!this.#canLoadTracks()) {
+      this.#status = '開啟 · 等待可驗證的 Prime 內容身份';
+      this.#render();
+      return;
+    }
+
     this.#clearTrackData();
+    this.#state = reducePlaybackLifecycle(this.#state, {
+      type: 'tracks-loading',
+    });
+    this.#bindAdapterGeneration();
     this.#status = '開啟 · 枚舉 Prime 官方字幕軌…';
     this.#render();
     this.#adapter.start();
@@ -228,7 +290,9 @@ class PlaybackController {
     this.#receivedEnglish = false;
     this.#receivedChinese = false;
     this.#synchronizerState = undefined;
-    this.#state = reduceToggle(this.#state, { type: 'reset' });
+    this.#state = reducePlaybackLifecycle(this.#state, {
+      type: 'tracks-loading',
+    });
     this.#status = '開啟 · 等待 MAIN 假軌';
     this.#render();
     postDuetSubMessage(
@@ -249,32 +313,34 @@ class PlaybackController {
     this.#receivedEnglish = false;
     this.#receivedChinese = false;
     this.#synchronizerState = undefined;
-    this.#state = reduceToggle(this.#state, { type: 'reset' });
   }
 
   readonly #onAdapterTracks = (tracks: TrackInfo[]) => {
     if (this.#destroyed || !this.#state.enabled) return;
     this.#tracks = tracks;
-    void this.#acquireOfficialTracks(tracks, this.#interactionRevision);
+    void this.#acquireOfficialTracks(
+      bindPlaybackGeneration(this.#state, tracks),
+      this.#interactionRevision,
+    );
   };
 
   async #acquireOfficialTracks(
-    tracks: readonly TrackInfo[],
+    generatedTracks: GenerationBound<readonly TrackInfo[]>,
     interactionRevision: number,
   ): Promise<void> {
     const adapter = this.#adapter;
     if (adapter === undefined) return;
+    const tracks = acceptPlaybackGeneration(this.#state, generatedTracks);
+    if (tracks === undefined) return;
 
     const selected = selectOfficialDualTracks(tracks);
     if (selected.english === undefined || selected.chinese === undefined) {
-      this.#state = reduceToggle(this.#state, { type: 'reset' });
       this.#status = `開啟 · 缺少官方 ${selected.missing.join(' + ')} 軌`;
       this.#render();
       return;
     }
 
     const acquisitionRevision = ++this.#acquisitionRevision;
-    this.#state = reduceToggle(this.#state, { type: 'reset' });
     this.#status = '開啟 · 正在取得官方英文 + 繁中…';
     this.#render();
 
@@ -283,7 +349,15 @@ class PlaybackController {
         adapter.fetchTrack(selected.english),
         adapter.fetchTrack(selected.chinese),
       ]);
+      const accepted = acceptPlaybackGeneration(
+        this.#state,
+        bindPlaybackGeneration(generatedTracks.generation, {
+          english,
+          chinese,
+        }),
+      );
       if (
+        accepted === undefined ||
         this.#destroyed ||
         !this.#state.enabled ||
         interactionRevision !== this.#interactionRevision ||
@@ -291,20 +365,26 @@ class PlaybackController {
       ) {
         return;
       }
-      if (english.length === 0 || chinese.length === 0) {
+      if (accepted.english.length === 0 || accepted.chinese.length === 0) {
         throw new Error('Prime returned an empty official subtitle track');
       }
 
-      this.#englishCues = english;
-      this.#chineseCues = chinese;
+      this.#englishCues = accepted.english;
+      this.#chineseCues = accepted.chinese;
       this.#englishMachineTranslated = false;
       this.#chineseMachineTranslated = false;
       this.#synchronizerState = undefined;
-      this.#state = reduceToggle(this.#state, { type: 'tracks-ready' });
+      this.#state = reducePlaybackLifecycle(this.#state, {
+        type: 'tracks-ready',
+      });
       this.#status = '官方英文 + 官方繁中 · 100%';
       this.#render();
     } catch (error) {
       if (
+        acceptPlaybackGeneration(
+          this.#state,
+          bindPlaybackGeneration(generatedTracks.generation, true),
+        ) !== true ||
         this.#destroyed ||
         interactionRevision !== this.#interactionRevision ||
         acquisitionRevision !== this.#acquisitionRevision
@@ -318,11 +398,17 @@ class PlaybackController {
     }
   }
 
-  readonly #onAdapterReset = () => {
+  readonly #onAdapterReset = (
+    reason: 'navigation' | 'episode' | 'seek-flush',
+  ) => {
     if (this.#destroyed) return;
     this.#interactionRevision += 1;
     this.#acquisitionRevision += 1;
-    this.#clearTrackData();
+    this.#state = reason === 'seek-flush'
+      ? reducePlaybackLifecycle(this.#state, { type: 'seeking' })
+      : reducePlaybackLifecycle(this.#state, { type: 'reset-content' });
+    if (reason !== 'seek-flush') this.#clearTrackData();
+    this.#bindAdapterGeneration();
     this.#status = '開啟 · Prime 播放狀態已重設';
     this.#render();
   };
@@ -357,7 +443,9 @@ class PlaybackController {
       this.#receivedEnglish &&
       this.#receivedChinese
     ) {
-      this.#state = reduceToggle(this.#state, { type: 'tracks-ready' });
+      this.#state = reducePlaybackLifecycle(this.#state, {
+        type: 'tracks-ready',
+      });
       this.#status = '假資料：官方英文 + MT 繁中 · 100%';
     }
     this.#render();
@@ -366,10 +454,9 @@ class PlaybackController {
   readonly #onSeeking = () => {
     if (!this.#state.enabled) return;
     this.#synchronizerState = undefined;
-    this.#state = reduceToggle(this.#state, {
-      type: 'suspend',
-      reason: 'seeking',
-    });
+    this.#acquisitionRevision += 1;
+    this.#state = reducePlaybackLifecycle(this.#state, { type: 'seeking' });
+    this.#bindAdapterGeneration();
     this.#status = '開啟 · 拖動中暫停顯示';
     this.#render();
   };
@@ -380,13 +467,59 @@ class PlaybackController {
       this.#requestFakeData();
     } else {
       this.#synchronizerState = undefined;
-      this.#state = reduceToggle(this.#state, { type: 'resume' });
+      this.#state = reducePlaybackLifecycle(this.#state, { type: 'seeked' });
+      this.#bindAdapterGeneration();
       this.#status = this.#englishCues.length > 0 && this.#chineseCues.length > 0
         ? '官方英文 + 官方繁中 · 100%'
         : '開啟 · 尚未取得雙軌';
       this.#render();
+      if (needsTrackAcquisition(this.#state)) this.#loadTracks();
     }
   };
+
+  #rebindVideo(video: HTMLVideoElement): void {
+    this.#nativeCaptions.restore();
+    this.video.removeEventListener('seeking', this.#onSeeking);
+    this.video.removeEventListener('seeked', this.#onSeeked);
+    this.video.removeEventListener('loadeddata', this.#onVideoReady);
+
+    this.video = video;
+    this.video.addEventListener('seeking', this.#onSeeking);
+    this.video.addEventListener('seeked', this.#onSeeked);
+    this.#synchronizerState = undefined;
+    this.#acquisitionRevision += 1;
+    this.#state = reducePlaybackLifecycle(this.#state, {
+      type: 'video-replaced',
+    });
+    this.#bindAdapterGeneration();
+    this.#status = '開啟 · Prime video 時鐘已替換';
+    this.#render();
+
+    if (video.readyState >= 2) this.#onVideoReady();
+    else video.addEventListener('loadeddata', this.#onVideoReady, { once: true });
+  }
+
+  readonly #onVideoReady = () => {
+    if (this.#destroyed || this.#state.suspension !== 'clock-reset') return;
+    this.#state = reducePlaybackLifecycle(this.#state, { type: 'video-ready' });
+    this.#bindAdapterGeneration();
+    this.#render();
+    if (needsTrackAcquisition(this.#state) && this.#canLoadTracks()) {
+      this.#loadTracks();
+    }
+  };
+
+  #bindAdapterGeneration(): void {
+    this.#adapter?.bindGeneration?.({
+      contentGeneration: this.#state.contentGeneration,
+      clockGeneration: this.#state.clockGeneration,
+    });
+  }
+
+  #canLoadTracks(): boolean {
+    return this.#siteId !== 'primevideo' ||
+      this.#state.contentIdentity !== undefined;
+  }
 
   readonly #onControlsActivity = () => {
     this.#controlsVisible = true;
@@ -401,7 +534,7 @@ class PlaybackController {
   };
 
   #render(): void {
-    const active = isOverlayActive(this.#state);
+    const active = isPlaybackOverlayActive(this.#state);
     const synchronized = active
       ? synchronizeCues(
           this.#englishCues,
@@ -422,7 +555,7 @@ class PlaybackController {
         controlsVisible: this.#controlsVisible,
       }),
     );
-    this.#nativeCaptions.setHidden(active);
+    this.#nativeCaptions.setHidden(shouldHideNativeCaptions(this.#state));
     this.#toggleView.render(this.#state.enabled, this.#status);
   }
 }

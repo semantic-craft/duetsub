@@ -1,3 +1,5 @@
+import type { PlaybackGeneration } from './lifecycle';
+
 export interface Cue {
   start: number;
   end: number;
@@ -19,6 +21,7 @@ export interface SiteAdapter {
   onTracks(cb: (tracks: TrackInfo[]) => void): void;
   onCues(cb: (trackId: string, cues: Cue[]) => void): void;
   fetchTrack(track: TrackInfo): Promise<Cue[]>;
+  bindGeneration?(generation: PlaybackGeneration): void;
   onReset(
     cb: (reason: 'navigation' | 'episode' | 'seek-flush') => void,
   ): void;
