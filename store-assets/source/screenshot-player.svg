@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800">
+  <defs>
+    <linearGradient id="scene" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#18324a"/>
+      <stop offset=".52" stop-color="#365169"/>
+      <stop offset="1" stop-color="#d69c55"/>
+    </linearGradient>
+    <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".88"/>
+    </linearGradient>
+    <filter id="softShadow" x="-30%" y="-50%" width="160%" height="200%">
+      <feDropShadow dx="0" dy="8" stdDeviation="9" flood-color="#000" flood-opacity=".45"/>
+    </filter>
+  </defs>
+  <rect width="1280" height="800" fill="#090d14"/>
+  <rect x="24" y="24" width="1232" height="752" rx="18" fill="url(#scene)"/>
+  <circle cx="980" cy="185" r="96" fill="#ffd782" fill-opacity=".58"/>
+  <path d="M24 548 244 304l138 145 149-197 190 238 164-171 371 286v171H24Z" fill="#122c3b" fill-opacity=".68"/>
+  <path d="M24 604 250 418l146 122 176-145 190 150 179-101 315 176v156H24Z" fill="#091a26" fill-opacity=".78"/>
+  <rect x="24" y="426" width="1232" height="350" rx="0 0 18 18" fill="url(#fade)"/>
+
+  <g transform="translate(640 466)" filter="url(#softShadow)">
+    <rect x="-290" y="-72" width="580" height="144" rx="18" fill="#07090d" fill-opacity=".78" stroke="#fff" stroke-opacity=".16"/>
+    <text x="0" y="-12" fill="#fff" font-family="Inter,Arial,sans-serif" font-size="34" font-weight="600" text-anchor="middle">Every story has another line.</text>
+    <text x="0" y="40" fill="#fff" font-family="PingFang TC,Noto Sans TC,Arial,sans-serif" font-size="42" font-weight="650" text-anchor="middle">每個故事都有另一行。</text>
+  </g>
+
+  <g transform="translate(76 672)">
+    <rect width="1128" height="5" rx="2.5" fill="#fff" fill-opacity=".28"/>
+    <rect width="724" height="5" rx="2.5" fill="#ffc845"/>
+    <circle cx="724" cy="2.5" r="8" fill="#ffc845"/>
+    <g transform="translate(0 42)" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m0 0 18 11L0 22Z" fill="#fff" stroke="none"/>
+      <path d="M58 5h8l10-9v30l-10-9h-8Z"/>
+      <path d="M82 5c7 5 7 12 0 17M88 0c12 8 12 22 0 30"/>
+    </g>
+    <text x="950" y="66" fill="#fff" font-family="Inter,Arial,sans-serif" font-size="19" font-weight="650">DS</text>
+    <rect x="932" y="38" width="54" height="42" rx="10" fill="#ffc845" fill-opacity=".18" stroke="#ffc845" stroke-width="2"/>
+    <g transform="translate(1030 42)" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round">
+      <path d="M0 8V0h8M30 8V0h-8M0 22v8h8M30 22v8h-8"/>
+    </g>
+    <text x="1090" y="66" fill="#fff" fill-opacity=".88" font-family="Inter,Arial,sans-serif" font-size="18">24:18</text>
+  </g>
+</svg>

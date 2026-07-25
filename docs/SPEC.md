@@ -15,7 +15,7 @@ Authoritative over: `README.md`（三站、Netflix-first 的旧表述已过时�
 
 ## Solution
 
-DuetSub 是一个**仅自用侧载**的 Chrome MV3 扩展。在四个目标站的播放器控制栏注入一个 **toggle button**；用户点一下即在视频上叠加一层扩展自有的 **overlay**，英文在上、繁体中文在下，由真实 `<video>` 时钟驱动，与播放严格同步。
+DuetSub 是一个可独立侧载并公开发布源码与构建产物的 Chrome MV3 扩展。在四个目标站的播放器控制栏注入一个 **toggle button**；用户点一下即在视频上叠加一层扩展自有的 **overlay**，英文在上、繁体中文在下，由真实 `<video>` 时钟驱动，与播放严格同步。
 
 字幕来源优先用**登录用户当前已能取用的官方轨**：中英官方轨都在时直接并排，绝不机翻。只有某一侧没有官方轨时，才用用户自备 key 的 **DeepSeek** 机翻补齐缺失的那一侧（**MT fallback**）；只有简体官方轨时用 **OpenCC** 转繁显示。DeepSeek 的 key 在扩展 **options page** 本地配置、存 `chrome.storage.local`，只经 service worker 走 HTTPS 发往 DeepSeek，绝不写日志、绝不外发观看数据。
 
@@ -214,7 +214,7 @@ zhActive = Chinese cues where start <= t < end
   - **测试连接**按钮 + 状态徽标（未配置 / 已配置 / 测试通过）。
   - 目标语言 `zh-Hant`、选轨链 §C、机翻方向自动——只读展示、不可改。
 - 持久化 `chrome.storage.local`；SW 读取供翻译调用。key 不写日志、除发往用户所配端点外不外发。
-- **manifest 权限**：`storage`；`host_permissions` = 四站域名 + 翻译端点。云端端点按所选供应商声明；**本地端点需 `http://localhost/*`（含常见环回地址）host_permission**，SW 负责本机端点的 CORS / 无鉴权处理与（可选）模型发现。仍**不用 `<all_urls>`**。`world:"MAIN"` 声明式 content script 由 WXT 生成，无需额外 `web_accessible_resources`。
+- **manifest 权限**：`storage`；安装时 `host_permissions` 只含四站域名。DeepSeek 与自定义云端共用 `optional_host_permissions: ["https://*/*"]`，本机端点只声明 `http://localhost/*`、`http://127.0.0.1/*`、`http://[::1]/*` 三条 optional host pattern。options page 仅在用户点击储存或测试时，按当前配置的精确 origin 调用 `chrome.permissions.request`；拒绝或旧配置尚未授权时，SW 不发请求、官方字幕照常显示，并提示回设置页授权。这里的 HTTPS wildcard 只是可申请范围，不是安装即授予的 `<all_urls>`。`world:"MAIN"` 声明式 content script 由 WXT 生成，无需额外 `web_accessible_resources`。
 
 ### J. 实现顺序（ticket 07，已锁）
 
@@ -235,7 +235,7 @@ zhActive = Chinese cues where start <= t < end
 
 ## Out of Scope
 
-- Chrome Web Store 发布、隐私政策、GPL 合规工程（仅自用侧载）。
+- Chrome Web Store 后台建档、审核与正式上架（公开 GitHub 仓库、独立构建、隐私政策、商店素材与发布流程已纳入）。
 - ~~本机/自托管模型~~ —— **2026-07-22 纳入范围**：统一 OpenAI 兼容端点已支持本机模型（Ollama/LM Studio），见 §D/§I；本 spec 其余「仅云端」旧表述以该更新为准。
 - App / TV / 非 Chrome 浏览器；移动端。
 - 下载视频、绕过 DRM、解锁地区限制轨、上传观看数据（README 红线）。

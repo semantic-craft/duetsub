@@ -1,0 +1,100 @@
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+const root = resolve(import.meta.dirname, '..');
+const packageJson = readJson('package.json');
+const manifest = readJson('.output/chrome-mv3/manifest.json');
+const version = packageJson.version;
+const archiveName = `duetsub-${version}-chrome.zip`;
+const archivePath = resolve(root, '.output', archiveName);
+const expectedId = 'nopbidmmkeonplhniidecfeibhnanmig';
+
+assert(manifest.manifest_version === 3, 'manifest_version must be 3');
+assert(manifest.version === version, 'package and manifest versions differ');
+assert(
+  process.env.RELEASE_TAG === undefined ||
+    process.env.RELEASE_TAG === `v${version}`,
+  `tag ${process.env.RELEASE_TAG} does not match v${version}`,
+);
+
+assertExactStrings(
+  manifest.permissions,
+  ['storage'],
+  'required API permissions',
+);
+assertExactStrings(
+  manifest.host_permissions,
+  [
+    'https://www.netflix.com/*',
+    'https://www.primevideo.com/*',
+    'https://play.hbomax.com/*',
+    'https://www.youtube.com/*',
+  ],
+  'required host permissions',
+);
+assertExactStrings(
+  manifest.optional_host_permissions,
+  [
+    'https://*/*',
+    'http://localhost/*',
+    'http://127.0.0.1/*',
+    'http://[::1]/*',
+  ],
+  'optional host permissions',
+);
+
+assert(typeof manifest.key === 'string', 'manifest public key is missing');
+assert(
+  extensionId(manifest.key) === expectedId,
+  `stable extension ID must remain ${expectedId}`,
+);
+
+const entries = execFileSync('unzip', ['-Z1', archivePath], {
+  encoding: 'utf8',
+}).trim().split('\n');
+assert(entries.includes('manifest.json'), `${archiveName} has no manifest.json`);
+const forbidden = entries.filter((entry) =>
+  entry.endsWith('.map') ||
+  entry.endsWith('.pem') ||
+  entry.endsWith('.key') ||
+  /(^|\/)\.env(?:\.|$)/u.test(entry)
+);
+assert(
+  forbidden.length === 0,
+  `forbidden release files: ${forbidden.join(', ')}`,
+);
+
+console.log(
+  `Verified ${archiveName}: MV3, version ${version}, ID ${expectedId}, ` +
+    `${entries.length} files, least-privilege host boundary.`,
+);
+
+function readJson(path) {
+  return JSON.parse(readFileSync(resolve(root, path), 'utf8'));
+}
+
+function assertExactStrings(actual, expected, label) {
+  assert(Array.isArray(actual), `${label} must be an array`);
+  const left = [...actual].sort();
+  const right = [...expected].sort();
+  assert(
+    JSON.stringify(left) === JSON.stringify(right),
+    `${label} differ: ${JSON.stringify(left)}`,
+  );
+}
+
+function extensionId(publicKey) {
+  return createHash('sha256')
+    .update(Buffer.from(publicKey, 'base64'))
+    .digest('hex')
+    .slice(0, 32)
+    .replace(/[0-9a-f]/gu, (digit) =>
+      String.fromCharCode('a'.charCodeAt(0) + Number.parseInt(digit, 16))
+    );
+}
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}

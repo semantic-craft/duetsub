@@ -715,7 +715,12 @@ class PlaybackController {
         cues: batch,
         skipCache,
       }) as {
-        readonly status: 'ok' | 'failed' | 'missing-key' | 'aborted';
+        readonly status:
+          | 'ok'
+          | 'failed'
+          | 'missing-key'
+          | 'missing-permission'
+          | 'aborted';
         readonly cues: readonly Cue[];
         readonly generation: typeof generation;
       };
@@ -731,6 +736,14 @@ class PlaybackController {
         if (!this.#translationHintShown) {
           this.#translationHintShown = true;
           this.#status = '官方字幕照常顯示 · 請到設定頁配置翻譯服務';
+          this.#render();
+        }
+        return;
+      }
+      if (response.status === 'missing-permission') {
+        if (!this.#translationHintShown) {
+          this.#translationHintShown = true;
+          this.#status = '官方字幕照常顯示 · 請到設定頁授權翻譯端點';
           this.#render();
         }
         return;

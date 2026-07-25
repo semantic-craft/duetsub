@@ -1,6 +1,6 @@
 {
   "name": "duetsub",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,6 +8,7 @@
     "build": "wxt build",
     "check": "tsc --noEmit",
     "postinstall": "wxt prepare",
+    "release:build": "npm test && npm run check && wxt zip -b chrome && node scripts/verify-release.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

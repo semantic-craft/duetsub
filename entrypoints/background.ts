@@ -5,6 +5,7 @@ import {
 } from '../src/mt/config';
 import { testTranslationConnection } from '../src/mt/connection';
 import { convertCuesToTraditional } from '../src/mt/opencc';
+import { hasEndpointPermission } from '../src/mt/permissions';
 import { isMtRequest } from '../src/mt/protocol';
 import { translateCueBatch } from '../src/mt/translator';
 
@@ -39,6 +40,10 @@ export default defineBackground(() => {
 
     void (async () => {
       if (request.type === 'test-connection') {
+        if (!(await hasEndpointPermission(chrome.permissions, request.config))) {
+          sendResponse({ ok: false, message: '未授權此翻譯端點' });
+          return;
+        }
         sendResponse(await testTranslationConnection(request.config));
         return;
       }
@@ -55,6 +60,14 @@ export default defineBackground(() => {
       if (config === undefined) {
         sendResponse({
           status: 'missing-key',
+          cues: [],
+          generation: request.generation,
+        });
+        return;
+      }
+      if (!(await hasEndpointPermission(chrome.permissions, config))) {
+        sendResponse({
+          status: 'missing-permission',
           cues: [],
           generation: request.generation,
         });
