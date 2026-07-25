@@ -2,11 +2,7 @@ import { DOMParser } from '@xmldom/xmldom';
 import { describe, expect, it } from 'vitest';
 
 import type { TrackInfo } from '../src/core/contracts';
-import {
-  mapMaxTrackResources,
-  selectMaxSegmentsAfterFailure,
-  selectMaxSegmentsAt,
-} from '../src/adapters/max-track-mapping';
+import { mapMaxTrackResources } from '../src/adapters/max-track-mapping';
 
 const ENGLISH: TrackInfo = {
   id: 'en-US-subtitles',
@@ -71,36 +67,6 @@ const SYNTHETIC_MPD = `<?xml version="1.0"?>
 </MPD>`;
 
 describe('mapMaxTrackResources', () => {
-  it('selects the current and future VTT segments at a resumed clock', () => {
-    const segments = [
-      {
-        url: 'https://media.example.invalid/intro.vtt',
-        presentationAnchor: { mpegTs: 0, presentationTimeMs: 0 },
-      },
-      {
-        url: 'https://media.example.invalid/feature-1.vtt',
-        presentationAnchor: { mpegTs: 0, presentationTimeMs: 19_000 },
-      },
-      {
-        url: 'https://media.example.invalid/feature-2.vtt',
-        presentationAnchor: {
-          mpegTs: 90_000,
-          presentationTimeMs: 1_191_760,
-        },
-      },
-    ];
-
-    expect(selectMaxSegmentsAt(segments, 1_245_000)).toEqual([
-      segments[2],
-    ]);
-    expect(
-      selectMaxSegmentsAfterFailure(segments, segments[0].url),
-    ).toEqual([segments[1], segments[2]]);
-    expect(
-      selectMaxSegmentsAfterFailure(segments, segments[2].url),
-    ).toEqual([]);
-  });
-
   it('maps authoritative DOM track ids through complete playbackInfo and MPD data', () => {
     expect(
       mapMaxTrackResources({
@@ -172,6 +138,27 @@ describe('mapMaxTrackResources', () => {
     ).toHaveProperty(
       'en-US-subtitles.segments.0.url',
       'https://akm.asia.prd.media.max.com/title/t/en/1.vtt',
+    );
+  });
+
+  it('maps the same path across current Max h264 CDN edges', () => {
+    const playbackInfoRaw = SYNTHETIC_PLAYBACK_INFO.replace(
+      'https://media.example.invalid/title/dash.mpd?synthetic=1',
+      'https://gcp.cf.prd.media.h264.io/title/dash.mpd?declared=1',
+    );
+
+    expect(
+      mapMaxTrackResources({
+        tracks: [ENGLISH, TRADITIONAL_CHINESE],
+        playbackInfoRaw,
+        manifestUrl:
+          'https://akm.cf.prd.media.h264.io/title/dash.mpd?observed=1',
+        manifestRaw: SYNTHETIC_MPD,
+        parser: new DOMParser(),
+      }),
+    ).toHaveProperty(
+      'en-US-subtitles.segments.0.url',
+      'https://akm.cf.prd.media.h264.io/title/t/en/1.vtt',
     );
   });
 

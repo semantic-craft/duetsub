@@ -63,6 +63,24 @@ describe('Max MAIN to ISOLATED messages', () => {
       }),
     ).toBe(false);
   });
+
+  it('accepts the current Max h264 CDN and rejects lookalike hosts', () => {
+    const valid = maxSubtitleResponseMessage(
+      'response-h264',
+      'manifest',
+      'https://edge.cf.prd.media.h264.io/gcs/title/dash.mpd',
+      '<MPD/>',
+      MAX_CONTENT_IDENTITY,
+    );
+
+    expect(isDuetSubMessage(valid)).toBe(true);
+    for (const url of [
+      'https://prd.media.h264.io.attacker.example/gcs/title/dash.mpd',
+      'https://media.h264.io/gcs/title/dash.mpd',
+    ]) {
+      expect(isDuetSubMessage({ ...valid, url })).toBe(false);
+    }
+  });
 });
 
 describe('Netflix MAIN to ISOLATED messages', () => {

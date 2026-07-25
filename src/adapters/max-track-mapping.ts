@@ -43,40 +43,6 @@ export interface MaxTrackResource {
   readonly segments: readonly MaxTrackSegment[];
 }
 
-export function selectMaxSegmentsAt(
-  segments: readonly MaxTrackSegment[],
-  presentationTimeMs: number,
-): readonly MaxTrackSegment[] {
-  if (
-    segments.length === 0 ||
-    !Number.isFinite(presentationTimeMs) ||
-    presentationTimeMs < 0
-  ) {
-    return [];
-  }
-
-  let selectedIndex = 0;
-  let previousStartMs = -1;
-  for (let index = 0; index < segments.length; index += 1) {
-    const startMs = segments[index].presentationAnchor.presentationTimeMs;
-    if (!Number.isFinite(startMs) || startMs < previousStartMs) return [];
-    if (startMs <= presentationTimeMs) selectedIndex = index;
-    previousStartMs = startMs;
-  }
-  return segments.slice(selectedIndex);
-}
-
-export function selectMaxSegmentsAfterFailure(
-  segments: readonly MaxTrackSegment[],
-  failedUrl: string,
-): readonly MaxTrackSegment[] {
-  const failedIndexes = segments.flatMap((segment, index) =>
-    segment.url === failedUrl ? [index] : []
-  );
-  if (failedIndexes.length !== 1) return [];
-  return segments.slice(failedIndexes[0] + 1);
-}
-
 export type MaxTrackResourceMap = Readonly<
   Record<string, MaxTrackResource>
 >;
@@ -516,7 +482,9 @@ export function sameMaxManifestUrl(left: string, right: string): boolean {
 function isMaxMediaHost(hostname: string): boolean {
   return (
     hostname === 'prd.media.max.com' ||
-    hostname.endsWith('.prd.media.max.com')
+    hostname.endsWith('.prd.media.max.com') ||
+    hostname === 'prd.media.h264.io' ||
+    hostname.endsWith('.prd.media.h264.io')
   );
 }
 

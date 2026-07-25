@@ -10,8 +10,6 @@ import {
   type MaxResponseInbox,
 } from './max-responses';
 import {
-  selectMaxSegmentsAfterFailure,
-  selectMaxSegmentsAt,
   type MaxTrackResource,
   type MaxTrackSegment,
 } from './max-track-mapping';
@@ -278,14 +276,7 @@ class MaxAdapter implements SiteAdapter {
     generation: PlaybackGeneration,
     signal: AbortSignal,
   ): Promise<Cue[]> {
-    const video = currentMaxPlayer()?.video;
-    if (video === undefined || !Number.isFinite(video.currentTime)) {
-      throw new Error('Max video clock unavailable');
-    }
-    let pending = [...selectMaxSegmentsAt(
-      resource.segments,
-      video.currentTime * 1_000,
-    )];
+    const pending = [...resource.segments];
     if (pending.length === 0) {
       throw new Error('Max subtitle segment timeline unavailable');
     }
@@ -301,19 +292,14 @@ class MaxAdapter implements SiteAdapter {
         try {
           raw = await fetchVtt(segment.url, signal);
         } catch (error) {
-          const recovery = error instanceof MaxVttRequestError &&
-              error.status === 404
-            ? selectMaxSegmentsAfterFailure(resource.segments, segment.url)
-            : [];
-          if (recovery.length === 0) throw error;
-          await this.#waitForPresentationTime(
-            video,
-            recovery[0].presentationAnchor.presentationTimeMs,
-            generation,
-            signal,
-          );
-          pending = [...recovery];
-          continue;
+          if (
+            error instanceof MaxVttRequestError &&
+            error.status === 404
+          ) {
+            pending.shift();
+            continue;
+          }
+          throw error;
         }
       }
       const parsed = parseWebVtt(raw, {
@@ -327,25 +313,6 @@ class MaxAdapter implements SiteAdapter {
       pending.shift();
     }
     return normalizeCues(cues);
-  }
-
-  async #waitForPresentationTime(
-    video: HTMLVideoElement,
-    presentationTimeMs: number,
-    generation: PlaybackGeneration,
-    signal: AbortSignal,
-  ): Promise<void> {
-    while (video.currentTime * 1_000 < presentationTimeMs) {
-      if (
-        signal.aborted ||
-        !sameGeneration(this.#generation, generation) ||
-        !video.isConnected ||
-        video.ended
-      ) {
-        throw new Error('Max VTT recovery became stale');
-      }
-      await new Promise<void>((resolve) => window.setTimeout(resolve, 100));
-    }
   }
 
   #observedVtt(

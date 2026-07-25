@@ -83,6 +83,30 @@ describe('alignMaxChineseCuesToEnglish', () => {
     ]);
   });
 
+  it('pins a slightly early Chinese cue to the following English cue', () => {
+    const english = [
+      cue(10_100, 12_000, 'English starts next.', 'en-US'),
+    ];
+    const chinese = [
+      cue(10_000, 11_900, '中文稍早', 'zh-Hant-TW'),
+    ];
+
+    expect(alignMaxChineseCuesToEnglish(english, chinese)).toEqual([
+      cue(10_100, 12_000, '中文稍早', 'zh-Hant-TW'),
+    ]);
+  });
+
+  it('fails closed when Chinese leads every English cue by over 250 ms', () => {
+    const english = [
+      cue(10_300, 12_000, 'English starts too late.', 'en-US'),
+    ];
+    const chinese = [
+      cue(10_000, 11_900, '無法可靠對齊', 'zh-Hant-TW'),
+    ];
+
+    expect(alignMaxChineseCuesToEnglish(english, chinese)).toEqual([]);
+  });
+
   it('keeps wrapped text together when no later English cue can own it', () => {
     const english = [
       cue(30_000, 32_000, 'One English cue.', 'en-US'),

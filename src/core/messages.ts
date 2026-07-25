@@ -580,7 +580,9 @@ function isMaxHost(hostname: string): boolean {
   return (
     hostname === 'play.hbomax.com' ||
     hostname.endsWith('.hbomax.com') ||
-    hostname.endsWith('.max.com')
+    hostname.endsWith('.max.com') ||
+    hostname === 'prd.media.h264.io' ||
+    hostname.endsWith('.prd.media.h264.io')
   );
 }
 

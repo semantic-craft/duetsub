@@ -1,6 +1,7 @@
 import type { Cue, TrackInfo } from '../core/contracts';
 
 const MIN_UNIQUE_ALIGNMENT_COVERAGE = 0.95;
+const MAX_CHINESE_LEAD_MS = 250;
 
 export function selectMaxEnglishPrimaryTrack(
   tracks: readonly TrackInfo[],
@@ -46,14 +47,23 @@ export function alignMaxChineseCuesToEnglish(
       activeEnglish.length,
       ...candidates,
     );
-    if (candidates.length !== 1) continue;
+    const primary = candidates.length === 1
+      ? candidates[0]
+      : candidates.length === 0
+        ? firstEnglishCueAfterChineseStart(
+          englishCues,
+          nextEnglishIndex,
+          chineseCue,
+        )
+        : undefined;
+    if (primary === undefined) continue;
 
     uniquelyAlignedCount += 1;
     aligned.push(
       ...alignChineseCue(
         chineseCue,
         englishCues,
-        englishCues.indexOf(candidates[0]),
+        englishCues.indexOf(primary),
       ),
     );
   }
@@ -63,6 +73,30 @@ export function alignMaxChineseCuesToEnglish(
         MIN_UNIQUE_ALIGNMENT_COVERAGE
     ? aligned
     : [];
+}
+
+function firstEnglishCueAfterChineseStart(
+  englishCues: readonly Cue[],
+  startIndex: number,
+  chineseCue: Cue,
+): Cue | undefined {
+  const candidates: Cue[] = [];
+  for (let index = startIndex; index < englishCues.length; index += 1) {
+    const candidate = englishCues[index];
+    if (candidate.start - chineseCue.start > MAX_CHINESE_LEAD_MS) break;
+    if (
+      candidate.start > chineseCue.start &&
+      candidate.start < chineseCue.end
+    ) {
+      candidates.push(candidate);
+    }
+  }
+  if (candidates.length === 0) return undefined;
+  const earliestStart = candidates[0].start;
+  const earliest = candidates.filter(
+    (candidate) => candidate.start === earliestStart,
+  );
+  return earliest.length === 1 ? earliest[0] : undefined;
 }
 
 function alignChineseCue(

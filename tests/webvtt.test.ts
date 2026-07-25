@@ -56,4 +56,29 @@ Anchored cue`;
       },
     ]);
   });
+
+  it('applies a non-zero period offset to a zero timestamp map', () => {
+    const raw = `WEBVTT
+X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:0
+
+00:00:12.000 --> 00:00:13.000
+Period cue`;
+
+    expect(
+      parseWebVtt(raw, {
+        language: 'en-US',
+        presentationAnchor: {
+          mpegTs: 900_000,
+          presentationTimeMs: 15_000,
+        },
+      }),
+    ).toEqual([
+      {
+        start: 17_000,
+        end: 18_000,
+        text: 'Period cue',
+        language: 'en-US',
+      },
+    ]);
+  });
 });

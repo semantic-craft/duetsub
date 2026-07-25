@@ -9,7 +9,6 @@ import { readMaxContentIdentity } from '../adapters/max-location';
 interface MaxObservationTarget {
   readonly kind: MaxSubtitleResponseKind;
   readonly url: string;
-  readonly contentIdentity: string;
 }
 
 const xhrTargets = new WeakMap<XMLHttpRequest, MaxObservationTarget>();
@@ -28,21 +27,16 @@ function patchFetch(): void {
   ): Promise<Response> {
     const result = originalFetch.call(this, input, init);
     const requestedUrl = requestUrl(input);
-    const contentIdentity = readMaxContentIdentity(window.location.href);
     const requestedTarget =
-      requestedUrl === undefined || contentIdentity === undefined
+      requestedUrl === undefined
         ? undefined
-        : observationTarget(requestedUrl, contentIdentity);
+        : observationTarget(requestedUrl);
 
     void result.then(
       (response) => {
         const target =
           requestedTarget ??
-          (
-            contentIdentity === undefined
-              ? undefined
-              : observationTarget(response.url, contentIdentity)
-          );
+          observationTarget(response.url);
         if (target !== undefined) {
           void observeFetchResponse(response, target);
         }
@@ -65,11 +59,10 @@ function patchXmlHttpRequest(): void {
     password?: string | null,
   ): void {
     const resolved = resolveUrl(String(url));
-    const contentIdentity = readMaxContentIdentity(window.location.href);
     const target =
-      resolved === undefined || contentIdentity === undefined
+      resolved === undefined
         ? undefined
-        : observationTarget(resolved, contentIdentity);
+        : observationTarget(resolved);
     if (target === undefined) xhrTargets.delete(this);
     else xhrTargets.set(this, target);
     originalOpen.call(this, method, url, async ?? true, username, password);
@@ -131,26 +124,27 @@ function forwardRawResponse(
   raw: string,
 ): void {
   if (raw.length === 0 || raw.length > 5_000_000) return;
+  const contentIdentity = readMaxContentIdentity(window.location.href);
+  if (contentIdentity === undefined) return;
   postDuetSubMessage(
     maxSubtitleResponseMessage(
       crypto.randomUUID(),
       target.kind,
       target.url,
       raw,
-      target.contentIdentity,
+      contentIdentity,
     ),
   );
 }
 
 function observationTarget(
   value: string,
-  contentIdentity: string,
 ): MaxObservationTarget | undefined {
   for (
     const kind of ['playback-info', 'manifest', 'vtt'] as const
   ) {
     if (isMaxSubtitleObservationUrl(value, kind)) {
-      return { kind, url: value, contentIdentity };
+      return { kind, url: value };
     }
   }
   return undefined;

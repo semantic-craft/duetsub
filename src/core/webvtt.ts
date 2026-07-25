@@ -97,7 +97,13 @@ function readTimestampOffset(
   ) {
     return undefined;
   }
-  if (localTimeMs === 0 && mappedMpegTs === 0) return 0;
+  if (
+    localTimeMs === 0 &&
+    mappedMpegTs === 0 &&
+    anchor === undefined
+  ) {
+    return 0;
+  }
   if (
     anchor === undefined ||
     !Number.isSafeInteger(anchor.mpegTs) ||

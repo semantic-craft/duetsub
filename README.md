@@ -47,7 +47,7 @@ API keys and settings stay in `chrome.storage.local`. Source subtitle text is se
 
 ## Verification status
 
-Automated tests cover parsing, track ownership, lifecycle generations, seek handling, subtitle restoration, translation batching/cache, and release-package invariants. Logged-in human gates have passed for Prime Video and Netflix. Max has passed dual-track playback, native-state restoration, and episode replacement historically; the final `v0.1.1` build must still pass the recorded seek/episode regression gate before release.
+Automated tests cover parsing, track ownership, lifecycle generations, seek handling, subtitle restoration, translation batching/cache, and release-package invariants. Logged-in human gates have passed for Prime Video, Netflix, and Max on the final `v0.1.1` candidate. Max was verified with real in-player episode changes, backward and forward progress-bar seeks, full-track subtitle reuse, and native Traditional Chinese restoration.
 
 See [docs/VERIFICATION.md](docs/VERIFICATION.md) for the current evidence and [docs/RELEASE.md](docs/RELEASE.md) for the release process.
 

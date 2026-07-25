@@ -4,14 +4,14 @@
 
 **Blocked by:** 03 — Prime Video 生命周期健壮性（共享生命周期 helper）。
 
-**Status:** claimed
+**Status:** done
 
 - [x] MAIN 在 Max 媒体域转发 `.vtt` 与 subtitle playlist/API 候选原文；ISOLATED 判格式。
 - [x] adapter 以 DOM track id/label（如 `en-US-subtitles`、`zh-Hant-TW-subtitles`）为权威枚举源，归一化 BCP-47、标 `official`；程序化开/关字幕菜单并恢复原开合状态。
 - [x] 第二轨由**完整 subtitle playlist/API 映射**（DOM id → 完整 VTT 或 segment playlist）驱动，绝不从单条 VTT URL 猜另一轨；MAIN 看不到映射即 fail closed。
 - [x] WebVTT parser 产出 `Cue[]`：毫秒正确、`<br>`/标签处理、实体解码、REGION/line 定位；非零 `X-TIMESTAMP-MAP` 须由 playlist/presentation 锚点换算（无锚点 fail closed）；仓库没有可验证的完整 Max VTT fixture，按本票约束改用明确标注为 synthetic 的最小 parser fixture。
 - [x] 同步 `[data-testid="VideoElement"]`；开启时隐藏 `[data-testid="caption_renderer_overlay"]`、否则恢复；复用 ticket 03 的 seek/广告/换集生命周期。
-- [ ] 按 §G Max stop rule 在真机双轨片子（+ seek + 换集/video replacement）验证；真实广告 gate 经用户明确批准 WAIVED。
+- [x] 按 §G Max stop rule 在真机双轨片子（+ seek + 换集/video replacement）验证；真实广告 gate 经用户明确批准 WAIVED。
 
 ## Answer
 
@@ -29,19 +29,28 @@
 - 真实 `來的不只是喜劇愛好者\n各種人都有` 提前显示模式已用精确时轴单测锁定：后行只在下一条英文 cue 开始时出现；无后续英文 cue 的视觉换行仍保持为一条字幕。
 - 通过时间轴从约 18 分钟跳到 27:57 后，overlay 保持开启、没有显示 seek 前陈旧 cue；观察窗口处于无字幕段，未看到新的 post-seek cue。因此“seek 后重新取得并显示新 cue”与换集仍不作为本次 PASS，完整 stop rule 保持未勾选。
 
+### 2026-07-25 `v0.1.1` 最终真人门禁
+
+- 真机确认 Max 当前媒体域为受限的 `*.prd.media.h264.io`。消息校验与 manifest 同路径映射仅新增这一官方后缀；相似恶意 host 与裸 `media.h264.io` 仍拒绝。
+- SPA 换集会先发下一集 `playbackInfo`、再更新页面 URL。MAIN hook 改为响应完成时读取当前内容 identity；真实从《Yes, And》切到《Bulletproof》及反向切换后，URL、title、duration、MPD、video clock 与字幕均属于新集。
+- 当前 DASH MPD 的广告 `Period` 会声明不存在的 VTT 并返回 404。adapter 只跳过这些缺失段，首次取得正片的完整英中 VTT；后续真实进度条从约 24:50 跳到 12:00、再到 17:25 时直接复用完整 cue 集，未由 DuetSub 再发 VTT `Fetch`，且两次均出现新位置字幕而非旧 cue。
+- 真机 VTT 使用零 `X-TIMESTAMP-MAP`，但 DASH `Period` 有 64.064 秒 presentation offset；parser 现在在有锚点时仍执行 MPEGTS→presentation 换算。真实英中样本共 544 条英文 CC 与 336 条繁中，58 条繁中原本早 41–208ms；250ms 英文主轨前视只把它们推迟到对应英文开始，覆盖 336/336，无歧义且不允许中文抢跑。
+- 最终 unpacked candidate 上，画面保持可见、按钮严格位于原生字幕按钮与全屏按钮之间、双轨状态为 `官方英文主軌 + 官方繁中對齊 · 100%`。关闭后 overlay 隐藏，原生 renderer 显示真实繁中，菜单仍为 `Chinese (Traditional)` checked；重新开启后双轨立即恢复。
+- 最终自动证据：34 个 test files、119 tests 通过；TypeScript、Chrome MV3 打包、稳定 ID、最小权限与 release archive 校验通过。完整签名 URL、token、观看数据与完整真人字幕均未写入仓库。
+
 ### 自动证据
 
 - 按 `mattpocock-skills:tdd` 做公开 seam 的垂直 red → green：纯 WebVTT parser；DOM track id + 完整 `playbackInfo`/DASH MPD 的纯映射；generation-bound response inbox；Max 英文主轨显示副本对齐。测试不检查私有调用次数，也没有为 Max DOM 编造 selector 单测。
 - 英文主轨对齐以四个独立 RED 锁定后逐项 GREEN：延迟中文 cue 采用其原始起点所落入的英文区间；唯一候选覆盖率低于 95% 时整轨 fail closed；官方英文 CC 优先于普通英文字幕；明确的多对话行溢出只移到中文源区间覆盖的后续英文对白 cue。
 - 2026-07-24 真机诊断发现同一 MPD 路径会从 `gcp.asia.prd.media.max.com` 跳转到 `akm.asia.prd.media.max.com`；先加入回归测试并确认 RED（映射返回 `{}`），再只允许“双方均为 HTTPS 官方 `*.prd.media.max.com` 且 pathname 完全相同”的跨 CDN 映射。非 Max host 或不同 pathname 仍返回空映射；目标测试现为 4 tests passed。
 - 真机 MPD 还包含 intro + feature 多个非重叠 `Period`。纯映射测试锁定 Period start/duration、presentation anchor 偏移与 MPEGTS 局部媒体时钟；重叠、缺 duration 或无法验证的时间线继续返回空映射。
-- 恢复播放时旧 intro VTT 会 404；纯选择测试锁定只从当前/未来 segment 开始，且 404 只能跳到完整 MPD 中已验证的下一 segment，并等待其 presentation time。无法唯一定位失败 URL、没有后继 segment 或非 404 均 fail closed。
+- DASH 广告 `Period` 中声明但不存在的 VTT 会 404；adapter 仅跳过 404 段并一次取得整集所有可验证正片 segment。非 404、解析失败或整轨为空仍 fail closed；seek 直接复用首次完整 cue 集。
 - 换集前 Max 会在旧 URL 下预取下一集 `playbackInfo`。generation 测试先复现元数据被错误丢弃，再只迁移“manifest URL 与旧集 active manifest 可验证不同”的预取 metadata；旧 manifest、旧 VTT、未知归属响应全部丢弃，新 MPD 到齐前不进入双轨 ready。
-- WebVTT parser 覆盖毫秒、标签/`<br>`、命名与数字实体、空白折叠、REGION/line top 定位；零 `X-TIMESTAMP-MAP` 直接使用节目时轴，非零 map 缺 presentation anchor 返回空，提供 MPEGTS→节目时间锚点后才换算。
+- WebVTT parser 覆盖毫秒、标签/`<br>`、命名与数字实体、空白折叠、REGION/line top 定位；没有 presentation anchor 的零 `X-TIMESTAMP-MAP` 可直接使用本地时轴，有 DASH anchor 时即使 map 为零也必须换算 Period offset；非零 map 缺 anchor 返回空。
 - Max MAIN `document_start` hook 只观察/转发 `playbackInfo`、`.mpd`/`.m3u8` 与 `.vtt` 原文；解析、BCP-47、选轨、MPD `SegmentTimeline` 展开、VTT 获取和 cue 归一化均在 ISOLATED。单条 VTT 即使合法也不能建立 track ownership；缺 API+manifest 完整映射时 `fetchTrack` fail closed。
 - adapter 只从当前可见 `[data-testid="VideoElement"]` 所属 `playerContainer` 内的 `player-ux-text-track-button` 枚举官方轨。真机发现 Max 在控制栏隐藏时保留唯一 menu button、仅设 `visibility:hidden`；入口仍可程序化打开完整菜单，因此不再错误等待入口“可见”，但仍严格要求 `playback_controls` 内唯一按钮。枚举不点击 track radio，原选择不变，并恢复菜单原开合状态。
 - Max 内容 identity 使用已验证的 `/video/watch/<id>/<id>`；`[data-testid="VideoElement"]`、`[data-testid="caption_renderer_overlay"]`、seek、video replacement、content/clock generation 与 SSAI break fail-closed 接回 ticket 03 lifecycle reducer。原生层仍只在双轨 `tracks-ready` 后隐藏，reset/seek/ad/关闭时恢复。
-- 最终全量复跑：`npm test` 为 30 files / 102 tests passed；`npm run check`、`npm run build`、`git diff --check` 均通过，`src/` 与 `tests/` 无 `[DEBUG-` 标记。生成 manifest 仍只有 `storage` 与既有四站 host，Max match 精确为 `https://play.hbomax.com/*`。
+- `v0.1.1` 最终全量复跑：`npm test` 为 34 files / 119 tests passed；`npm run check`、release zip、`git diff --check` 均通过，`src/` 与 `tests/` 无 `[DEBUG-` 标记。生成 manifest 的必需 host 仍只有四个受支持站点，Max content-script match 精确为 `https://play.hbomax.com/*`。
 - 仓库无完整可验证的 Max VTT 文件；新增 `max-minimal.synthetic.vtt` 明确声明不是 Max 真机 fixture。没有把登录态抓到的完整 VTT、签名 query、token 或观看数据写入仓库。
 
 ### 历史真人证据（登录态 Chrome，2026-07-24；reopen 后不代表新构建 PASS）
