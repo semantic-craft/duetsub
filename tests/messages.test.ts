@@ -14,6 +14,9 @@ import {
 
 const PRIME_TTML_URL =
   'https://cf-timedtext.aux.pv-cdn.net/example/subtitle.ttml2';
+const PRIME_FRAGMENTED_TEXT_URL =
+  'https://subtitle.ta.pop-vod-dash.main.amazon.pv-cdn.net/asset/' +
+  'english_text_1.mp4?token=SIGNED_PLACEHOLDER';
 const MAX_CONTENT_IDENTITY =
   '/video/watch/41c7eddd-2eea-4ed3-a299-474d693063f4/35a8260d-3bc6-4b91-b370-a5f3c72ad6d5';
 
@@ -24,6 +27,24 @@ describe('Prime MAIN to ISOLATED messages', () => {
         primeTtmlResponseMessage('response-1', PRIME_TTML_URL, '<tt/>'),
       ),
     ).toBe(true);
+  });
+
+  it('accepts the trusted fragmented-text URL used by Off Campus', () => {
+    const valid = primeTtmlResponseMessage(
+      'response-off-campus',
+      PRIME_FRAGMENTED_TEXT_URL,
+      '\u0000\u0000\u0000\u0008mdat<?xml version="1.0"?><tt/>',
+    );
+
+    expect(isDuetSubMessage(valid)).toBe(true);
+    expect(
+      isDuetSubMessage({
+        ...valid,
+        url:
+          'https://subtitle.ta.pop-vod-dash.main.amazon.pv-cdn.net.' +
+          'attacker.example/asset/english_text_1.mp4',
+      }),
+    ).toBe(false);
   });
 
   it('rejects page-forged malformed response payloads', () => {

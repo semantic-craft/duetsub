@@ -52,11 +52,7 @@ export function consumePrimeTtmlResponse(
   const remaining = inbox.filter((response) => !matches.includes(response));
 
   for (const response of matches.toReversed()) {
-    const cues = parseTtml(response.raw, {
-      language: track.language,
-      acceptedSourceLanguages: acceptedPrimeTtmlLanguages(track.language),
-      parser,
-    });
+    const cues = parsePrimeTtmlPayload(response.raw, track.language, parser);
     if (isValidCueSet(cues)) return { inbox: remaining, cues };
   }
 
@@ -68,6 +64,52 @@ function acceptedPrimeTtmlLanguages(language: string): readonly string[] {
     return ['zh-Hant', 'cmn-Hant', 'zh-TW', 'cmn-TW'];
   }
   return [language];
+}
+
+function parsePrimeTtmlPayload(
+  raw: string,
+  language: string,
+  parser: NonNullable<TtmlParserOptions['parser']> | undefined,
+): Cue[] {
+  const cues = extractTtmlDocuments(raw).flatMap((document) =>
+    parseTtml(document, {
+      language,
+      acceptedSourceLanguages: acceptedPrimeTtmlLanguages(language),
+      parser,
+    }),
+  );
+  const unique = new Map<string, Cue>();
+  for (const cue of cues) {
+    const key =
+      `${cue.start}\u0000${cue.end}\u0000${cue.text}\u0000` +
+      `${cue.language}\u0000${cue.position ?? ''}`;
+    unique.set(key, cue);
+  }
+  return [...unique.values()].toSorted(
+    (left, right) => left.start - right.start || left.end - right.end,
+  );
+}
+
+function extractTtmlDocuments(raw: string): string[] {
+  const documents: string[] = [];
+  let cursor = 0;
+
+  while (cursor < raw.length) {
+    const rootStart = raw.indexOf('<tt', cursor);
+    if (rootStart < 0) break;
+    const declarationStart = raw.lastIndexOf('<?xml', rootStart);
+    const start =
+      declarationStart >= cursor && declarationStart < rootStart
+        ? declarationStart
+        : rootStart;
+    const rootEnd = raw.indexOf('</tt>', rootStart);
+    if (rootEnd < 0) break;
+    const end = rootEnd + '</tt>'.length;
+    documents.push(raw.slice(start, end));
+    cursor = end;
+  }
+
+  return documents;
 }
 
 function isValidCueSet(cues: readonly Cue[]): cues is Cue[] {

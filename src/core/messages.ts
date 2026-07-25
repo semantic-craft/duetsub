@@ -489,12 +489,18 @@ export function isNetflixManifestCandidate(value: unknown): boolean {
 export function isPrimeTtmlUrl(value: string): boolean {
   try {
     const url = new URL(value);
+    const isLegacyTtml =
+      url.hostname === 'cf-timedtext.aux.pv-cdn.net' &&
+      url.pathname.endsWith('.ttml2');
+    const isFragmentedTextMp4 =
+      (url.hostname === 'amazon.pv-cdn.net' ||
+        url.hostname.endsWith('.amazon.pv-cdn.net')) &&
+      /_text_\d+\.mp4$/i.test(url.pathname);
     return (
       url.protocol === 'https:' &&
       url.username === '' &&
       url.password === '' &&
-      url.hostname === 'cf-timedtext.aux.pv-cdn.net' &&
-      url.pathname.endsWith('.ttml2')
+      (isLegacyTtml || isFragmentedTextMp4)
     );
   } catch {
     return false;

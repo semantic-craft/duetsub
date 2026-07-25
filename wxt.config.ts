@@ -9,10 +9,11 @@ export default defineConfig({
     description: 'Personal bilingual subtitle overlay for supported video sites.',
     version: '0.1.1',
     ...(mode === 'store' ? {} : { key: STABLE_EXTENSION_PUBLIC_SPKI }),
-    permissions: ['storage'],
+    permissions: ['storage', 'webRequest'],
     host_permissions: [
       'https://www.netflix.com/*',
       'https://www.primevideo.com/*',
+      'https://*.amazon.pv-cdn.net/*',
       'https://play.hbomax.com/*',
       'https://www.youtube.com/*',
     ],

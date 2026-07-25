@@ -13,6 +13,15 @@ describe('release-channel manifest', () => {
   it('keeps the stable key in standalone builds', async () => {
     expect(await manifest(env('production'))).toHaveProperty('key');
   });
+
+  it('grants the narrow network access required for Prime text MP4s', async () => {
+    const value = await manifest(env('production'));
+
+    expect(value.permissions).toContain('webRequest');
+    expect(value.host_permissions).toContain(
+      'https://*.amazon.pv-cdn.net/*',
+    );
+  });
 });
 
 function env(mode: string): ConfigEnv {
