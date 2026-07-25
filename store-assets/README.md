@@ -9,6 +9,14 @@ Prepared listing assets:
 
 The existing extension icon is `public/icons/icon-128.png`. Before a store submission, compare the PNGs against the final store candidate and regenerate them from the SVG sources if the interface changed.
 
+Build the upload package with:
+
+```bash
+npm run store:build
+```
+
+Upload `.output/duetsub-<version>-chrome-web-store.zip`. This package intentionally omits `manifest.key`; do not upload the standalone GitHub archive when creating a Store item.
+
 Regenerate PNGs with Playwright so the browser uses the same SVG and font rendering as Chrome:
 
 ```bash

@@ -12,7 +12,7 @@ The same semantic version must appear in:
 - the tag, as `v<version>`
 - the generated `manifest.json`
 
-`scripts/verify-release.mjs` enforces the built-manifest, permission, stable-ID, archive-content, and optional tag invariants.
+`scripts/verify-release.mjs` enforces the built-manifest, permission, channel-specific ID, archive-content, and optional tag invariants.
 
 ## Local candidate
 
@@ -53,10 +53,11 @@ The tag starts `.github/workflows/release.yml`. The workflow repeats the release
 
 The store is a separate human-controlled release surface:
 
-1. Upload a draft package in the Chrome Web Store dashboard.
-2. Complete the privacy, single-purpose, permission-justification, listing, and distribution forms.
-3. If the first store draft provides a public key different from the standalone key, update the manifest key once and treat the resulting store ID as immutable.
-4. Upload the assets and text from `store-assets/`.
-5. Run the same human gates on the exact store candidate.
+1. Run `npm run store:build`.
+2. Upload `.output/duetsub-<version>-chrome-web-store.zip` as a draft in the Chrome Web Store dashboard.
+3. Confirm the dashboard accepts the package and assigns an immutable Store Item ID. Store packages must omit `manifest.key`; the dashboard owns the store identity.
+4. Complete the privacy, single-purpose, permission-justification, listing, and distribution forms.
+5. Upload the assets and text from `store-assets/`.
+6. Run the same human gates on the exact store candidate.
 
 Do not describe a dashboard, reviewer, clean-profile, ad, or store gate as passed unless it was actually run.

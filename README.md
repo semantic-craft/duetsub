@@ -27,13 +27,13 @@ DuetSub only uses subtitle tracks already available to the signed-in viewer. It 
 3. Open `chrome://extensions`, enable **Developer mode**, and choose **Load unpacked**.
 4. Select the unzipped folder.
 
-The standalone build carries the stable extension ID:
+The standalone GitHub build carries the stable extension ID:
 
 ```text
 nopbidmmkeonplhniidecfeibhnanmig
 ```
 
-Chrome Web Store publication remains a separate dashboard review. If its first draft assigns a different public key, that store key must be adopted once before the store build is declared stable.
+The Chrome Web Store build intentionally omits `manifest.key`, because the dashboard assigns and preserves the Store Item ID. The two release channels are packaged separately so the standalone key is never accidentally submitted to the store.
 
 ## Translation is optional
 
@@ -68,7 +68,13 @@ Create and verify the distributable archive:
 npm run release:build
 ```
 
-The archive is written under `.output/`. A `v*` tag triggers the GitHub Actions release workflow, which reruns all release checks before attaching the archive.
+Create and verify the Chrome Web Store archive:
+
+```bash
+npm run store:build
+```
+
+Both archives are written under `.output/`. A `v*` tag triggers the GitHub Actions release workflow, which reruns all standalone release checks before attaching the GitHub archive.
 
 ## Repository boundaries
 

@@ -9,6 +9,7 @@
     "check": "tsc --noEmit",
     "postinstall": "wxt prepare",
     "release:build": "npm test && npm run check && wxt zip -b chrome && node scripts/verify-release.mjs",
+    "store:build": "npm test && npm run check && wxt build -b chrome --mode store && node scripts/package-store.mjs && node scripts/verify-release.mjs store",
     "test": "vitest run",
     "test:watch": "vitest"
   },

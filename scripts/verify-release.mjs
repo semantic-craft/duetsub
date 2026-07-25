@@ -5,10 +5,21 @@ import { resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
 const packageJson = readJson('package.json');
-const manifest = readJson('.output/chrome-mv3/manifest.json');
 const version = packageJson.version;
-const archiveName = `duetsub-${version}-chrome.zip`;
+const channel = process.argv[2] ?? 'standalone';
+assert(
+  channel === 'standalone' || channel === 'store',
+  `unknown release channel: ${channel}`,
+);
+const archiveName = channel === 'store'
+  ? `duetsub-${version}-chrome-web-store.zip`
+  : `duetsub-${version}-chrome.zip`;
 const archivePath = resolve(root, '.output', archiveName);
+const manifest = JSON.parse(
+  execFileSync('unzip', ['-p', archivePath, 'manifest.json'], {
+    encoding: 'utf8',
+  }),
+);
 const expectedId = 'nopbidmmkeonplhniidecfeibhnanmig';
 
 assert(manifest.manifest_version === 3, 'manifest_version must be 3');
@@ -45,11 +56,18 @@ assertExactStrings(
   'optional host permissions',
 );
 
-assert(typeof manifest.key === 'string', 'manifest public key is missing');
-assert(
-  extensionId(manifest.key) === expectedId,
-  `stable extension ID must remain ${expectedId}`,
-);
+if (channel === 'store') {
+  assert(
+    !Object.hasOwn(manifest, 'key'),
+    'Chrome Web Store package must omit manifest.key',
+  );
+} else {
+  assert(typeof manifest.key === 'string', 'manifest public key is missing');
+  assert(
+    extensionId(manifest.key) === expectedId,
+    `stable extension ID must remain ${expectedId}`,
+  );
+}
 
 const entries = execFileSync('unzip', ['-Z1', archivePath], {
   encoding: 'utf8',
@@ -67,8 +85,11 @@ assert(
 );
 
 console.log(
-  `Verified ${archiveName}: MV3, version ${version}, ID ${expectedId}, ` +
-    `${entries.length} files, least-privilege host boundary.`,
+  channel === 'store'
+    ? `Verified ${archiveName}: MV3, version ${version}, store-assigned ID, ` +
+      `${entries.length} files, no manifest.key, least-privilege host boundary.`
+    : `Verified ${archiveName}: MV3, version ${version}, ID ${expectedId}, ` +
+      `${entries.length} files, least-privilege host boundary.`,
 );
 
 function readJson(path) {
