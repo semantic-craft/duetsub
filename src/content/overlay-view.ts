@@ -96,7 +96,6 @@ const OVERLAY_CSS = `
     border-radius: 0.28em;
     background: rgb(0 0 0 / 70%);
     box-shadow: 0 0.12em 0.4em rgb(0 0 0 / 35%);
-    backdrop-filter: blur(2px);
     color: #fff;
     font-size: ${OVERLAY_FONT_SIZE};
     font-style: normal;

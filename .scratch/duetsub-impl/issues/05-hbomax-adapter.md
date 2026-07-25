@@ -4,16 +4,30 @@
 
 **Blocked by:** 03 — Prime Video 生命周期健壮性（共享生命周期 helper）。
 
-**Status:** resolved
+**Status:** claimed
 
 - [x] MAIN 在 Max 媒体域转发 `.vtt` 与 subtitle playlist/API 候选原文；ISOLATED 判格式。
 - [x] adapter 以 DOM track id/label（如 `en-US-subtitles`、`zh-Hant-TW-subtitles`）为权威枚举源，归一化 BCP-47、标 `official`；程序化开/关字幕菜单并恢复原开合状态。
 - [x] 第二轨由**完整 subtitle playlist/API 映射**（DOM id → 完整 VTT 或 segment playlist）驱动，绝不从单条 VTT URL 猜另一轨；MAIN 看不到映射即 fail closed。
 - [x] WebVTT parser 产出 `Cue[]`：毫秒正确、`<br>`/标签处理、实体解码、REGION/line 定位；非零 `X-TIMESTAMP-MAP` 须由 playlist/presentation 锚点换算（无锚点 fail closed）；仓库没有可验证的完整 Max VTT fixture，按本票约束改用明确标注为 synthetic 的最小 parser fixture。
 - [x] 同步 `[data-testid="VideoElement"]`；开启时隐藏 `[data-testid="caption_renderer_overlay"]`、否则恢复；复用 ticket 03 的 seek/广告/换集生命周期。
-- [x] 按 §G Max stop rule 在真机双轨片子（+ seek + 换集/video replacement）验证；真实广告 gate 经用户明确批准 WAIVED。
+- [ ] 按 §G Max stop rule 在真机双轨片子（+ seek + 换集/video replacement）验证；真实广告 gate 经用户明确批准 WAIVED。
 
 ## Answer
+
+### 2026-07-24 真人回归后 reopen
+
+- 真人回放发现两项新回归：DuetSub 双语字幕继续推进时 HBO 画面曾不显示；另一个真实繁中 cue `來的不只是喜劇愛好者\n各種人都有` 在英文仍为 `I mean,\nit's not just comedy fans.` 时已经包含下一句译文，约 1.43 秒后英文才推进到 `It's everybody, you know?`。
+- 中英行 100ms 采样确认两行 DOM 大多同帧更新，故“中文抢跑”不是渲染先后，而是无说话人前缀、无句末标点的两行繁中 cue 被旧对齐器误当成一个单元。真实句子先形成 RED，再只在中文源区间覆盖足够的后续英文对白 cue 时按显式换行分配；目标测试转 GREEN。
+- 画面回归在诊断时已恢复，无法建立真实 DRM 黑画面的自动 seam。代码从不改 `<video>` 样式；overlay 唯一会读取视频背板像素的 `backdrop-filter` 已移除。此项仍须重载 unpacked extension 后真人复验，不能以 CSS 字符串测试冒充 PASS。
+- 修正后自动证据：`npm test` 为 30 files / 104 tests passed；`npm run check`、`npm run build`、`git diff --check` 通过。完整的真人 stop rule 仍未重跑完，所以本票退回 `claimed`。
+
+### 2026-07-25 真人回归（本次回归范围）
+
+- 在《退休》重载实际 unpacked build 后，播放器可见画面且 `readyState` 为 4、无 `MediaError`；双语 overlay 同时显示实际英文与繁中。不再保留覆盖层的 `backdrop-filter`：旧产物开启 overlay 时画面变黑、关闭后立即恢复，故这是已验证的合成回归根因。
+- Max 控制条的实际顺序为“音量 → 音频和字幕设置 → DuetSub → 全屏”。DuetSub 与原生按钮同为 48px，插在原生字幕按钮与全屏之间；不再作为 `[data-testid="playback_controls"]` 根节点的左下角子项。
+- 真实 `來的不只是喜劇愛好者\n各種人都有` 提前显示模式已用精确时轴单测锁定：后行只在下一条英文 cue 开始时出现；无后续英文 cue 的视觉换行仍保持为一条字幕。
+- 通过时间轴从约 18 分钟跳到 27:57 后，overlay 保持开启、没有显示 seek 前陈旧 cue；观察窗口处于无字幕段，未看到新的 post-seek cue。因此“seek 后重新取得并显示新 cue”与换集仍不作为本次 PASS，完整 stop rule 保持未勾选。
 
 ### 自动证据
 
@@ -30,7 +44,7 @@
 - 最终全量复跑：`npm test` 为 30 files / 102 tests passed；`npm run check`、`npm run build`、`git diff --check` 均通过，`src/` 与 `tests/` 无 `[DEBUG-` 标记。生成 manifest 仍只有 `storage` 与既有四站 host，Max match 精确为 `https://play.hbomax.com/*`。
 - 仓库无完整可验证的 Max VTT 文件；新增 `max-minimal.synthetic.vtt` 明确声明不是 Max 真机 fixture。没有把登录态抓到的完整 VTT、签名 query、token 或观看数据写入仓库。
 
-### 真人证据（Computer Use，登录态 Chrome，2026-07-24）
+### 历史真人证据（登录态 Chrome，2026-07-24；reopen 后不代表新构建 PASS）
 
 - **PASS — 英文主轨对齐**：在《退休》开头以 100ms 间隔同帧采样真实 video 时钟和 DuetSub 英中两行；原先可重复的约 0.4–2.0 秒中文滞后已消失。实测同段依次同屏出现 `blind singer` / `盲人歌手`、`John Lennon! / Time.` / `約翰藍儂 / 時間到`、`Stevie Wonder.` / `史提夫溫達`。
 - 两集完整 VTT 只在内存核验：一集唯一英文候选覆盖 258/263（98.10%）；另一集普通英文字幕仅 233/314（74.20%）并正确 fail closed，改选同集官方英文 CC 后为 310/314（98.73%）并进入 ready。没有把缺口用固定 offset 或最近邻补齐。

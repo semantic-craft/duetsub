@@ -57,6 +57,44 @@ describe('alignMaxChineseCuesToEnglish', () => {
       cue(21_800, 24_100, '-下一個回答', 'zh-Hant-TW'),
     ]);
   });
+
+  it('does not show the next translated line before its English cue', () => {
+    const english = [
+      cue(
+        742_366,
+        743_797,
+        "I mean,\nit's not just comedy fans.",
+        'en-US',
+      ),
+      cue(743_797, 745_069, "It's everybody, you know?", 'en-US'),
+    ];
+    const chinese = [
+      cue(
+        742_366,
+        745_069,
+        '來的不只是喜劇愛好者\n各種人都有',
+        'zh-Hant-TW',
+      ),
+    ];
+
+    expect(alignMaxChineseCuesToEnglish(english, chinese)).toEqual([
+      cue(742_366, 743_797, '來的不只是喜劇愛好者', 'zh-Hant-TW'),
+      cue(743_797, 745_069, '各種人都有', 'zh-Hant-TW'),
+    ]);
+  });
+
+  it('keeps wrapped text together when no later English cue can own it', () => {
+    const english = [
+      cue(30_000, 32_000, 'One English cue.', 'en-US'),
+    ];
+    const chinese = [
+      cue(30_500, 33_000, '同一句字幕\n只是視覺換行', 'zh-Hant-TW'),
+    ];
+
+    expect(alignMaxChineseCuesToEnglish(english, chinese)).toEqual([
+      cue(30_000, 32_000, '同一句字幕\n只是視覺換行', 'zh-Hant-TW'),
+    ]);
+  });
 });
 
 describe('selectMaxEnglishPrimaryTrack', () => {

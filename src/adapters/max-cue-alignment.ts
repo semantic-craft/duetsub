@@ -71,8 +71,21 @@ function alignChineseCue(
   primaryIndex: number,
 ): Cue[] {
   const primary = englishCues[primaryIndex];
-  const chineseUnits = splitDialogueUnits(chineseCue.text);
   const primaryCapacity = spokenUnitCount(primary.text);
+  const parsedUnits = splitDialogueUnits(chineseCue.text);
+  const wrappedLines = nonEmptyLines(chineseCue.text);
+  const followingCapacity = englishCues.slice(primaryIndex + 1).filter(
+    (cue) =>
+      cue.start < chineseCue.end &&
+      chineseCue.start < cue.end &&
+      spokenUnitCount(cue.text) > 0,
+  ).length;
+  const chineseUnits =
+    parsedUnits.length <= primaryCapacity &&
+      wrappedLines.length > primaryCapacity &&
+      wrappedLines.length - primaryCapacity <= followingCapacity
+      ? wrappedLines
+      : parsedUnits;
   if (
     primaryCapacity === 0 ||
     chineseUnits.length <= primaryCapacity
@@ -122,7 +135,7 @@ function spokenUnitCount(text: string): number {
 }
 
 function splitDialogueUnits(text: string): string[] {
-  const lines = text.split('\n').map((line) => line.trim()).filter(Boolean);
+  const lines = nonEmptyLines(text);
   const units: string[] = [];
   let current = '';
 
@@ -140,4 +153,8 @@ function splitDialogueUnits(text: string): string[] {
   }
   if (current !== '') units.push(current);
   return units;
+}
+
+function nonEmptyLines(text: string): string[] {
+  return text.split('\n').map((line) => line.trim()).filter(Boolean);
 }
