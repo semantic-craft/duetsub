@@ -71,20 +71,21 @@ describe('Prime Video site UI', () => {
 });
 
 describe('Netflix site UI', () => {
-  it('anchors the toggle beside the play button in the left control group', () => {
+  it('uses the stable fullscreen anchor in the right control group', () => {
     const player = element();
-    const leftControls = element(player);
-    const playWrapper = element(leftControls);
-    const spacer = element(leftControls);
-    Object.defineProperty(playWrapper, 'nextElementSibling', {
-      value: spacer,
-    });
-    const play = element(playWrapper);
+    const rightControls = element(player);
+    const audioWrapper = element(rightControls);
+    const audio = element(audioWrapper);
+    const fullscreenWrapper = element(rightControls);
+    const fullscreen = element(fullscreenWrapper);
     const video = element(player) as HTMLVideoElement;
 
     player.querySelector = vi.fn((selector: string) => {
-      if (selector === 'button[data-uia^="control-play-pause-"]') {
-        return play;
+      if (selector === 'button[data-uia="control-audio-subtitle"]') {
+        return audio;
+      }
+      if (selector === 'button[data-uia^="control-fullscreen-"]') {
+        return fullscreen;
       }
       return null;
     }) as typeof player.querySelector;
@@ -104,8 +105,48 @@ describe('Netflix site UI', () => {
 
     const target = findSiteUiTarget('netflix');
 
-    expect(target?.controls).toBe(leftControls);
-    expect(target?.toggleBefore).toBe(spacer);
+    expect(target?.controls).toBe(rightControls);
+    expect(target?.toggleBefore).toBe(fullscreenWrapper);
+  });
+
+  it('does not use an existing toggle as its next anchor', () => {
+    const player = element();
+    const rightControls = element(player);
+    const existingToggle = element(rightControls);
+    const audioWrapper = element(rightControls);
+    const audio = element(audioWrapper);
+    const fullscreenWrapper = element(rightControls);
+    const fullscreen = element(fullscreenWrapper);
+    const video = element(player) as HTMLVideoElement;
+
+    player.querySelector = vi.fn((selector: string) => {
+      if (selector === 'button[data-uia="control-audio-subtitle"]') {
+        return audio;
+      }
+      if (selector === 'button[data-uia^="control-fullscreen-"]') {
+        return fullscreen;
+      }
+      return null;
+    }) as typeof player.querySelector;
+
+    vi.stubGlobal('window', {
+      location: {
+        href: 'https://www.netflix.com/watch/80021956',
+      },
+    });
+    vi.stubGlobal('document', {
+      querySelector: (selector: string) => {
+        if (selector === '#appMountPoint video') return video;
+        if (selector === '.watch-video--player-view') return player;
+        return null;
+      },
+    });
+
+    const target = findSiteUiTarget('netflix');
+
+    expect(target?.controls).toBe(rightControls);
+    expect(target?.toggleBefore).toBe(fullscreenWrapper);
+    expect(target?.toggleBefore).not.toBe(existingToggle);
   });
 });
 

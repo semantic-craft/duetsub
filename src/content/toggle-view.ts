@@ -189,8 +189,12 @@ const TOGGLE_CSS = `
     margin-top: 4px;
   }
 
+  :host([data-site="netflix"]:not([data-fallback-anchor])) {
+    order: -1;
+  }
+
   :host([data-site="netflix"]:not([data-fallback-anchor])) .icon {
-    transform: translateY(-9px);
+    transform: translateY(-9px) scale(1.3);
   }
 
   button {

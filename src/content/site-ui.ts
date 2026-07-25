@@ -117,22 +117,24 @@ function findNetflixControls(player: HTMLElement): {
   readonly controls?: HTMLElement;
   readonly toggleBefore?: HTMLElement;
 } {
-  const play = player.querySelector<HTMLElement>(
-    'button[data-uia^="control-play-pause-"]',
+  const audio = player.querySelector<HTMLElement>(
+    'button[data-uia="control-audio-subtitle"]',
   );
-  const playWrapper = play?.parentElement ?? undefined;
-  const controls = playWrapper?.parentElement ?? undefined;
-  const toggleBefore =
-    playWrapper?.nextElementSibling as HTMLElement | undefined;
+  const fullscreen = player.querySelector<HTMLElement>(
+    'button[data-uia^="control-fullscreen-"]',
+  );
+  const audioWrapper = audio?.parentElement ?? undefined;
+  const toggleBefore = fullscreen?.parentElement ?? undefined;
+  const controls = toggleBefore?.parentElement ?? undefined;
 
-  if (controls === undefined) {
+  if (
+    controls === undefined ||
+    toggleBefore === undefined ||
+    audioWrapper?.parentElement !== controls
+  ) {
     return {};
   }
-  return {
-    controls,
-    toggleBefore:
-      toggleBefore?.parentElement === controls ? toggleBefore : undefined,
-  };
+  return { controls, toggleBefore };
 }
 
 function findPrimeVideoControls(player: HTMLElement): {
