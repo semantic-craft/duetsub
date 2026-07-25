@@ -34,6 +34,17 @@ describe('playback lifecycle', () => {
     expect(resumed.contentGeneration).toBe(ready.contentGeneration);
   });
 
+  it('restores native captions when a ready track set has to be loaded again', () => {
+    const ready = readyLifecycle();
+    const loading = reducePlaybackLifecycle(ready, {
+      type: 'tracks-loading',
+    });
+
+    expect(loading.enabled).toBe(true);
+    expect(loading.tracksReady).toBe(false);
+    expect(shouldHideNativeCaptions(loading)).toBe(false);
+  });
+
   it('rejects a response that belongs to the generation before reset', () => {
     const ready = readyLifecycle();
     const response = bindPlaybackGeneration(ready, ['old cue']);

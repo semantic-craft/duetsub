@@ -40,6 +40,51 @@ describe('parseTtml', () => {
     ).toEqual([]);
   });
 
+  it('relaxes incomplete source language only for an explicitly owned track', () => {
+    const unlabeled = netflixFixture.replace('xml:lang="en"', '');
+    const underspecified = netflixFixture.replace(
+      'xml:lang="en"',
+      'xml:lang="zh"',
+    );
+
+    expect(
+      parseTtml(unlabeled, {
+        language: 'zh-Hant',
+        acceptedSourceLanguages: ['zh-Hant'],
+        parser: new DOMParser(),
+      }),
+    ).toEqual([]);
+    expect(
+      parseTtml(unlabeled, {
+        language: 'zh-Hant',
+        acceptedSourceLanguages: ['zh-Hant'],
+        allowMissingSourceLanguage: true,
+        parser: new DOMParser(),
+      })[0],
+    ).toMatchObject({
+      text: 'Alpha & Beta Gamma\nDelta line',
+      language: 'zh-Hant',
+    });
+    expect(
+      parseTtml(underspecified, {
+        language: 'zh-Hant',
+        acceptedSourceLanguages: ['zh-Hant'],
+        parser: new DOMParser(),
+      }),
+    ).toEqual([]);
+    expect(
+      parseTtml(underspecified, {
+        language: 'zh-Hant',
+        acceptedSourceLanguages: ['zh-Hant'],
+        allowUnderspecifiedSourceLanguage: true,
+        parser: new DOMParser(),
+      })[0],
+    ).toMatchObject({
+      text: 'Alpha & Beta Gamma\nDelta line',
+      language: 'zh-Hant',
+    });
+  });
+
   it('uses the document tick rate for Netflix IMSC cue boundaries', () => {
     const cues = parseTtml(netflixFixture, {
       language: 'en',

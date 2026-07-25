@@ -33,6 +33,8 @@ interface XmlDocument {
 export interface TtmlParserOptions {
   readonly language: string;
   readonly acceptedSourceLanguages?: readonly string[];
+  readonly allowMissingSourceLanguage?: boolean;
+  readonly allowUnderspecifiedSourceLanguage?: boolean;
   readonly parser?: {
     parseFromString(source: string, mimeType: 'application/xml'): unknown;
   };
@@ -65,13 +67,19 @@ export function parseTtml(
     return [];
   }
 
-  if (
-    options.acceptedSourceLanguages !== undefined &&
-    !options.acceptedSourceLanguages.some(
-      (language) => language.toLowerCase() === rootLanguage(root).toLowerCase(),
-    )
-  ) {
-    return [];
+  if (options.acceptedSourceLanguages !== undefined) {
+    const sourceLanguage = rootLanguage(root);
+    if (
+      (sourceLanguage === '' && options.allowMissingSourceLanguage !== true) ||
+      (sourceLanguage !== '' &&
+        !sourceLanguageAccepted(
+          sourceLanguage,
+          options.acceptedSourceLanguages,
+          options.allowUnderspecifiedSourceLanguage === true,
+        ))
+    ) {
+      return [];
+    }
   }
 
   const topRegions = collectTopRegions(document);
@@ -96,6 +104,22 @@ export function parseTtml(
   }
 
   return cues;
+}
+
+function sourceLanguageAccepted(
+  sourceLanguage: string,
+  acceptedLanguages: readonly string[],
+  allowUnderspecified: boolean,
+): boolean {
+  const normalizedSource = sourceLanguage.toLowerCase();
+  return acceptedLanguages.some((language) => {
+    const normalizedAccepted = language.toLowerCase();
+    return (
+      normalizedAccepted === normalizedSource ||
+      (allowUnderspecified &&
+        normalizedAccepted.startsWith(`${normalizedSource}-`))
+    );
+  });
 }
 
 function readTickRate(root: XmlElement): number | undefined {
@@ -204,6 +228,7 @@ function localName(node: XmlNode): string {
 function rootLanguage(root: XmlElement): string {
   return (
     root.getAttributeNS(XML_NAMESPACE, 'lang') ||
-    root.getAttribute('xml:lang')
+    root.getAttribute('xml:lang') ||
+    ''
   );
 }

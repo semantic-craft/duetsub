@@ -4,6 +4,7 @@ import { isDuetSubMessage } from '../core/messages';
 import { readNetflixWatchIdentity } from './netflix-location';
 import { parseNetflixManifest, type NetflixManifest } from './netflix-manifest';
 import {
+  claimNetflixTtmlResponseForSelectedTrack,
   claimNetflixTtmlResponseForPending,
   consumeNetflixTtmlResponse,
   EMPTY_NETFLIX_TTML_INBOX,
@@ -122,6 +123,11 @@ class NetflixAdapter implements SiteAdapter {
       },
       (error) => {
         console.warn('[DuetSub] Netflix track enumeration failed', error);
+        const currentManifest = this.#currentManifest();
+        if (currentManifest !== undefined) {
+          this.#emitTracks(currentManifest.tracks, generation);
+          return;
+        }
         if (sameGeneration(this.#generation, generation)) {
           this.#retryOnControlsInteraction = true;
         }
@@ -251,6 +257,12 @@ class NetflixAdapter implements SiteAdapter {
       }
       originalKey = selected[0].key;
       this.#currentTrack = uniqueTrackForOption(selected[0], this.#tracks);
+      if (this.#currentTrack !== undefined) {
+        this.#claimUnownedResponses(
+          { track: this.#currentTrack, generation },
+          true,
+        );
+      }
 
       const requestedTracks = uniqueRequestedTracks(requests);
       for (const track of requestedTracks) {
@@ -319,6 +331,9 @@ class NetflixAdapter implements SiteAdapter {
     generation: PlaybackGeneration,
     button: HTMLElement,
   ): Promise<Cue[]> {
+    const prefetched = this.#takePrefetchedResponse(track, generation);
+    if (prefetched !== undefined) return prefetched;
+
     let menu = await ensureSubtitleMenuOpen(button);
     let options = readSubtitleOptions(menu);
     let target = findOptionForTrack(track, options);
@@ -357,6 +372,20 @@ class NetflixAdapter implements SiteAdapter {
       this.#rejectPending(asError(error));
       throw error;
     }
+  }
+
+  #takePrefetchedResponse(
+    track: TrackInfo,
+    generation: PlaybackGeneration,
+  ): Cue[] | undefined {
+    this.#claimUnownedResponses({ track, generation });
+    const consumed = consumeNetflixTtmlResponse(
+      this.#responseInbox,
+      track,
+      generation,
+    );
+    this.#responseInbox = consumed.inbox;
+    return consumed.cues === undefined ? undefined : [...consumed.cues];
   }
 
   #armPending(
@@ -602,7 +631,10 @@ class NetflixAdapter implements SiteAdapter {
     for (const callback of this.#trackCallbacks) callback([...tracks]);
   }
 
-  #claimUnownedResponses(): void {
+  #claimUnownedResponses(
+    requestedOwner: NetflixResponseOwner | undefined = this.#pending,
+    selectedTrackOwnsMissingLanguage = false,
+  ): void {
     if (this.#tracks.length === 0 || this.#unownedResponses.length === 0) {
       return;
     }
@@ -620,17 +652,22 @@ class NetflixAdapter implements SiteAdapter {
         : [{ ...response, generation }];
     });
 
-    const pending = this.#pending;
     let claimedResponseId: string | undefined;
     if (
-      pending !== undefined &&
-      sameGeneration(pending.generation, this.#generation)
+      requestedOwner !== undefined &&
+      sameGeneration(requestedOwner.generation, this.#generation)
     ) {
-      const claimed = claimNetflixTtmlResponseForPending(
-        this.#responseInbox,
-        currentResponses,
-        pending,
-      );
+      const claimed = selectedTrackOwnsMissingLanguage
+        ? claimNetflixTtmlResponseForSelectedTrack(
+            this.#responseInbox,
+            currentResponses,
+            requestedOwner,
+          )
+        : claimNetflixTtmlResponseForPending(
+            this.#responseInbox,
+            currentResponses,
+            requestedOwner,
+          );
       this.#responseInbox = claimed.inbox;
       claimedResponseId = claimed.claimedResponseId;
     }
@@ -894,11 +931,58 @@ async function ensureSubtitleMenuOpen(
   const current = document.querySelector<HTMLElement>(SUBTITLE_MENU_SELECTOR);
   if (current !== null && isVisible(current)) return current;
 
-  button.click();
+  const currentButton = await currentNetflixMenuButton(button);
+  currentButton.click();
   await waitUntil(() => isSubtitleMenuOpen(), DOM_TIMEOUT_MS);
   const menu = document.querySelector<HTMLElement>(SUBTITLE_MENU_SELECTOR);
   if (menu === null) throw new Error('Netflix subtitle menu did not open');
   return menu;
+}
+
+async function currentNetflixMenuButton(
+  previous: HTMLElement,
+): Promise<HTMLElement> {
+  let current = document.querySelector<HTMLElement>(MENU_BUTTON_SELECTOR);
+  if (current !== null) return current;
+
+  revealNetflixControls();
+  await waitUntil(
+    () => document.querySelector(MENU_BUTTON_SELECTOR) !== null,
+    DOM_TIMEOUT_MS,
+  ).catch(() => undefined);
+  current = document.querySelector<HTMLElement>(MENU_BUTTON_SELECTOR);
+  if (current !== null) return current;
+  if (previous.isConnected !== false) return previous;
+  throw new Error('Netflix subtitle menu button unavailable');
+}
+
+function revealNetflixControls(): void {
+  const player = document.querySelector<HTMLElement>(
+    '.watch-video--player-view',
+  );
+  if (player === null) return;
+
+  const init = {
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    clientX: player.clientWidth / 2,
+    clientY: player.clientHeight * 0.8,
+  };
+  let dispatched = false;
+  if (typeof PointerEvent === 'function') {
+    player.dispatchEvent(
+      new PointerEvent('pointermove', { ...init, pointerType: 'mouse' }),
+    );
+    dispatched = true;
+  }
+  if (typeof MouseEvent === 'function') {
+    player.dispatchEvent(new MouseEvent('mousemove', init));
+    dispatched = true;
+  }
+  if (!dispatched && typeof Event === 'function') {
+    player.dispatchEvent(new Event('mousemove', init));
+  }
 }
 
 function isSubtitleMenuOpen(): boolean {

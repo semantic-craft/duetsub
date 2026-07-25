@@ -67,11 +67,70 @@ export function recordNetflixTtmlResponse(
   },
   parser?: NonNullable<TtmlParserOptions['parser']>,
 ): NetflixTtmlResponseInbox {
+  return recordOwnedNetflixTtmlResponse(
+    inbox,
+    response,
+    parser,
+    false,
+    false,
+  );
+}
+
+export function claimNetflixTtmlResponseForSelectedTrack(
+  inbox: NetflixTtmlResponseInbox,
+  responses: readonly {
+    readonly responseId: string;
+    readonly raw: string;
+  }[],
+  owner: NetflixResponseOwner,
+  parser?: NonNullable<TtmlParserOptions['parser']>,
+): {
+  readonly inbox: NetflixTtmlResponseInbox;
+  readonly claimedResponseId: string | undefined;
+} {
+  const matches = responses.flatMap((response) =>
+    recordOwnedNetflixTtmlResponse(
+      EMPTY_NETFLIX_TTML_INBOX,
+      { ...response, owner },
+      parser,
+      true,
+      true,
+    ),
+  );
+  if (matches.length !== 1) {
+    return { inbox, claimedResponseId: undefined };
+  }
+
+  const claimed = matches[0];
+  return {
+    inbox: [
+      ...inbox.filter(
+        ({ responseId }) => responseId !== claimed.responseId,
+      ),
+      claimed,
+    ].slice(-MAX_BUFFERED_RESPONSES),
+    claimedResponseId: claimed.responseId,
+  };
+}
+
+function recordOwnedNetflixTtmlResponse(
+  inbox: NetflixTtmlResponseInbox,
+  response: {
+    readonly responseId: string;
+    readonly raw: string;
+    readonly owner: NetflixResponseOwner;
+  },
+  parser: NonNullable<TtmlParserOptions['parser']> | undefined,
+  allowMissingSourceLanguage: boolean,
+  allowUnderspecifiedSourceLanguage: boolean,
+): NetflixTtmlResponseInbox {
   const cues = parseTtml(response.raw, {
     language: response.owner.track.language,
     acceptedSourceLanguages: acceptedNetflixTtmlLanguages(
       response.owner.track.language,
     ),
+    allowMissingSourceLanguage,
+    allowUnderspecifiedSourceLanguage,
     parser,
   });
   if (!isValidCueSet(cues)) return inbox;

@@ -88,8 +88,6 @@ class PlaybackController {
   readonly #adapter: SiteAdapter | undefined;
   readonly #storageKey: string;
   readonly #player: HTMLElement;
-  readonly #toggleAnchor: HTMLElement;
-  readonly #toggleBefore: HTMLElement | undefined;
   readonly #nativeCaptions: NativeCaptionVisibility;
   readonly #overlayView: OverlayView;
   readonly #toggleView: ToggleView;
@@ -140,8 +138,6 @@ class PlaybackController {
     this.#storageKey = `duetsub:enabled:${siteId}`;
     this.video = target.video;
     this.#player = target.player;
-    this.#toggleAnchor = target.controls ?? target.player;
-    this.#toggleBefore = target.toggleBefore;
     if (target.contentIdentity !== undefined) {
       this.#state = reducePlaybackLifecycle(this.#state, {
         type: 'content-observed',
@@ -154,7 +150,7 @@ class PlaybackController {
     );
     this.#overlayView = createOverlayView(this.#player);
     this.#toggleView = createToggleView(
-      this.#toggleAnchor,
+      target.controls ?? target.player,
       target.controls === undefined,
       {
         onToggle: () => this.#toggle(),
@@ -208,12 +204,16 @@ class PlaybackController {
   reconcile(target: SiteUiTarget): boolean {
     if (
       this.#destroyed ||
-      this.#player !== target.player ||
-      this.#toggleAnchor !== (target.controls ?? target.player) ||
-      this.#toggleBefore !== target.toggleBefore
+      this.#player !== target.player
     ) {
       return false;
     }
+
+    this.#toggleView.reanchor(
+      target.controls ?? target.player,
+      target.controls === undefined,
+      target.toggleBefore,
+    );
 
     let contentChanged = false;
     if (target.contentIdentity !== this.#state.contentIdentity) {
@@ -513,6 +513,10 @@ class PlaybackController {
       }
       console.warn('[DuetSub] Dual-track acquisition failed', error);
       this.#clearTrackData();
+      this.#state = reducePlaybackLifecycle(this.#state, {
+        type: 'tracks-loading',
+      });
+      this.#bindAdapterGeneration();
       this.#status = acquisitionErrorStatus(error);
       this.#render();
     }

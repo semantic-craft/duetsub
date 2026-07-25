@@ -6,6 +6,11 @@ export interface ToggleViewCallbacks {
 
 export interface ToggleView {
   render(enabled: boolean, status: string): void;
+  reanchor(
+    anchor: HTMLElement,
+    isFallbackAnchor: boolean,
+    before?: HTMLElement,
+  ): void;
   destroy(): void;
 }
 
@@ -101,12 +106,43 @@ export function createToggleView(
       button.setAttribute('aria-pressed', String(enabled));
       status.textContent = statusText;
     },
+    reanchor(nextAnchor, nextIsFallbackAnchor, nextBefore) {
+      reanchorToggleHost(
+        host,
+        nextAnchor,
+        nextIsFallbackAnchor,
+        nextBefore,
+      );
+    },
     destroy() {
       cancelLongPress();
       document.removeEventListener('pointerdown', onDocumentPointerDown);
       host.remove();
     },
   };
+}
+
+export function reanchorToggleHost(
+  host: HTMLElement,
+  anchor: HTMLElement,
+  isFallbackAnchor: boolean,
+  before?: HTMLElement,
+): void {
+  if (
+    isFallbackAnchor &&
+    !host.hasAttribute('data-fallback-anchor')
+  ) {
+    return;
+  }
+
+  host.toggleAttribute('data-fallback-anchor', isFallbackAnchor);
+  const nextSibling = before ?? null;
+  if (
+    host.parentElement !== anchor ||
+    host.nextSibling !== nextSibling
+  ) {
+    anchor.insertBefore(host, nextSibling);
+  }
 }
 
 function createBar(className: 'english' | 'chinese'): HTMLSpanElement {
@@ -127,10 +163,9 @@ function menuButton(label: string): HTMLButtonElement {
 const TOGGLE_CSS = `
   :host {
     position: relative;
-    z-index: 2147483647;
-    display: inline-flex;
-    margin-inline: 0.35rem;
-    vertical-align: middle;
+    display: flex;
+    align-items: center;
+    margin: 0;
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   }
 
@@ -146,20 +181,19 @@ const TOGGLE_CSS = `
 
   .toggle {
     display: grid;
-    width: 36px;
-    height: 28px;
+    width: 48px;
+    height: 48px;
     place-content: center;
     gap: 3px;
-    padding: 5px 7px;
-    border: 1px solid rgb(255 255 255 / 30%);
-    border-radius: 6px;
-    background: rgb(24 28 36 / 82%);
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
     cursor: pointer;
   }
 
   .toggle.enabled {
-    border-color: #ffc24b;
-    box-shadow: 0 0 0 1px rgb(255 194 75 / 30%);
+    box-shadow: inset 0 -2px 0 #ffc24b;
   }
 
   .bar {

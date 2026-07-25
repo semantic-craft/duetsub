@@ -157,7 +157,7 @@ describe('Netflix adapter lifecycle', () => {
     expect(menuOpenCount).toBe(1);
   });
 
-  it('uses one request-bound buffered response after generation advances', async () => {
+  it('reuses first-load responses, then restores native state after fallback switching', async () => {
     vi.useFakeTimers();
     let onMessage: ((event: MessageEvent<unknown>) => void) | undefined;
     const fakeWindow = {
@@ -175,6 +175,10 @@ describe('Netflix adapter lifecycle', () => {
     } as unknown as Window & typeof globalThis;
     let menuOpen = false;
     let selectedKey = 'traditional-chinese';
+    let selectionClicks = 0;
+    let emitResponseAfterSelection = false;
+    let controlsVisible = true;
+    const selectionHistory: string[] = [];
     const visible = {
       getClientRects: () => [{}],
     };
@@ -184,7 +188,14 @@ describe('Netflix adapter lifecycle', () => {
     };
     const button = {
       click() {
+        if (!controlsVisible) return;
         menuOpen = true;
+      },
+    };
+    const player = {
+      dispatchEvent() {
+        controlsVisible = true;
+        return true;
       },
     };
     const option = (config: {
@@ -195,8 +206,26 @@ describe('Netflix adapter lifecycle', () => {
     }) => ({
       textContent: config.label,
       click() {
+        selectionClicks += 1;
+        selectionHistory.push(config.key);
         selectedKey = config.key;
         menuOpen = false;
+        controlsVisible = false;
+        if (
+          emitResponseAfterSelection &&
+          config.key === 'english-cc'
+        ) {
+          queueMicrotask(() => {
+            onMessage?.({
+              source: fakeWindow,
+              data: netflixTtmlResponseMessage(
+                'english-after-selection',
+                '81262757',
+                netflixFixture,
+              ),
+            } as unknown as MessageEvent<unknown>);
+          });
+        }
       },
       getAttribute(name: string) {
         if (name === 'data-uia') {
@@ -212,6 +241,23 @@ describe('Netflix adapter lifecycle', () => {
       },
     });
     const options = [
+      {
+        textContent: '關閉',
+        click() {
+          selectionClicks += 1;
+          selectionHistory.push('off');
+          selectedKey = 'off';
+          menuOpen = false;
+          controlsVisible = false;
+        },
+        getAttribute(name: string) {
+          if (name === 'data-uia') return 'subtitle-item-off';
+          if (name === 'aria-selected') {
+            return selectedKey === 'off' ? 'true' : 'false';
+          }
+          return null;
+        },
+      },
       option({
         key: 'english-cc',
         label: 'English (CC)',
@@ -241,7 +287,10 @@ describe('Netflix adapter lifecycle', () => {
     vi.stubGlobal('document', {
       querySelector(selector: string) {
         if (selector === '#appMountPoint video') return video;
-        if (selector.includes('control-audio-subtitle')) return button;
+        if (selector === '.watch-video--player-view') return player;
+        if (selector.includes('control-audio-subtitle')) {
+          return controlsVisible ? button : null;
+        }
         if (selector === 'div[data-uia="selector-audio-subtitle"]') {
           return menuOpen ? menu : null;
         }
@@ -272,6 +321,14 @@ describe('Netflix adapter lifecycle', () => {
         'early-english',
         '81262757',
         netflixFixture,
+      ),
+    } as unknown as MessageEvent<unknown>);
+    onMessage?.({
+      source: fakeWindow,
+      data: netflixTtmlResponseMessage(
+        'early-traditional-chinese',
+        '81262757',
+        netflixFixture.replace('xml:lang="en"', 'xml:lang="zh"'),
       ),
     } as unknown as MessageEvent<unknown>);
     adapter.bindGeneration?.({
@@ -323,15 +380,40 @@ describe('Netflix adapter lifecycle', () => {
     adapter.start();
 
     const englishCc = emittedTracks?.find(({ id }) => id === 'english-cc');
+    const traditionalChinese = emittedTracks?.find(
+      ({ id }) => id === 'traditional-chinese',
+    );
     expect(englishCc).toBeDefined();
-    const cuesPromise = adapter.fetchTrack(englishCc!);
+    expect(traditionalChinese).toBeDefined();
+    const englishCuesPromise = adapter.fetchTrack(englishCc!);
+    const chineseCuesPromise = adapter.fetchTrack(traditionalChinese!);
     await vi.advanceTimersByTimeAsync(500);
 
-    expect((await cuesPromise)[0]).toMatchObject({
+    expect((await englishCuesPromise)[0]).toMatchObject({
       start: 22_708,
       end: 24_708,
       language: 'en',
     });
+    expect((await chineseCuesPromise)[0]).toMatchObject({
+      start: 22_708,
+      end: 24_708,
+      language: 'zh-Hant',
+    });
+    expect(selectionClicks).toBe(0);
+    expect(selectedKey).toBe('traditional-chinese');
+    expect(menuOpen).toBe(false);
+
+    emitResponseAfterSelection = true;
+    const recapturedEnglish = adapter.fetchTrack(englishCc!);
+    await vi.advanceTimersByTimeAsync(500);
+
+    expect((await recapturedEnglish)[0]).toMatchObject({
+      language: 'en',
+    });
+    expect(selectionHistory).toEqual([
+      'english-cc',
+      'traditional-chinese',
+    ]);
     expect(selectedKey).toBe('traditional-chinese');
     expect(menuOpen).toBe(false);
   });
@@ -412,5 +494,80 @@ describe('Netflix adapter lifecycle', () => {
     await vi.advanceTimersByTimeAsync(200);
 
     expect(emissions).toEqual([[], ['menu:zh-Hant:plain:中文[繁體]']]);
+  });
+
+  it('does not erase manifest tracks when menu enumeration times out later', async () => {
+    vi.useFakeTimers();
+    let onMessage: ((event: MessageEvent<unknown>) => void) | undefined;
+    const fakeWindow = {
+      addEventListener(
+        type: string,
+        callback: (event: MessageEvent<unknown>) => void,
+      ) {
+        if (type === 'message') onMessage = callback;
+      },
+      setTimeout,
+      clearTimeout,
+      location: {
+        href: 'https://www.netflix.com/watch/81262757',
+      },
+    } as unknown as Window & typeof globalThis;
+    const video = {
+      getClientRects: () => [{}],
+      readyState: 4,
+    };
+    vi.stubGlobal('window', fakeWindow);
+    vi.stubGlobal('document', {
+      querySelector(selector: string) {
+        if (selector === '#appMountPoint video') return video;
+        return null;
+      },
+    });
+    vi.stubGlobal('getComputedStyle', () => ({
+      display: 'block',
+      visibility: 'visible',
+    }));
+    const adapter = createNetflixAdapter();
+    const emissions: string[][] = [];
+    adapter.onTracks((tracks) => emissions.push(tracks.map(({ id }) => id)));
+
+    adapter.start();
+    await vi.advanceTimersByTimeAsync(100);
+    onMessage?.({
+      source: fakeWindow,
+      data: netflixManifestMessage({
+        movieId: 81262757,
+        timedtexttracks: [
+          {
+            id: 'english-cc',
+            language: 'en',
+            languageDescription: 'English',
+            rawTrackType: 'closedcaptions',
+            hydrated: true,
+            ttDownloadables: {
+              text: {
+                downloadUrls: { primary: 'https://example.test/en-cc' },
+              },
+            },
+          },
+          {
+            id: 'traditional-chinese',
+            language: 'zh-Hant',
+            languageDescription: '中文（繁體）',
+            hydrated: true,
+            ttDownloadables: {
+              text: {
+                downloadUrls: { primary: 'https://example.test/zh' },
+              },
+            },
+          },
+        ],
+      }),
+    } as unknown as MessageEvent<unknown>);
+    await vi.advanceTimersByTimeAsync(8_100);
+
+    expect(emissions).toEqual([
+      ['english-cc', 'traditional-chinese'],
+    ]);
   });
 });

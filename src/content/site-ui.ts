@@ -21,16 +21,15 @@ const SITE_UI: Record<SiteId, SiteUiBinding> = {
   primevideo: {
     videoSelector: '#dv-web-player video',
     playerSelector: '#dv-web-player',
-    controlsSelector:
-      '#dv-web-player .atvwebplayersdk-infobar-container *:has(> .atvwebplayersdk-nexttitle-button)',
-    toggleBeforeSelector:
-      '#dv-web-player .atvwebplayersdk-nexttitle-button',
     nativeCaptionSelector:
       '#dv-web-player .atvwebplayersdk-captions-overlay, [data-duetsub-native-captions="primevideo"]',
   },
   max: {
     videoSelector: '[data-testid="VideoElement"]',
-    controlsSelector: '[data-testid="playback_controls"]',
+    controlsSelector:
+      '[data-testid="playback_controls"] *:has(> [data-testid="player-ux-track-selector-button"]):has(> [data-testid="player-ux-fullscreen-button"])',
+    toggleBeforeSelector:
+      '[data-testid="playback_controls"] *:has(> [data-testid="player-ux-track-selector-button"]):has(> [data-testid="player-ux-fullscreen-button"]) > [data-testid="player-ux-fullscreen-button"]',
     nativeCaptionSelector:
       '[data-testid="caption_renderer_overlay"], [data-duetsub-native-captions="max"]',
   },
@@ -75,12 +74,23 @@ export function findSiteUiTarget(siteId: SiteId): SiteUiTarget | undefined {
   if (player === null) return undefined;
   if (siteId === 'primevideo' && !isVisible(player)) return undefined;
 
-  const controls = binding.controlsSelector
-    ? document.querySelector<HTMLElement>(binding.controlsSelector) ?? undefined
-    : undefined;
-  const selectedToggleBefore = binding.toggleBeforeSelector
-    ? document.querySelector<HTMLElement>(binding.toggleBeforeSelector)
-    : null;
+  const primeControls =
+    siteId === 'primevideo' ? findPrimeVideoControls(player) : undefined;
+  const netflixControls =
+    siteId === 'netflix' ? findNetflixControls(player) : undefined;
+  const controls =
+    netflixControls?.controls ??
+    primeControls?.controls ??
+    (binding.controlsSelector
+      ? document.querySelector<HTMLElement>(binding.controlsSelector) ??
+        undefined
+      : undefined);
+  const selectedToggleBefore =
+    netflixControls?.toggleBefore ??
+    primeControls?.toggleBefore ??
+    (binding.toggleBeforeSelector
+      ? document.querySelector<HTMLElement>(binding.toggleBeforeSelector)
+      : null);
   const toggleBefore =
     controls !== undefined && selectedToggleBefore?.parentElement === controls
       ? selectedToggleBefore
@@ -94,7 +104,7 @@ export function findSiteUiTarget(siteId: SiteId): SiteUiTarget | undefined {
     nativeCaptionSelector: binding.nativeCaptionSelector,
     contentIdentity:
       siteId === 'primevideo'
-        ? readPrimeEpisodeIdentity(player)
+        ? readPrimeContentIdentity(player)
         : siteId === 'max'
           ? readMaxContentIdentity(window.location.href)
           : siteId === 'netflix'
@@ -103,14 +113,62 @@ export function findSiteUiTarget(siteId: SiteId): SiteUiTarget | undefined {
   };
 }
 
-function readPrimeEpisodeIdentity(player: HTMLElement): string | undefined {
+function findNetflixControls(player: HTMLElement): {
+  readonly controls?: HTMLElement;
+  readonly toggleBefore?: HTMLElement;
+} {
+  const subtitle = player.querySelector<HTMLElement>(
+    'button[data-uia="control-audio-subtitle"]',
+  );
+  const fullscreen = player.querySelector<HTMLElement>(
+    'button[data-uia^="control-fullscreen-"]',
+  );
+  const subtitleWrapper = subtitle?.parentElement ?? undefined;
+  const toggleBefore = fullscreen?.parentElement ?? undefined;
+  const controls = toggleBefore?.parentElement ?? undefined;
+
+  if (
+    controls === undefined ||
+    toggleBefore === undefined ||
+    subtitleWrapper?.parentElement !== controls
+  ) {
+    return {};
+  }
+  return { controls, toggleBefore };
+}
+
+function findPrimeVideoControls(player: HTMLElement): {
+  readonly controls?: HTMLElement;
+  readonly toggleBefore?: HTMLElement;
+} {
+  const subtitle = player.querySelector<HTMLElement>(
+    'button[aria-label="Subtitles and Audio Menu"]',
+  );
+  const fullscreen = player.querySelector<HTMLElement>(
+    'button[aria-label="Fullscreen"]',
+  );
+  const toggleBefore = fullscreen?.parentElement ?? undefined;
+  const controls = toggleBefore?.parentElement ?? undefined;
+
+  if (
+    subtitle === null ||
+    controls === undefined ||
+    toggleBefore === undefined
+  ) {
+    return {};
+  }
+  return { controls, toggleBefore };
+}
+
+function readPrimeContentIdentity(player: HTMLElement): string | undefined {
   const title = player
     .querySelector<HTMLElement>('.atvwebplayersdk-title-text')
     ?.textContent?.trim();
+  if (!title) return undefined;
   const episode = player
     .querySelector<HTMLElement>('.atvwebplayersdk-subtitle-text')
     ?.textContent?.trim();
-  return title && episode ? `${title}\n${episode}` : undefined;
+  return episode ? `${title}\n${episode}` : title;
 }
 
 function isVisible(element: HTMLElement): boolean {
