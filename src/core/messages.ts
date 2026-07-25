@@ -492,9 +492,12 @@ export function isPrimeTtmlUrl(value: string): boolean {
     const isLegacyTtml =
       url.hostname === 'cf-timedtext.aux.pv-cdn.net' &&
       url.pathname.endsWith('.ttml2');
+    const isPrimeFragmentedTextHost =
+      url.hostname === 'amazon.pv-cdn.net' ||
+      url.hostname.endsWith('.amazon.pv-cdn.net') ||
+      url.hostname.endsWith('-amazon.akamaized.net');
     const isFragmentedTextMp4 =
-      (url.hostname === 'amazon.pv-cdn.net' ||
-        url.hostname.endsWith('.amazon.pv-cdn.net')) &&
+      isPrimeFragmentedTextHost &&
       /_text_\d+\.mp4$/i.test(url.pathname);
     return (
       url.protocol === 'https:' &&

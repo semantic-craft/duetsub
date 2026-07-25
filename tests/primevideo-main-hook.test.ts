@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { startPrimeVideoMainHook } from '../src/main/primevideo-hook';
 
 const OFF_CAMPUS_TEXT_URL =
-  'https://subtitle.ta.pop-vod-dash.main.amazon.pv-cdn.net/asset/' +
+  'https://a124vod-dash-pv-ta-amazon.akamaized.net/ww_nrt/sanitized/' +
   'english_text_1.mp4?token=SIGNED_PLACEHOLDER';
 
 class FakeXmlHttpRequest {
