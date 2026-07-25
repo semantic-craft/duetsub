@@ -152,6 +152,7 @@ class PlaybackController {
     this.#toggleView = createToggleView(
       target.controls ?? target.player,
       target.controls === undefined,
+      siteId,
       {
         onToggle: () => this.#toggle(),
         onRetranslate: () => {

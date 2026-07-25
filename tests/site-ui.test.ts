@@ -7,14 +7,11 @@ afterEach(() => {
 });
 
 describe('Prime Video site UI', () => {
-  it('anchors the toggle in the current native control group before fullscreen', () => {
+  it('anchors the toggle at the left edge before subtitles and audio', () => {
     const player = element();
-    const subtitleControls = element(player);
-    const subtitleWrapper = element(subtitleControls);
-    const subtitle = element(subtitleWrapper);
     const controls = element(player);
-    const fullscreenWrapper = element(controls);
-    const fullscreen = element(fullscreenWrapper);
+    const subtitleWrapper = element(controls);
+    const subtitle = element(subtitleWrapper);
     const video = element(player) as HTMLVideoElement;
 
     player.querySelector = vi.fn((selector: string) => {
@@ -23,9 +20,6 @@ describe('Prime Video site UI', () => {
         'button[aria-label="Subtitles and Audio Menu"]'
       ) {
         return subtitle;
-      }
-      if (selector === 'button[aria-label="Fullscreen"]') {
-        return fullscreen;
       }
       return null;
     }) as typeof player.querySelector;
@@ -45,7 +39,7 @@ describe('Prime Video site UI', () => {
     const target = findSiteUiTarget('primevideo');
 
     expect(target?.controls).toBe(controls);
-    expect(target?.toggleBefore).toBe(fullscreenWrapper);
+    expect(target?.toggleBefore).toBe(subtitleWrapper);
   });
 
   it('uses the visible movie title as the verified content identity', () => {
@@ -77,22 +71,20 @@ describe('Prime Video site UI', () => {
 });
 
 describe('Netflix site UI', () => {
-  it('anchors the toggle in the native control group before fullscreen', () => {
+  it('anchors the toggle beside the play button in the left control group', () => {
     const player = element();
-    const controls = element(player);
-    const audioWrapper = element(controls);
-    const audio = element(audioWrapper);
-    const speedWrapper = element(controls);
-    const fullscreenWrapper = element(controls);
-    const fullscreen = element(fullscreenWrapper);
+    const leftControls = element(player);
+    const playWrapper = element(leftControls);
+    const spacer = element(leftControls);
+    Object.defineProperty(playWrapper, 'nextElementSibling', {
+      value: spacer,
+    });
+    const play = element(playWrapper);
     const video = element(player) as HTMLVideoElement;
 
     player.querySelector = vi.fn((selector: string) => {
-      if (selector === 'button[data-uia="control-audio-subtitle"]') {
-        return audio;
-      }
-      if (selector === 'button[data-uia^="control-fullscreen-"]') {
-        return fullscreen;
+      if (selector === 'button[data-uia^="control-play-pause-"]') {
+        return play;
       }
       return null;
     }) as typeof player.querySelector;
@@ -112,10 +104,8 @@ describe('Netflix site UI', () => {
 
     const target = findSiteUiTarget('netflix');
 
-    expect(audioWrapper.parentElement).toBe(controls);
-    expect(speedWrapper.parentElement).toBe(controls);
-    expect(target?.controls).toBe(controls);
-    expect(target?.toggleBefore).toBe(fullscreenWrapper);
+    expect(target?.controls).toBe(leftControls);
+    expect(target?.toggleBefore).toBe(spacer);
   });
 });
 

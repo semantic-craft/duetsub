@@ -1,3 +1,5 @@
+import type { SiteId } from '../core/contracts';
+
 export interface ToggleViewCallbacks {
   readonly onToggle: () => void;
   readonly onRetranslate: () => void;
@@ -17,11 +19,13 @@ export interface ToggleView {
 export function createToggleView(
   anchor: HTMLElement,
   isFallbackAnchor: boolean,
+  siteId: SiteId,
   callbacks: ToggleViewCallbacks,
   before?: HTMLElement,
 ): ToggleView {
   const host = document.createElement('div');
   host.dataset.duetsubToggle = '';
+  host.dataset.site = siteId;
   if (isFallbackAnchor) host.dataset.fallbackAnchor = '';
 
   const shadow = host.attachShadow({ mode: 'open' });
@@ -34,7 +38,11 @@ export function createToggleView(
   button.title = 'DuetSub';
   button.setAttribute('aria-label', '切換 DuetSub 雙字幕');
   button.setAttribute('aria-haspopup', 'menu');
-  button.append(createBar('english'), createBar('chinese'));
+  const icon = document.createElement('span');
+  icon.className = 'icon';
+  icon.setAttribute('aria-hidden', 'true');
+  icon.append(createBar('english'), createBar('chinese'));
+  button.append(icon);
 
   const popover = document.createElement('div');
   popover.className = 'popover';
@@ -175,6 +183,16 @@ const TOGGLE_CSS = `
     bottom: 2.5%;
   }
 
+  :host([data-site="max"]:not([data-fallback-anchor])) {
+    align-self: flex-start;
+    height: 48px;
+    margin-top: 4px;
+  }
+
+  :host([data-site="netflix"]:not([data-fallback-anchor])) .icon {
+    transform: translateY(-9px);
+  }
+
   button {
     font: inherit;
   }
@@ -184,7 +202,6 @@ const TOGGLE_CSS = `
     width: 48px;
     height: 48px;
     place-content: center;
-    gap: 3px;
     padding: 0;
     border: 0;
     border-radius: 0;
@@ -192,8 +209,16 @@ const TOGGLE_CSS = `
     cursor: pointer;
   }
 
-  .toggle.enabled {
-    box-shadow: inset 0 -2px 0 #ffc24b;
+  .icon {
+    box-sizing: border-box;
+    display: grid;
+    width: 24px;
+    height: 24px;
+    place-content: center;
+    gap: 3px;
+    border: 2px solid #f6f8fb;
+    border-radius: 5px;
+    background: transparent;
   }
 
   .bar {
@@ -203,14 +228,20 @@ const TOGGLE_CSS = `
   }
 
   .bar.english {
-    width: 20px;
+    width: 14px;
     background: #f6f8fb;
   }
 
   .bar.chinese {
-    width: 14px;
+    width: 12px;
     justify-self: center;
+    background: #f6f8fb;
+    opacity: 0.72;
+  }
+
+  .toggle.enabled .bar.chinese {
     background: #ffc24b;
+    opacity: 1;
   }
 
   .popover {

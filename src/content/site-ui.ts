@@ -117,24 +117,22 @@ function findNetflixControls(player: HTMLElement): {
   readonly controls?: HTMLElement;
   readonly toggleBefore?: HTMLElement;
 } {
-  const subtitle = player.querySelector<HTMLElement>(
-    'button[data-uia="control-audio-subtitle"]',
+  const play = player.querySelector<HTMLElement>(
+    'button[data-uia^="control-play-pause-"]',
   );
-  const fullscreen = player.querySelector<HTMLElement>(
-    'button[data-uia^="control-fullscreen-"]',
-  );
-  const subtitleWrapper = subtitle?.parentElement ?? undefined;
-  const toggleBefore = fullscreen?.parentElement ?? undefined;
-  const controls = toggleBefore?.parentElement ?? undefined;
+  const playWrapper = play?.parentElement ?? undefined;
+  const controls = playWrapper?.parentElement ?? undefined;
+  const toggleBefore =
+    playWrapper?.nextElementSibling as HTMLElement | undefined;
 
-  if (
-    controls === undefined ||
-    toggleBefore === undefined ||
-    subtitleWrapper?.parentElement !== controls
-  ) {
+  if (controls === undefined) {
     return {};
   }
-  return { controls, toggleBefore };
+  return {
+    controls,
+    toggleBefore:
+      toggleBefore?.parentElement === controls ? toggleBefore : undefined,
+  };
 }
 
 function findPrimeVideoControls(player: HTMLElement): {
@@ -144,17 +142,10 @@ function findPrimeVideoControls(player: HTMLElement): {
   const subtitle = player.querySelector<HTMLElement>(
     'button[aria-label="Subtitles and Audio Menu"]',
   );
-  const fullscreen = player.querySelector<HTMLElement>(
-    'button[aria-label="Fullscreen"]',
-  );
-  const toggleBefore = fullscreen?.parentElement ?? undefined;
+  const toggleBefore = subtitle?.parentElement ?? undefined;
   const controls = toggleBefore?.parentElement ?? undefined;
 
-  if (
-    subtitle === null ||
-    controls === undefined ||
-    toggleBefore === undefined
-  ) {
+  if (controls === undefined || toggleBefore === undefined) {
     return {};
   }
   return { controls, toggleBefore };
