@@ -1,6 +1,10 @@
 import type { Cue, SiteAdapter, TrackInfo } from '../core/contracts';
 import type { PlaybackGeneration } from '../core/lifecycle';
-import { isDuetSubMessage } from '../core/messages';
+import {
+  isDuetSubMessage,
+  postDuetSubMessage,
+  requestPrimeTimelineOffset,
+} from '../core/messages';
 import {
   alignPrimeChineseCuesToEnglish,
   consumePrimeTtmlResponse,
@@ -34,6 +38,11 @@ interface PendingResponse {
   readonly timeout: number;
 }
 
+interface PendingTimelineOffset {
+  readonly requestId: string;
+  readonly generation: PlaybackGeneration;
+}
+
 export function createPrimeVideoAdapter(): SiteAdapter {
   return new PrimeVideoAdapter();
 }
@@ -53,6 +62,8 @@ class PrimeVideoAdapter implements SiteAdapter {
   #batchScheduled = false;
   #batchRunning = false;
   #pending: PendingResponse | undefined;
+  #pendingTimelineOffset: PendingTimelineOffset | undefined;
+  #timelineOffsetMs: number | undefined;
   #responseInbox: PrimeTtmlResponseInbox = EMPTY_PRIME_TTML_INBOX;
   #generation: PlaybackGeneration = {
     contentGeneration: 0,
@@ -117,6 +128,8 @@ class PrimeVideoAdapter implements SiteAdapter {
       this.#responseInbox,
       generation,
     );
+    this.#pendingTimelineOffset = undefined;
+    this.#timelineOffsetMs = undefined;
     this.#rejectPending(new Error('Prime TTML response became stale'));
 
     const stale = this.#requestQueue.splice(0);
@@ -321,6 +334,7 @@ class PrimeVideoAdapter implements SiteAdapter {
       }, RESPONSE_TIMEOUT_MS);
       this.#pending = { track, radio, generation, resolve, reject, timeout };
     });
+    this.#requestTimelineOffset(generation);
     this.#resolvePendingFromInbox();
     return response;
   }
@@ -336,6 +350,23 @@ class PrimeVideoAdapter implements SiteAdapter {
   readonly #onMessage = (event: MessageEvent<unknown>) => {
     if (event.source !== window || !isDuetSubMessage(event.data)) return;
     const message = event.data;
+    if (
+      message.direction === 'main-to-isolated' &&
+      message.type === 'prime-timeline-offset'
+    ) {
+      const request = this.#pendingTimelineOffset;
+      if (
+        request === undefined ||
+        message.requestId !== request.requestId ||
+        !sameGeneration(this.#generation, request.generation)
+      ) {
+        return;
+      }
+      this.#timelineOffsetMs = message.timelineOffsetMs;
+      this.#pendingTimelineOffset = undefined;
+      this.#resolvePendingFromInbox();
+      return;
+    }
     if (
       message.direction !== 'main-to-isolated' ||
       message.type !== 'prime-ttml-response'
@@ -365,7 +396,8 @@ class PrimeVideoAdapter implements SiteAdapter {
     const pending = this.#pending;
     if (
       pending === undefined ||
-      !sameGeneration(this.#generation, pending.generation)
+      !sameGeneration(this.#generation, pending.generation) ||
+      this.#timelineOffsetMs === undefined
     ) {
       return;
     }
@@ -374,6 +406,8 @@ class PrimeVideoAdapter implements SiteAdapter {
       this.#responseInbox,
       pending.track,
       pending.generation,
+      undefined,
+      this.#timelineOffsetMs,
     );
     this.#responseInbox = consumed.inbox;
     if (consumed.cues === undefined) return;
@@ -381,6 +415,12 @@ class PrimeVideoAdapter implements SiteAdapter {
     window.clearTimeout(pending.timeout);
     this.#pending = undefined;
     pending.resolve(consumed.cues);
+  }
+
+  #requestTimelineOffset(generation: PlaybackGeneration): void {
+    const requestId = crypto.randomUUID();
+    this.#pendingTimelineOffset = { requestId, generation };
+    postDuetSubMessage(requestPrimeTimelineOffset(requestId));
   }
 
   #emitTracks(

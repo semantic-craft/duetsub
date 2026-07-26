@@ -11,6 +11,24 @@ class FakeXmlHttpRequest {
   send(): void {}
 }
 
+class FakeSourceBuffer {
+  #timestampOffset = 0;
+
+  get timestampOffset(): number {
+    return this.#timestampOffset;
+  }
+
+  set timestampOffset(value: number) {
+    this.#timestampOffset = value;
+  }
+}
+
+class FakeMediaSource {
+  addSourceBuffer(): FakeSourceBuffer {
+    return new FakeSourceBuffer();
+  }
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
@@ -31,6 +49,9 @@ describe('Prime MAIN-world response observation', () => {
         new Response('cached-range-fragment', { status: 206 }),
       );
     const postMessage = vi.fn();
+    let messageListener:
+      | ((event: MessageEvent<unknown>) => void)
+      | undefined;
 
     vi.stubGlobal('window', {
       fetch: originalFetch,
@@ -39,10 +60,50 @@ describe('Prime MAIN-world response observation', () => {
         origin: 'https://www.primevideo.com',
       },
       postMessage,
+      addEventListener(
+        type: string,
+        listener: (event: MessageEvent<unknown>) => void,
+      ) {
+        if (type === 'message') messageListener = listener;
+      },
     });
     vi.stubGlobal('XMLHttpRequest', FakeXmlHttpRequest);
+    vi.stubGlobal('SourceBuffer', FakeSourceBuffer);
+    vi.stubGlobal('MediaSource', FakeMediaSource);
 
     startPrimeVideoMainHook();
+    const mediaSource = new MediaSource();
+    const audio = mediaSource.addSourceBuffer('audio/mp4');
+    const video = mediaSource.addSourceBuffer('video/mp4');
+    audio.timestampOffset = 0;
+    video.timestampOffset = 0;
+
+    expect(messageListener).toBeTypeOf('function');
+    messageListener?.({
+      source: window,
+      data: {
+        channel: 'duetsub',
+        version: 1,
+        direction: 'isolated-to-main',
+        type: 'request-prime-timeline-offset',
+        siteId: 'primevideo',
+        requestId: 'initializing-clock-request',
+      },
+    } as unknown as MessageEvent<unknown>);
+    expect(postMessage).not.toHaveBeenCalled();
+
+    video.timestampOffset = 6;
+    audio.timestampOffset = 6;
+
+    await vi.waitFor(() => {
+      expect(postMessage).toHaveBeenCalledOnce();
+    });
+    expect(postMessage.mock.calls[0]?.[0]).toMatchObject({
+      type: 'prime-timeline-offset',
+      requestId: 'initializing-clock-request',
+      timelineOffsetMs: 6_000,
+    });
+
     await window.fetch(
       new Request(OFF_CAMPUS_TEXT_URL, {
         headers: { range: 'bytes=0-16383' },
@@ -50,9 +111,9 @@ describe('Prime MAIN-world response observation', () => {
     );
 
     await vi.waitFor(() => {
-      expect(postMessage).toHaveBeenCalledOnce();
+      expect(postMessage).toHaveBeenCalledTimes(2);
     });
-    expect(postMessage.mock.calls[0]?.[0]).toMatchObject({
+    expect(postMessage.mock.calls[1]?.[0]).toMatchObject({
       type: 'prime-ttml-response',
       url: OFF_CAMPUS_TEXT_URL,
       raw: completeTrack,
@@ -63,13 +124,33 @@ describe('Prime MAIN-world response observation', () => {
     });
 
     await vi.waitFor(() => {
-      expect(postMessage).toHaveBeenCalledTimes(2);
+      expect(postMessage).toHaveBeenCalledTimes(3);
     });
-    expect(postMessage.mock.calls[1]?.[0]).toMatchObject({
+    expect(postMessage.mock.calls[2]?.[0]).toMatchObject({
       type: 'prime-ttml-response',
       url: OFF_CAMPUS_TEXT_URL,
       raw: completeTrack,
     });
     expect(originalFetch).toHaveBeenCalledTimes(3);
+
+    messageListener?.({
+      source: window,
+      data: {
+        channel: 'duetsub',
+        version: 1,
+        direction: 'isolated-to-main',
+        type: 'request-prime-timeline-offset',
+        siteId: 'primevideo',
+        requestId: 'clock-request',
+      },
+    } as unknown as MessageEvent<unknown>);
+    await vi.waitFor(() => {
+      expect(postMessage).toHaveBeenCalledTimes(4);
+    });
+    expect(postMessage.mock.calls.at(-1)?.[0]).toMatchObject({
+      type: 'prime-timeline-offset',
+      requestId: 'clock-request',
+      timelineOffsetMs: 6_000,
+    });
   });
 });

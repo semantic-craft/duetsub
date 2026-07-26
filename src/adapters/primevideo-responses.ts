@@ -53,6 +53,7 @@ export function consumePrimeTtmlResponse(
   track: TrackInfo,
   generation: PlaybackGeneration,
   parser?: NonNullable<TtmlParserOptions['parser']>,
+  fallbackTimelineOffsetMs?: number,
 ): {
   readonly inbox: PrimeTtmlResponseInbox;
   readonly cues?: Cue[];
@@ -62,14 +63,25 @@ export function consumePrimeTtmlResponse(
       response.trackId === track.id &&
       sameGeneration(response.generation, generation),
   );
-  const remaining = inbox.filter((response) => !matches.includes(response));
+  if (fallbackTimelineOffsetMs === undefined) return { inbox };
 
   for (const response of matches.toReversed()) {
-    const cues = parsePrimeTtmlPayload(response.raw, track, parser);
-    if (isValidCueSet(cues)) return { inbox: remaining, cues };
+    const cues = parsePrimeTtmlPayload(response.raw, track, parser).map(
+      (cue) => ({
+        ...cue,
+        start: cue.start + fallbackTimelineOffsetMs,
+        end: cue.end + fallbackTimelineOffsetMs,
+      }),
+    );
+    if (isValidCueSet(cues)) {
+      return {
+        inbox: inbox.filter((candidate) => !matches.includes(candidate)),
+        cues,
+      };
+    }
   }
 
-  return { inbox: remaining };
+  return { inbox };
 }
 
 function acceptedPrimeTtmlLanguages(language: string): readonly string[] {

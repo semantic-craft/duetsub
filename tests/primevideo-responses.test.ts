@@ -43,6 +43,7 @@ describe('Prime TTML response inbox', () => {
       ENGLISH_TRACK,
       EPISODE_ONE,
       new DOMParser(),
+      0,
     );
 
     expect(consumed.cues?.map(({ text }) => text)).toEqual([
@@ -79,6 +80,7 @@ describe('Prime TTML response inbox', () => {
       OFF_CAMPUS_ENGLISH_TRACK,
       EPISODE_ONE,
       new DOMParser(),
+      0,
     );
 
     expect(consumed.cues).toEqual([
@@ -95,6 +97,96 @@ describe('Prime TTML response inbox', () => {
         language: 'en-US',
       },
     ]);
+  });
+
+  it('maps Off Campus TTML cues onto Prime playback time', () => {
+    const raw =
+      '<?xml version="1.0" encoding="utf-8"?>' +
+      '<tt xmlns="http://www.w3.org/ns/ttml" xml:lang="en-US">' +
+      '<body><div><p begin="00:04:11.125" end="00:04:13.041">' +
+      'Did she do it?' +
+      '</p></div></body></tt>';
+    const inbox = recordPrimeTtmlResponse(EMPTY_PRIME_TTML_INBOX, {
+      responseId: 'off-campus-clock-offset',
+      trackId: OFF_CAMPUS_ENGLISH_TRACK.id,
+      raw,
+      generation: EPISODE_ONE,
+    });
+
+    const consumed = consumePrimeTtmlResponse(
+      inbox,
+      OFF_CAMPUS_ENGLISH_TRACK,
+      EPISODE_ONE,
+      new DOMParser(),
+      6_000,
+    );
+
+    expect(consumed.cues).toEqual([
+      {
+        start: 257_125,
+        end: 259_041,
+        text: 'Did she do it?',
+        language: 'en-US',
+      },
+    ]);
+  });
+
+  it('uses the clock correlated to the active track request', () => {
+    const raw =
+      '<?xml version="1.0" encoding="utf-8"?>' +
+      '<tt xmlns="http://www.w3.org/ns/ttml" xml:lang="en-US">' +
+      '<body><div><p begin="00:04:11.125" end="00:04:13.041">' +
+      'Did she do it?' +
+      '</p></div></body></tt>';
+    const inbox = recordPrimeTtmlResponse(EMPTY_PRIME_TTML_INBOX, {
+      responseId: 'off-campus-stale-response-clock',
+      trackId: OFF_CAMPUS_ENGLISH_TRACK.id,
+      raw,
+      generation: EPISODE_ONE,
+    });
+
+    const consumed = consumePrimeTtmlResponse(
+      inbox,
+      OFF_CAMPUS_ENGLISH_TRACK,
+      EPISODE_ONE,
+      new DOMParser(),
+      6_000,
+    );
+
+    expect(consumed.cues?.[0]).toMatchObject({
+      start: 257_125,
+      end: 259_041,
+    });
+  });
+
+  it('waits for a response with a verified Prime playback clock', () => {
+    const inbox = recordPrimeTtmlResponse(EMPTY_PRIME_TTML_INBOX, {
+      responseId: 'background-response-without-playback-clock',
+      trackId: OFF_CAMPUS_ENGLISH_TRACK.id,
+      raw: primeVideoFixture,
+      generation: EPISODE_ONE,
+    });
+
+    expect(
+      consumePrimeTtmlResponse(
+        inbox,
+        OFF_CAMPUS_ENGLISH_TRACK,
+        EPISODE_ONE,
+        new DOMParser(),
+      ).cues,
+    ).toBeUndefined();
+
+    const consumed = consumePrimeTtmlResponse(
+      inbox,
+      OFF_CAMPUS_ENGLISH_TRACK,
+      EPISODE_ONE,
+      new DOMParser(),
+      6_000,
+    );
+    expect(consumed.cues?.[0]).toMatchObject({
+      start: 28_708,
+      end: 30_708,
+    });
   });
 
   it('keeps dialogue while removing Off Campus English CC-only captions', () => {
@@ -127,6 +219,7 @@ describe('Prime TTML response inbox', () => {
       OFF_CAMPUS_ENGLISH_TRACK,
       EPISODE_ONE,
       new DOMParser(),
+      0,
     );
 
     expect(consumed.cues).toEqual([

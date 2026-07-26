@@ -1,15 +1,116 @@
 import {
+  isDuetSubMessage,
   isPrimeTtmlUrl,
   postDuetSubMessage,
+  primeTimelineOffsetMessage,
   primeTtmlResponseMessage,
 } from '../core/messages';
 
 const xhrUrls = new WeakMap<XMLHttpRequest, string>();
 const completeFragmentedTextPayloads = new Map<string, Promise<string>>();
+let readPrimeTimelineOffsetMs: () => number | undefined = () => undefined;
 
 export function startPrimeVideoMainHook(): void {
+  readPrimeTimelineOffsetMs = observePrimePlaybackTimeline();
+  window.addEventListener('message', respondWithPrimeTimelineOffset);
   const originalFetch = patchFetch();
   patchXmlHttpRequest(originalFetch);
+}
+
+function respondWithPrimeTimelineOffset(event: MessageEvent<unknown>): void {
+  if (event.source !== window || !isDuetSubMessage(event.data)) return;
+  const message = event.data;
+  if (
+    message.direction !== 'isolated-to-main' ||
+    message.type !== 'request-prime-timeline-offset'
+  ) {
+    return;
+  }
+  void readStablePrimeTimelineOffsetMs().then((timelineOffsetMs) => {
+    if (timelineOffsetMs === undefined) return;
+    postDuetSubMessage(
+      primeTimelineOffsetMessage(message.requestId, timelineOffsetMs),
+    );
+  });
+}
+
+async function readStablePrimeTimelineOffsetMs(): Promise<
+  number | undefined
+> {
+  const deadline = performance.now() + 500;
+  let timelineOffsetMs = readPrimeTimelineOffsetMs();
+  while (
+    (timelineOffsetMs === undefined || timelineOffsetMs === 0) &&
+    performance.now() < deadline
+  ) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 25));
+    timelineOffsetMs = readPrimeTimelineOffsetMs();
+  }
+  return timelineOffsetMs;
+}
+
+function observePrimePlaybackTimeline(): () => number | undefined {
+  if (
+    typeof MediaSource === 'undefined' ||
+    typeof SourceBuffer === 'undefined'
+  ) {
+    return () => undefined;
+  }
+
+  const originalAddSourceBuffer = MediaSource.prototype.addSourceBuffer;
+  const offsetDescriptor = Object.getOwnPropertyDescriptor(
+    SourceBuffer.prototype,
+    'timestampOffset',
+  );
+  if (
+    offsetDescriptor?.get === undefined ||
+    offsetDescriptor.set === undefined
+  ) {
+    return () => undefined;
+  }
+
+  const kindByBuffer = new WeakMap<SourceBuffer, 'audio' | 'video'>();
+  let audioOffset: number | undefined;
+  let videoOffset: number | undefined;
+  let confirmedOffset: number | undefined;
+
+  MediaSource.prototype.addSourceBuffer = function duetSubAddSourceBuffer(
+    type: string,
+  ): SourceBuffer {
+    const sourceBuffer = originalAddSourceBuffer.call(this, type);
+    const kind = type.startsWith('audio/')
+      ? 'audio'
+      : type.startsWith('video/')
+        ? 'video'
+        : undefined;
+    if (kind !== undefined) kindByBuffer.set(sourceBuffer, kind);
+    return sourceBuffer;
+  };
+
+  Object.defineProperty(SourceBuffer.prototype, 'timestampOffset', {
+    configurable: offsetDescriptor.configurable,
+    enumerable: offsetDescriptor.enumerable,
+    get: offsetDescriptor.get,
+    set(this: SourceBuffer, value: number) {
+      offsetDescriptor.set?.call(this, value);
+      if (!Number.isFinite(value)) return;
+      const kind = kindByBuffer.get(this);
+      if (kind === 'audio') audioOffset = value;
+      if (kind === 'video') videoOffset = value;
+      if (
+        audioOffset !== undefined &&
+        videoOffset !== undefined &&
+        Math.abs(audioOffset - videoOffset) <= 0.001
+      ) {
+        confirmedOffset = (audioOffset + videoOffset) / 2;
+      }
+    },
+  });
+
+  return () =>
+    confirmedOffset === undefined
+      ? undefined
+      : Math.round(confirmedOffset * 1_000);
 }
 
 function patchFetch(): typeof window.fetch {

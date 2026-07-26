@@ -5,7 +5,9 @@ import {
   maxSubtitleResponseMessage,
   netflixManifestMessage,
   netflixTtmlResponseMessage,
+  primeTimelineOffsetMessage,
   primeTtmlResponseMessage,
+  requestPrimeTimelineOffset,
   youtubeCaptionsMessage,
   youtubePlayerCommand,
   youtubePlayerCommandResult,
@@ -21,6 +23,20 @@ const MAX_CONTENT_IDENTITY =
   '/video/watch/41c7eddd-2eea-4ed3-a299-474d693063f4/35a8260d-3bc6-4b91-b370-a5f3c72ad6d5';
 
 describe('Prime MAIN to ISOLATED messages', () => {
+  it('validates the correlated Prime playback clock handshake', () => {
+    const request = requestPrimeTimelineOffset('clock-request');
+    const response = primeTimelineOffsetMessage('clock-request', 6_000);
+
+    expect(isDuetSubMessage(request)).toBe(true);
+    expect(isDuetSubMessage(response)).toBe(true);
+    expect(
+      isDuetSubMessage({
+        ...response,
+        timelineOffsetMs: Number.POSITIVE_INFINITY,
+      }),
+    ).toBe(false);
+  });
+
   it('accepts a validated Prime TTML response envelope', () => {
     expect(
       isDuetSubMessage(

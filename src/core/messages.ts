@@ -46,6 +46,19 @@ export interface PrimeTtmlResponseMessage extends UncorrelatedMessageEnvelope {
   readonly raw: string;
 }
 
+export interface PrimeTimelineOffsetRequestMessage extends MessageEnvelope {
+  readonly direction: 'isolated-to-main';
+  readonly type: 'request-prime-timeline-offset';
+  readonly siteId: 'primevideo';
+}
+
+export interface PrimeTimelineOffsetMessage extends MessageEnvelope {
+  readonly direction: 'main-to-isolated';
+  readonly type: 'prime-timeline-offset';
+  readonly siteId: 'primevideo';
+  readonly timelineOffsetMs: number;
+}
+
 export type MaxSubtitleResponseKind =
   | 'playback-info'
   | 'manifest'
@@ -149,6 +162,7 @@ export type MainToIsolatedMessage =
   | TracksMessage
   | CuesMessage
   | PrimeTtmlResponseMessage
+  | PrimeTimelineOffsetMessage
   | MaxSubtitleResponseMessage
   | NetflixManifestMessage
   | NetflixTtmlResponseMessage
@@ -157,6 +171,7 @@ export type MainToIsolatedMessage =
   | YoutubePlayerCommandResultMessage;
 export type IsolatedToMainMessage =
   | RequestFakeDataMessage
+  | PrimeTimelineOffsetRequestMessage
   | YoutubePlayerCommandMessage;
 export type DuetSubMessage = MainToIsolatedMessage | IsolatedToMainMessage;
 
@@ -221,6 +236,34 @@ export function primeTtmlResponseMessage(
     responseId,
     url,
     raw,
+  };
+}
+
+export function requestPrimeTimelineOffset(
+  requestId: string,
+): PrimeTimelineOffsetRequestMessage {
+  return {
+    channel: CHANNEL,
+    version: VERSION,
+    direction: 'isolated-to-main',
+    type: 'request-prime-timeline-offset',
+    siteId: 'primevideo',
+    requestId,
+  };
+}
+
+export function primeTimelineOffsetMessage(
+  requestId: string,
+  timelineOffsetMs: number,
+): PrimeTimelineOffsetMessage {
+  return {
+    channel: CHANNEL,
+    version: VERSION,
+    direction: 'main-to-isolated',
+    type: 'prime-timeline-offset',
+    siteId: 'primevideo',
+    requestId,
+    timelineOffsetMs,
   };
 }
 
@@ -433,6 +476,9 @@ export function isDuetSubMessage(value: unknown): value is DuetSubMessage {
     return false;
   }
   if (candidate.direction === 'isolated-to-main') {
+    if (candidate.type === 'request-prime-timeline-offset') {
+      return candidate.siteId === 'primevideo';
+    }
     if (candidate.type === 'youtube-player-command') {
       return (
         candidate.siteId === 'youtube' &&
@@ -450,6 +496,12 @@ export function isDuetSubMessage(value: unknown): value is DuetSubMessage {
     );
   }
   if (candidate.direction !== 'main-to-isolated') return false;
+  if (candidate.type === 'prime-timeline-offset') {
+    return (
+      candidate.siteId === 'primevideo' &&
+      isTimelineOffsetMs(candidate.timelineOffsetMs)
+    );
+  }
   if (candidate.type === 'youtube-player-command-result') {
     return (
       candidate.siteId === 'youtube' &&
@@ -567,6 +619,14 @@ function isSiteId(value: unknown): value is SiteId {
     value === 'primevideo' ||
     value === 'max' ||
     value === 'youtube'
+  );
+}
+
+function isTimelineOffsetMs(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    Math.abs(value) <= 86_400_000
   );
 }
 
