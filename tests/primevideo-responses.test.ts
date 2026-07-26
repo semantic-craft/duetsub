@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { TrackInfo } from '../src/core/contracts';
 import {
+  alignPrimeChineseCuesToEnglish,
   consumePrimeTtmlResponse,
   EMPTY_PRIME_TTML_INBOX,
   recordPrimeTtmlResponse,
@@ -94,6 +95,82 @@ describe('Prime TTML response inbox', () => {
         language: 'en-US',
       },
     ]);
+  });
+
+  it('keeps dialogue while removing Off Campus English CC-only captions', () => {
+    const fragmentedMp4 =
+      '\u0000\u0000mdat<?xml version="1.0" encoding="utf-8"?>' +
+      '<tt xmlns="http://www.w3.org/ns/ttml" xml:lang="en-US">' +
+      '<body><div>' +
+      '<p begin="00:00:04.000" end="00:00:06.000">' +
+      '♪ Background song lyrics ♪' +
+      '</p>' +
+      '<p begin="00:00:06.000" end="00:00:08.000">' +
+      '-[students groaning]' +
+      '</p>' +
+      '<p begin="00:00:08.000" end="00:00:10.000">' +
+      '-[Dean] Maybe an hour?' +
+      '</p>' +
+      '<p begin="00:00:10.000" end="00:00:12.000">' +
+      '-[students groaning]<br/>-Okay, yeah.' +
+      '</p>' +
+      '</div></body></tt>';
+    const inbox = recordPrimeTtmlResponse(EMPTY_PRIME_TTML_INBOX, {
+      responseId: 'off-campus-english-cc',
+      trackId: OFF_CAMPUS_ENGLISH_TRACK.id,
+      raw: fragmentedMp4,
+      generation: EPISODE_ONE,
+    });
+
+    const consumed = consumePrimeTtmlResponse(
+      inbox,
+      OFF_CAMPUS_ENGLISH_TRACK,
+      EPISODE_ONE,
+      new DOMParser(),
+    );
+
+    expect(consumed.cues).toEqual([
+      {
+        start: 8_000,
+        end: 10_000,
+        text: '- Maybe an hour?',
+        language: 'en-US',
+      },
+      {
+        start: 10_000,
+        end: 12_000,
+        text: '-Okay, yeah.',
+        language: 'en-US',
+      },
+    ]);
+  });
+
+  it('removes translated Chinese cues for Off Campus CC-only intervals', () => {
+    const englishDialogue = {
+      start: 8_000,
+      end: 10_000,
+      text: '- Maybe an hour?',
+      language: 'en-US',
+    };
+    const translatedMouthing = {
+      start: 6_000,
+      end: 8_000,
+      text: '抱歉',
+      language: 'zh-Hant',
+    };
+    const translatedDialogue = {
+      start: 8_000,
+      end: 10_000,
+      text: '大概一小時？',
+      language: 'zh-Hant',
+    };
+
+    expect(
+      alignPrimeChineseCuesToEnglish(
+        [englishDialogue],
+        [translatedMouthing, translatedDialogue],
+      ),
+    ).toEqual([translatedDialogue]);
   });
 
   it('keeps a previous episode response invisible after generation reset', () => {

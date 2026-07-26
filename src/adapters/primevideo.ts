@@ -2,6 +2,7 @@ import type { Cue, SiteAdapter, TrackInfo } from '../core/contracts';
 import type { PlaybackGeneration } from '../core/lifecycle';
 import { isDuetSubMessage } from '../core/messages';
 import {
+  alignPrimeChineseCuesToEnglish,
   consumePrimeTtmlResponse,
   EMPTY_PRIME_TTML_INBOX,
   recordPrimeTtmlResponse,
@@ -219,6 +220,23 @@ class PrimeVideoAdapter implements SiteAdapter {
         const cues = await this.#switchAndCapture(track, generation);
         captured.set(track.id, cues);
       }
+
+      const english = requestedTracks.find(isEnglishCcTrack);
+      const chinese = requestedTracks.find(isTraditionalChineseTrack);
+      const englishCues =
+        english === undefined ? undefined : captured.get(english.id);
+      const chineseCues =
+        chinese === undefined ? undefined : captured.get(chinese.id);
+      if (
+        chinese !== undefined &&
+        englishCues !== undefined &&
+        chineseCues !== undefined
+      ) {
+        captured.set(
+          chinese.id,
+          alignPrimeChineseCuesToEnglish(englishCues, chineseCues),
+        );
+      }
     } catch (error) {
       operationError = error;
     }
@@ -431,6 +449,19 @@ function uniqueRequestedTracks(requests: readonly TrackRequest[]): TrackInfo[] {
     if (!result.some(({ id }) => id === track.id)) result.push(track);
   }
   return result;
+}
+
+function isEnglishCcTrack(track: TrackInfo): boolean {
+  const language = track.language.toLowerCase();
+  return (
+    (language === 'en' || language.startsWith('en-')) &&
+    /\[CC\]/i.test(track.label)
+  );
+}
+
+function isTraditionalChineseTrack(track: TrackInfo): boolean {
+  const language = track.language.toLowerCase();
+  return language === 'zh-hant' || language.startsWith('zh-hant-');
 }
 
 async function restoreOriginalState(
