@@ -32,7 +32,7 @@ assert(
 
 assertExactStrings(
   manifest.permissions,
-  ['storage'],
+  ['storage', 'webRequest'],
   'required API permissions',
 );
 assertExactStrings(
@@ -40,6 +40,7 @@ assertExactStrings(
   [
     'https://www.netflix.com/*',
     'https://www.primevideo.com/*',
+    'https://*.amazon.pv-cdn.net/*',
     'https://play.hbomax.com/*',
     'https://www.youtube.com/*',
   ],

@@ -16,6 +16,19 @@ export type PrimeTtmlResponseInbox =
 
 export const EMPTY_PRIME_TTML_INBOX: PrimeTtmlResponseInbox = [];
 
+export function alignPrimeChineseCuesToEnglish(
+  englishCues: readonly Cue[],
+  chineseCues: readonly Cue[],
+): Cue[] {
+  return chineseCues.filter((chineseCue) =>
+    englishCues.some(
+      (englishCue) =>
+        englishCue.start < chineseCue.end &&
+        chineseCue.start < englishCue.end,
+    ),
+  );
+}
+
 export function recordPrimeTtmlResponse(
   inbox: PrimeTtmlResponseInbox,
   response: PrimeTtmlResponseObservation,
@@ -40,6 +53,7 @@ export function consumePrimeTtmlResponse(
   track: TrackInfo,
   generation: PlaybackGeneration,
   parser?: NonNullable<TtmlParserOptions['parser']>,
+  fallbackTimelineOffsetMs?: number,
 ): {
   readonly inbox: PrimeTtmlResponseInbox;
   readonly cues?: Cue[];
@@ -49,18 +63,25 @@ export function consumePrimeTtmlResponse(
       response.trackId === track.id &&
       sameGeneration(response.generation, generation),
   );
-  const remaining = inbox.filter((response) => !matches.includes(response));
+  if (fallbackTimelineOffsetMs === undefined) return { inbox };
 
   for (const response of matches.toReversed()) {
-    const cues = parseTtml(response.raw, {
-      language: track.language,
-      acceptedSourceLanguages: acceptedPrimeTtmlLanguages(track.language),
-      parser,
-    });
-    if (isValidCueSet(cues)) return { inbox: remaining, cues };
+    const cues = parsePrimeTtmlPayload(response.raw, track, parser).map(
+      (cue) => ({
+        ...cue,
+        start: cue.start + fallbackTimelineOffsetMs,
+        end: cue.end + fallbackTimelineOffsetMs,
+      }),
+    );
+    if (isValidCueSet(cues)) {
+      return {
+        inbox: inbox.filter((candidate) => !matches.includes(candidate)),
+        cues,
+      };
+    }
   }
 
-  return { inbox: remaining };
+  return { inbox };
 }
 
 function acceptedPrimeTtmlLanguages(language: string): readonly string[] {
@@ -68,6 +89,72 @@ function acceptedPrimeTtmlLanguages(language: string): readonly string[] {
     return ['zh-Hant', 'cmn-Hant', 'zh-TW', 'cmn-TW'];
   }
   return [language];
+}
+
+function parsePrimeTtmlPayload(
+  raw: string,
+  track: TrackInfo,
+  parser: NonNullable<TtmlParserOptions['parser']> | undefined,
+): Cue[] {
+  const cues = extractTtmlDocuments(raw)
+    .flatMap((document) =>
+      parseTtml(document, {
+        language: track.language,
+        acceptedSourceLanguages: acceptedPrimeTtmlLanguages(track.language),
+        parser,
+      }),
+    )
+    .flatMap((cue) => normalizePrimeCue(cue, track));
+  const unique = new Map<string, Cue>();
+  for (const cue of cues) {
+    const key =
+      `${cue.start}\u0000${cue.end}\u0000${cue.text}\u0000` +
+      `${cue.language}\u0000${cue.position ?? ''}`;
+    unique.set(key, cue);
+  }
+  return [...unique.values()].toSorted(
+    (left, right) => left.start - right.start || left.end - right.end,
+  );
+}
+
+function normalizePrimeCue(cue: Cue, track: TrackInfo): Cue[] {
+  if (
+    !track.language.toLowerCase().startsWith('en') ||
+    !/\[CC\]/i.test(track.label)
+  ) {
+    return [cue];
+  }
+  if (/[♪♫]/u.test(cue.text)) return [];
+
+  const text = cue.text
+    .split('\n')
+    .map((line) => line.replace(/\[[^\]\r\n]+\]/gu, '').trim())
+    .filter((line) => line !== '' && !/^[-–—\s]*$/u.test(line))
+    .join('\n')
+    .trim();
+  return text === '' ? [] : [{ ...cue, text }];
+}
+
+function extractTtmlDocuments(raw: string): string[] {
+  const documents: string[] = [];
+  let cursor = 0;
+
+  while (cursor < raw.length) {
+    const rootStart = raw.indexOf('<tt', cursor);
+    if (rootStart < 0) break;
+    const declarationStart = raw.lastIndexOf('<?xml', rootStart);
+    const start =
+      declarationStart >= cursor && declarationStart < rootStart
+        ? declarationStart
+        : rootStart;
+    const rootEnd = raw.indexOf('</tt>', rootStart);
+    if (rootEnd < 0) break;
+    const end = rootEnd + '</tt>'.length;
+    documents.push(raw.slice(start, end));
+    cursor = end;
+  }
+
+  return documents;
 }
 
 function isValidCueSet(cues: readonly Cue[]): cues is Cue[] {

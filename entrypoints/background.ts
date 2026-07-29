@@ -1,4 +1,5 @@
 import { IndexedDbTranslationCache } from '../src/mt/cache';
+import { createPrimeVideoWebRequestObserver } from '../src/background/primevideo-subtitles';
 import {
   TRANSLATION_CONFIG_STORAGE_KEY,
   type TranslationConfig,
@@ -12,6 +13,17 @@ import { translateCueBatch } from '../src/mt/translator';
 export default defineBackground(() => {
   const cache = new IndexedDbTranslationCache();
   const requests = new Map<string, AbortController>();
+  const observePrimeVideoResponse = createPrimeVideoWebRequestObserver({
+    fetch: (url) => fetch(url),
+    sendMessage: (tabId, message) => chrome.tabs.sendMessage(tabId, message),
+  });
+  chrome.webRequest.onBeforeRequest.addListener(
+    (details) => {
+      void observePrimeVideoResponse(details);
+    },
+    { urls: ['https://*.amazon.pv-cdn.net/*'] },
+  );
+
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (
       areaName !== 'local' ||

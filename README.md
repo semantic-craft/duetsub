@@ -1,6 +1,8 @@
 # DuetSub
 
-DuetSub is an open-source Chrome extension that displays English and Traditional Chinese subtitles together on:
+> Two languages. One screen. No subtitle juggling.
+
+DuetSub is an open-source Chrome extension for people who learn, listen, and watch across languages. It places synchronized English and Traditional Chinese subtitles together on:
 
 - Netflix
 - Prime Video

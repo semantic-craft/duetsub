@@ -147,6 +147,7 @@ class PlaybackController {
     this.#restoredPlayerPosition = ensurePositioned(this.#player);
     this.#nativeCaptions = new NativeCaptionVisibility(
       target.nativeCaptionSelector,
+      siteId === 'netflix' ? target.player : undefined,
     );
     this.#overlayView = createOverlayView(this.#player);
     this.#toggleView = createToggleView(

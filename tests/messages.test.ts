@@ -5,7 +5,9 @@ import {
   maxSubtitleResponseMessage,
   netflixManifestMessage,
   netflixTtmlResponseMessage,
+  primeTimelineOffsetMessage,
   primeTtmlResponseMessage,
+  requestPrimeTimelineOffset,
   youtubeCaptionsMessage,
   youtubePlayerCommand,
   youtubePlayerCommandResult,
@@ -14,16 +16,51 @@ import {
 
 const PRIME_TTML_URL =
   'https://cf-timedtext.aux.pv-cdn.net/example/subtitle.ttml2';
+const PRIME_FRAGMENTED_TEXT_URL =
+  'https://a124vod-dash-pv-ta-amazon.akamaized.net/ww_nrt/sanitized/' +
+  'english_text_1.mp4?token=SIGNED_PLACEHOLDER';
 const MAX_CONTENT_IDENTITY =
   '/video/watch/41c7eddd-2eea-4ed3-a299-474d693063f4/35a8260d-3bc6-4b91-b370-a5f3c72ad6d5';
 
 describe('Prime MAIN to ISOLATED messages', () => {
+  it('validates the correlated Prime playback clock handshake', () => {
+    const request = requestPrimeTimelineOffset('clock-request');
+    const response = primeTimelineOffsetMessage('clock-request', 6_000);
+
+    expect(isDuetSubMessage(request)).toBe(true);
+    expect(isDuetSubMessage(response)).toBe(true);
+    expect(
+      isDuetSubMessage({
+        ...response,
+        timelineOffsetMs: Number.POSITIVE_INFINITY,
+      }),
+    ).toBe(false);
+  });
+
   it('accepts a validated Prime TTML response envelope', () => {
     expect(
       isDuetSubMessage(
         primeTtmlResponseMessage('response-1', PRIME_TTML_URL, '<tt/>'),
       ),
     ).toBe(true);
+  });
+
+  it('accepts the trusted fragmented-text URL used by Off Campus', () => {
+    const valid = primeTtmlResponseMessage(
+      'response-off-campus',
+      PRIME_FRAGMENTED_TEXT_URL,
+      '\u0000\u0000\u0000\u0008mdat<?xml version="1.0"?><tt/>',
+    );
+
+    expect(isDuetSubMessage(valid)).toBe(true);
+    expect(
+      isDuetSubMessage({
+        ...valid,
+        url:
+          'https://a124vod-dash-pv-ta-amazon.akamaized.net.' +
+          'attacker.example/asset/english_text_1.mp4',
+      }),
+    ).toBe(false);
   });
 
   it('rejects page-forged malformed response payloads', () => {
