@@ -1,6 +1,6 @@
 # Verification ledger
 
-Last updated: July 25, 2026
+Last updated: July 29, 2026
 
 Gate labels are strict:
 
@@ -21,6 +21,15 @@ Run `npm run release:build`. It must pass:
 - archive checks excluding source maps, environment files, and private keys.
 
 The command output for the release commit is the authoritative count; this document does not freeze a stale test total.
+
+## `v0.1.4` release candidate
+
+- **PASS — automated release archive:** `npm run release:build` passed 37 test files / 135 tests, TypeScript checking, Chrome MV3 packaging, stable-ID verification, archive-content checks, and the least-privilege host boundary.
+- **PASS — automated store archive:** `npm run store:build` passed the same behavior and type gates; the 18-file store package omits `manifest.key` and retains the least-privilege host boundary.
+- **PASS — source-equivalent Netflix playback:** the unpacked build already loaded in the logged-in Netflix tab uses the same Netflix source and test objects as this candidate. Live playback showed one DuetSub English/Traditional Chinese board and no second native subtitle layer; the tab was returned to paused state afterward.
+- **NOT RUN — exact-candidate extension reload:** browser automation could not access Chrome's internal extensions page, so the final `0.1.4` unpacked directory was not explicitly reloaded before the live observation. The source-equivalent playback result above is not mislabeled as this gate.
+- **NOT RUN — exact-candidate Prime/Max/YouTube replay:** the existing logged-in ledger remains historical evidence; those sites were not replayed on the final `0.1.4` package.
+- **NOT RUN — Chrome Web Store dashboard:** the verified upload archive was prepared locally, but dashboard upload, review, and publication remain human-controlled gates.
 
 ## Logged-in player gates
 
