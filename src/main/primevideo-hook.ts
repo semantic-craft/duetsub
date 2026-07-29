@@ -8,6 +8,7 @@ import {
 
 const xhrUrls = new WeakMap<XMLHttpRequest, string>();
 const completeFragmentedTextPayloads = new Map<string, Promise<string>>();
+const PRIME_ZERO_OFFSET_STABILITY_MS = 2_000;
 let readPrimeTimelineOffsetMs: () => number | undefined = () => undefined;
 
 export function startPrimeVideoMainHook(): void {
@@ -37,7 +38,7 @@ function respondWithPrimeTimelineOffset(event: MessageEvent<unknown>): void {
 async function readStablePrimeTimelineOffsetMs(): Promise<
   number | undefined
 > {
-  const deadline = performance.now() + 500;
+  const deadline = performance.now() + PRIME_ZERO_OFFSET_STABILITY_MS;
   let timelineOffsetMs = readPrimeTimelineOffsetMs();
   while (
     (timelineOffsetMs === undefined || timelineOffsetMs === 0) &&
@@ -69,10 +70,35 @@ function observePrimePlaybackTimeline(): () => number | undefined {
     return () => undefined;
   }
 
-  const kindByBuffer = new WeakMap<SourceBuffer, 'audio' | 'video'>();
-  let audioOffset: number | undefined;
-  let videoOffset: number | undefined;
-  let confirmedOffset: number | undefined;
+  const offsetsByMediaSource = new WeakMap<
+    MediaSource,
+    {
+      audio?: number;
+      video?: number;
+      confirmed?: number;
+    }
+  >();
+  const mediaSourceByUrl = new Map<string, MediaSource>();
+  const originalCreateObjectUrl = URL.createObjectURL;
+  URL.createObjectURL = function duetSubCreateObjectUrl(
+    object: Blob | MediaSource,
+  ): string {
+    const url = originalCreateObjectUrl.call(this, object);
+    if (object instanceof MediaSource) {
+      mediaSourceByUrl.set(url, object);
+    }
+    return url;
+  };
+  const originalRevokeObjectUrl = URL.revokeObjectURL;
+  URL.revokeObjectURL = function duetSubRevokeObjectUrl(url: string): void {
+    mediaSourceByUrl.delete(url);
+    originalRevokeObjectUrl.call(this, url);
+  };
+
+  const bindingByBuffer = new WeakMap<
+    SourceBuffer,
+    { readonly kind: 'audio' | 'video'; readonly source: MediaSource }
+  >();
 
   MediaSource.prototype.addSourceBuffer = function duetSubAddSourceBuffer(
     type: string,
@@ -83,7 +109,9 @@ function observePrimePlaybackTimeline(): () => number | undefined {
       : type.startsWith('video/')
         ? 'video'
         : undefined;
-    if (kind !== undefined) kindByBuffer.set(sourceBuffer, kind);
+    if (kind !== undefined) {
+      bindingByBuffer.set(sourceBuffer, { kind, source: this });
+    }
     return sourceBuffer;
   };
 
@@ -94,23 +122,39 @@ function observePrimePlaybackTimeline(): () => number | undefined {
     set(this: SourceBuffer, value: number) {
       offsetDescriptor.set?.call(this, value);
       if (!Number.isFinite(value)) return;
-      const kind = kindByBuffer.get(this);
-      if (kind === 'audio') audioOffset = value;
-      if (kind === 'video') videoOffset = value;
+      const binding = bindingByBuffer.get(this);
+      if (binding === undefined) return;
+      const offsets = offsetsByMediaSource.get(binding.source) ?? {};
+      offsetsByMediaSource.set(binding.source, offsets);
+      if (binding.kind === 'audio') offsets.audio = value;
+      if (binding.kind === 'video') offsets.video = value;
       if (
-        audioOffset !== undefined &&
-        videoOffset !== undefined &&
-        Math.abs(audioOffset - videoOffset) <= 0.001
+        offsets.audio !== undefined &&
+        offsets.video !== undefined &&
+        Math.abs(offsets.audio - offsets.video) <= 0.001
       ) {
-        confirmedOffset = (audioOffset + videoOffset) / 2;
+        offsets.confirmed = (offsets.audio + offsets.video) / 2;
       }
     },
   });
 
-  return () =>
-    confirmedOffset === undefined
+  return () => {
+    const video = document.querySelector<HTMLVideoElement>(
+      '#dv-web-player video',
+    );
+    const mediaSourceUrl = video?.currentSrc || video?.src;
+    if (mediaSourceUrl === undefined || mediaSourceUrl === '') {
+      return undefined;
+    }
+    const mediaSource = mediaSourceByUrl.get(mediaSourceUrl);
+    const confirmedOffset =
+      mediaSource === undefined
+        ? undefined
+        : offsetsByMediaSource.get(mediaSource)?.confirmed;
+    return confirmedOffset === undefined
       ? undefined
       : Math.round(confirmedOffset * 1_000);
+  };
 }
 
 function patchFetch(): typeof window.fetch {

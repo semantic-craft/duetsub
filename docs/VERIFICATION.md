@@ -22,6 +22,14 @@ Run `npm run release:build`. It must pass:
 
 The command output for the release commit is the authoritative count; this document does not freeze a stale test total.
 
+## `v0.1.5` release candidate
+
+- **PASS — automated release archive:** `npm run release:build` passed 37 test files / 135 tests, TypeScript checking, Chrome MV3 packaging, stable-ID verification, archive-content checks, and the least-privilege host boundary.
+- **PASS — automated store archive:** `npm run store:build` passed the same behavior and type gates; the store package omits `manifest.key` and retains the least-privilege host boundary.
+- **PASS — exact-candidate Prime Video timeline:** after reloading the unpacked extension, the same five Prime Video cues appeared in the native renderer and DuetSub within 43–194 ms. Before the fix, matching cue boundaries were 5.96–6.38 seconds early. Prime native subtitles were returned to off, DuetSub remained enabled, and playback was paused afterward.
+- **NOT RUN — exact-candidate Netflix/Max/YouTube replay:** the existing logged-in ledger remains historical evidence; those sites were not replayed on the final `0.1.5` package.
+- **PENDING — Chrome Web Store dashboard:** upload and submission use the exact verified `0.1.5` store archive.
+
 ## `v0.1.4` release candidate
 
 - **PASS — automated release archive:** `npm run release:build` passed 37 test files / 135 tests, TypeScript checking, Chrome MV3 packaging, stable-ID verification, archive-content checks, and the least-privilege host boundary.
