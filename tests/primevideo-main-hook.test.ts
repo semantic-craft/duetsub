@@ -30,6 +30,7 @@ class FakeMediaSource {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -49,6 +50,7 @@ describe('Prime MAIN-world response observation', () => {
         new Response('cached-range-fragment', { status: 206 }),
       );
     const postMessage = vi.fn();
+    let activeVideoSource = '';
     let messageListener:
       | ((event: MessageEvent<unknown>) => void)
       | undefined;
@@ -70,9 +72,23 @@ describe('Prime MAIN-world response observation', () => {
     vi.stubGlobal('XMLHttpRequest', FakeXmlHttpRequest);
     vi.stubGlobal('SourceBuffer', FakeSourceBuffer);
     vi.stubGlobal('MediaSource', FakeMediaSource);
+    vi.stubGlobal('document', {
+      querySelector(selector: string) {
+        if (selector !== '#dv-web-player video') return null;
+        return {
+          currentSrc: activeVideoSource,
+          src: activeVideoSource,
+        };
+      },
+    });
+    vi.spyOn(URL, 'createObjectURL')
+      .mockReturnValueOnce('blob:https://www.primevideo.com/active-player')
+      .mockReturnValueOnce('blob:https://www.primevideo.com/preview');
+    vi.spyOn(URL, 'revokeObjectURL');
 
     startPrimeVideoMainHook();
     const mediaSource = new MediaSource();
+    activeVideoSource = URL.createObjectURL(mediaSource);
     const audio = mediaSource.addSourceBuffer('audio/mp4');
     const video = mediaSource.addSourceBuffer('video/mp4');
     audio.timestampOffset = 0;
@@ -90,6 +106,9 @@ describe('Prime MAIN-world response observation', () => {
         requestId: 'initializing-clock-request',
       },
     } as unknown as MessageEvent<unknown>);
+    expect(postMessage).not.toHaveBeenCalled();
+
+    await new Promise((resolve) => setTimeout(resolve, 700));
     expect(postMessage).not.toHaveBeenCalled();
 
     video.timestampOffset = 6;
@@ -132,6 +151,13 @@ describe('Prime MAIN-world response observation', () => {
       raw: completeTrack,
     });
     expect(originalFetch).toHaveBeenCalledTimes(3);
+
+    const previewMediaSource = new MediaSource();
+    URL.createObjectURL(previewMediaSource);
+    const previewAudio = previewMediaSource.addSourceBuffer('audio/mp4');
+    const previewVideo = previewMediaSource.addSourceBuffer('video/mp4');
+    previewAudio.timestampOffset = 0;
+    previewVideo.timestampOffset = 0;
 
     messageListener?.({
       source: window,
