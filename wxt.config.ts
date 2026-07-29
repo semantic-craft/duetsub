@@ -7,7 +7,7 @@ export default defineConfig({
   manifest: ({ mode }) => ({
     name: 'DuetSub',
     description: 'Personal bilingual subtitle overlay for supported video sites.',
-    version: '0.1.4',
+    version: '0.1.5',
     ...(mode === 'store' ? {} : { key: STABLE_EXTENSION_PUBLIC_SPKI }),
     permissions: ['storage', 'webRequest'],
     host_permissions: [
