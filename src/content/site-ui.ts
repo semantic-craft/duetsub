@@ -37,7 +37,8 @@ const SITE_UI: Record<SiteId, SiteUiBinding> = {
     videoSelector: '#movie_player video',
     playerSelector: '#movie_player',
     controlsSelector: '.ytp-right-controls',
-    nativeCaptionSelector: '[data-duetsub-native-captions="youtube"]',
+    nativeCaptionSelector:
+      '.ytp-caption-window-container, [data-duetsub-native-captions="youtube"]',
   },
 };
 

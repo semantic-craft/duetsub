@@ -70,6 +70,32 @@ describe('Prime Video site UI', () => {
   });
 });
 
+describe('YouTube site UI', () => {
+  it('uses the verified native caption window as the suppression target', () => {
+    const player = element();
+    const controls = element(player);
+    const video = element(player) as HTMLVideoElement;
+
+    vi.stubGlobal('window', {
+      location: {
+        href: 'https://www.youtube.com/watch?v=video-one',
+      },
+    });
+    vi.stubGlobal('document', {
+      querySelector: (selector: string) => {
+        if (selector === '#movie_player video') return video;
+        if (selector === '#movie_player') return player;
+        if (selector === '.ytp-right-controls') return controls;
+        return null;
+      },
+    });
+
+    expect(findSiteUiTarget('youtube')?.nativeCaptionSelector).toBe(
+      '.ytp-caption-window-container, [data-duetsub-native-captions="youtube"]',
+    );
+  });
+});
+
 describe('Netflix site UI', () => {
   it('uses the stable fullscreen anchor in the right control group', () => {
     const player = element();
