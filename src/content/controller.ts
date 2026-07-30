@@ -176,6 +176,7 @@ class PlaybackController {
         onSelectLanguagePair: (preference) => {
           void this.#selectLanguagePair(preference);
         },
+        onReloadOfficialTracks: () => this.#reloadOfficialTracks(),
         onRetranslate: () => {
           if (this.#translationPlan === undefined) {
             this.#status = '目前使用官方雙軌，無需重新翻譯';
@@ -417,6 +418,35 @@ class PlaybackController {
       return;
     }
     if (this.#canLoadTracks()) this.#adapter.start();
+  }
+
+  #reloadOfficialTracks(): void {
+    this.#interactionRevision += 1;
+    this.#acquisitionRevision += 1;
+    this.#state = reducePlaybackLifecycle(this.#state, {
+      type: 'reload-tracks',
+    });
+    this.#clearTrackData();
+    this.#bindAdapterGeneration();
+
+    if (!this.#state.enabled) {
+      this.#status = '關閉 · 已清除本輪官方字幕';
+      this.#render();
+      return;
+    }
+    if (this.#adapter === undefined) {
+      this.#requestFakeData();
+      return;
+    }
+    if (!this.#canLoadTracks()) {
+      this.#status = `開啟 · 等待可驗證的 ${this.#siteLabel} 內容身份`;
+      this.#render();
+      return;
+    }
+
+    this.#status = `正在重新載入 ${pairLabel(this.#languagePairPreference)}…`;
+    this.#render();
+    this.#adapter.start();
   }
 
   async #selectLanguagePair(

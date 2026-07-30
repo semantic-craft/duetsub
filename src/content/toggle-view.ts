@@ -11,6 +11,7 @@ export interface ToggleViewCallbacks {
   readonly onSelectLanguagePair: (
     preference: LanguagePairPreference,
   ) => void;
+  readonly onReloadOfficialTracks: () => void;
   readonly onRetranslate: () => void;
   readonly onOpenSettings: () => void;
 }
@@ -108,9 +109,17 @@ export function createToggleView(
   chooser.append(topSelect.label, bottomSelect.label);
 
   const swap = menuButton('交換上下');
-  const retranslate = menuButton('重新翻譯（ticket 04）');
+  const reloadOfficial = menuButton('重新載入官方字幕');
+  const retranslate = menuButton('重新翻譯');
   const settings = menuButton('打開設定');
-  popover.append(status, chooser, swap, retranslate, settings);
+  popover.append(
+    status,
+    chooser,
+    swap,
+    reloadOfficial,
+    retranslate,
+    settings,
+  );
   shadow.append(style, button, languageButton, popover);
   anchor.insertBefore(host, before ?? null);
 
@@ -204,6 +213,10 @@ export function createToggleView(
       topSelect.select.value,
     );
     if (preference !== undefined) callbacks.onSelectLanguagePair(preference);
+  });
+  reloadOfficial.addEventListener('click', () => {
+    callbacks.onReloadOfficialTracks();
+    hidePopover();
   });
   retranslate.addEventListener('click', () => {
     callbacks.onRetranslate();

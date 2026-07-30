@@ -74,6 +74,23 @@ describe('playback lifecycle', () => {
     expect(acceptPlaybackGeneration(changed, oldStatus)).toBeUndefined();
   });
 
+  it('invalidates the current acquisition when official tracks are manually reloaded', () => {
+    const ready = readyLifecycle();
+    const oldCues = bindPlaybackGeneration(ready, ['cached cue']);
+    const reloading = reducePlaybackLifecycle(ready, {
+      type: 'reload-tracks',
+    });
+
+    expect(reloading.selectionGeneration).toBe(
+      ready.selectionGeneration + 1,
+    );
+    expect(reloading.enabled).toBe(true);
+    expect(reloading.tracksReady).toBe(false);
+    expect(needsTrackAcquisition(reloading)).toBe(true);
+    expect(shouldHideNativeCaptions(reloading)).toBe(false);
+    expect(acceptPlaybackGeneration(reloading, oldCues)).toBeUndefined();
+  });
+
   it('rejects the previous episode response after the verified content identity changes', () => {
     const episodeOne = readyLifecycle(
       reducePlaybackLifecycle(INITIAL_PLAYBACK_LIFECYCLE, {
