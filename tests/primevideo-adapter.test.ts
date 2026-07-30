@@ -41,16 +41,24 @@ describe('Prime official subtitle metadata', () => {
       visibility: 'visible',
     }));
     vi.stubGlobal('document', {
-      querySelector: (selector: string) =>
-        selector ===
-        'div[id^="dv-web-player"].dv-player-fullscreen .atvwebplayersdk-subtitle-radio-group'
-          ? group
-          : null,
+      querySelector: (selector: string) => {
+        if (
+          selector ===
+          'div[id^="dv-web-player"].dv-player-fullscreen .atvwebplayersdk-subtitle-radio-group'
+        ) {
+          return group;
+        }
+        if (
+          selector ===
+          'div[id^="dv-web-player"].dv-player-fullscreen button[aria-label="Subtitles and Audio Menu"]'
+        ) {
+          return button;
+        }
+        return null;
+      },
     });
 
-    await expect(
-      ensurePrimeSubtitleMenuOpen(button as unknown as HTMLButtonElement),
-    ).resolves.toBe(group);
+    await expect(ensurePrimeSubtitleMenuOpen()).resolves.toBe(group);
     expect(button.click).toHaveBeenCalledOnce();
   });
 
@@ -87,15 +95,24 @@ describe('Prime official subtitle metadata', () => {
       visibility: 'visible',
     }));
     vi.stubGlobal('document', {
-      querySelector: (selector: string) =>
-        selector ===
-        'div[id^="dv-web-player"].dv-player-fullscreen .atvwebplayersdk-subtitle-radio-group'
-          ? group
-          : null,
+      querySelector: (selector: string) => {
+        if (
+          selector ===
+          'div[id^="dv-web-player"].dv-player-fullscreen .atvwebplayersdk-subtitle-radio-group'
+        ) {
+          return group;
+        }
+        if (
+          selector ===
+          'div[id^="dv-web-player"].dv-player-fullscreen button[aria-label="Subtitles and Audio Menu"]'
+        ) {
+          return button;
+        }
+        return null;
+      },
     });
 
     const restored = restorePrimeSubtitleState(
-      button as unknown as HTMLButtonElement,
       currentRadio.id,
       false,
     );

@@ -218,8 +218,8 @@ class PrimeVideoAdapter implements SiteAdapter {
       return;
     }
 
-    const button = await waitForMenuButton().catch(() => undefined);
-    if (button === undefined) {
+    const menuAvailable = await waitForMenuButton().catch(() => undefined);
+    if (menuAvailable === undefined) {
       rejectRequests(requests, new Error('Prime subtitle menu unavailable'));
       return;
     }
@@ -264,7 +264,7 @@ class PrimeVideoAdapter implements SiteAdapter {
         restore: async () =>
           generation.contentGeneration !==
               this.#generation.contentGeneration ||
-          restorePrimeSubtitleState(button, originalId, menuWasOpen),
+          restorePrimeSubtitleState(originalId, menuWasOpen),
       });
       captured = applyPrimeVideoPairAlignmentPolicy(
         requestedTracks,
@@ -292,8 +292,7 @@ class PrimeVideoAdapter implements SiteAdapter {
     track: TrackInfo,
     generation: PlaybackGeneration,
   ): Promise<Cue[]> {
-    const button = await waitForMenuButton();
-    let group = await ensurePrimeSubtitleMenuOpen(button);
+    let group = await ensurePrimeSubtitleMenuOpen();
     let radio = findRadio(group, track.id);
     if (radio === undefined) throw new Error(`Prime track disappeared: ${track.id}`);
 
@@ -307,7 +306,7 @@ class PrimeVideoAdapter implements SiteAdapter {
         () => isPrimeSubtitleTrackChecked(off.id),
         DOM_TIMEOUT_MS,
       );
-      group = await ensurePrimeSubtitleMenuOpen(button);
+      group = await ensurePrimeSubtitleMenuOpen();
       radio = findRadio(group, track.id);
       if (radio === undefined) throw new Error(`Prime track disappeared: ${track.id}`);
     }
@@ -654,12 +653,11 @@ function isTraditionalChineseTrack(track: TrackInfo): boolean {
 }
 
 export async function restorePrimeSubtitleState(
-  button: HTMLButtonElement,
   originalId: string,
   menuWasOpen: boolean,
 ): Promise<boolean> {
   try {
-    const group = await ensurePrimeSubtitleMenuOpen(button);
+    const group = await ensurePrimeSubtitleMenuOpen();
     const original = findRadio(group, originalId);
     if (original === undefined) return false;
     if (!original.checked) {
@@ -669,20 +667,20 @@ export async function restorePrimeSubtitleState(
         DOM_TIMEOUT_MS,
       );
     }
-    return await restoreMenuState(button, menuWasOpen);
+    return await restoreMenuState(menuWasOpen);
   } catch {
     return false;
   }
 }
 
 async function restoreMenuState(
-  button: HTMLButtonElement,
   menuWasOpen: boolean,
 ): Promise<boolean> {
   try {
     if (menuWasOpen) {
-      await ensurePrimeSubtitleMenuOpen(button);
+      await ensurePrimeSubtitleMenuOpen();
     } else if (isSubtitleMenuOpen()) {
+      const button = await waitForMenuButton();
       button.click();
       await waitUntil(() => !isSubtitleMenuOpen(), DOM_TIMEOUT_MS);
     }
@@ -692,13 +690,12 @@ async function restoreMenuState(
   }
 }
 
-export async function ensurePrimeSubtitleMenuOpen(
-  button: HTMLButtonElement,
-): Promise<HTMLElement> {
+export async function ensurePrimeSubtitleMenuOpen(): Promise<HTMLElement> {
   const current = document.querySelector<HTMLElement>(
     PRIME_SUBTITLE_GROUP_SELECTOR,
   );
   if (current !== null && isVisible(current)) return current;
+  const button = await waitForMenuButton();
   button.click();
   await waitUntil(() => isSubtitleMenuOpen(), DOM_TIMEOUT_MS);
   const group = document.querySelector<HTMLElement>(
