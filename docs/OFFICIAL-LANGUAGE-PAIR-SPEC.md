@@ -197,7 +197,7 @@ interface PlaybackGeneration {
 - 对齐重排只能通过内部 `(siteId, topLanguage, bottomLanguage, trackKind)` 白名单启用。
 - 白名单必须来自同一 media time 的真人逐句证据；自动测试不能创建白名单。
 - 允许的对齐只能基于 cue 区间重叠和已存在的硬换行，不得固定加减 offset、翻译、改写、语义重排或生成新文本。
-- 唯一匹配覆盖率低于既定阈值时，整对 fail closed，不退回未经验证的对齐。
+- 唯一匹配覆盖率低于既定阈值时，不应用未经验证的对齐副本，保留两条官方轨各自的原始 cue 区间。
 - 当前已验证的 English-primary / Traditional-Chinese 行为作为兼容 policy 保留；其他语言对先走原始时序，真人验证后再决定是否增加 policy。
 
 ## 11. Overlay 国际化
