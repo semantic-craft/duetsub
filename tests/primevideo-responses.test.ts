@@ -25,6 +25,13 @@ const OFF_CAMPUS_ENGLISH_TRACK: TrackInfo = {
   label: 'English [CC]',
   kind: 'closed-captions',
 };
+const OFF_CAMPUS_JAPANESE_TRACK: TrackInfo = {
+  id: 'ja-jp_Subtitle_Dialog',
+  language: 'ja-JP',
+  source: 'official',
+  label: '日本語',
+  kind: 'subtitles',
+};
 
 const EPISODE_ONE = {
   contentGeneration: 1,
@@ -130,6 +137,38 @@ describe('Prime TTML response inbox', () => {
         end: 259_041,
         text: 'Did she do it?',
         language: 'en-US',
+      },
+    ]);
+  });
+
+  it('accepts the non-standard jp language code in the Off Campus Japanese TTML', () => {
+    const raw =
+      '<?xml version="1.0" encoding="utf-8"?>' +
+      '<tt xmlns="http://www.w3.org/ns/ttml" xml:lang="jp">' +
+      '<body><div><p begin="00:00:04.625" end="00:00:06.291">' +
+      '日本語の字幕' +
+      '</p></div></body></tt>';
+    const inbox = recordPrimeTtmlResponse(EMPTY_PRIME_TTML_INBOX, {
+      responseId: 'off-campus-japanese-jp-alias',
+      trackId: OFF_CAMPUS_JAPANESE_TRACK.id,
+      raw,
+      generation: EPISODE_ONE,
+    });
+
+    expect(
+      consumePrimeTtmlResponse(
+        inbox,
+        OFF_CAMPUS_JAPANESE_TRACK,
+        EPISODE_ONE,
+        new DOMParser(),
+        0,
+      ).cues,
+    ).toEqual([
+      {
+        start: 4_625,
+        end: 6_291,
+        text: '日本語の字幕',
+        language: 'ja-JP',
       },
     ]);
   });

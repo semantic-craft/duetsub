@@ -88,8 +88,12 @@ export function consumePrimeTtmlResponse(
 }
 
 function acceptedPrimeTtmlLanguages(language: string): readonly string[] {
-  if (language.toLowerCase() === 'zh-hant') {
+  const normalized = language.toLowerCase();
+  if (normalized === 'zh-hant') {
     return ['zh-Hant', 'cmn-Hant', 'zh-TW', 'cmn-TW'];
+  }
+  if (normalized === 'ja' || normalized === 'ja-jp') {
+    return [language, 'ja', 'jp'];
   }
   return [language];
 }
