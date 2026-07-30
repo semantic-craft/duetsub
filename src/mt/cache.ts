@@ -2,7 +2,11 @@ export interface TranslationCacheIdentity {
   readonly contentId: string;
   readonly trackId: string;
   readonly sourceText: string;
+  readonly sourceStartMs: number;
+  readonly sourceEndMs: number;
   readonly targetLanguage: string;
+  readonly promptProfile: string;
+  readonly promptVersion: string;
   readonly provider: string;
   readonly endpoint: string;
   readonly model: string;
@@ -22,7 +26,11 @@ export async function translationCacheKey(
     identity.contentId,
     identity.trackId,
     identity.sourceText.trim().replace(/\s+/g, ' '),
+    identity.sourceStartMs,
+    identity.sourceEndMs,
     identity.targetLanguage,
+    identity.promptProfile,
+    identity.promptVersion,
     identity.provider,
     new URL(identity.endpoint).origin +
       new URL(identity.endpoint).pathname.replace(/\/$/, ''),

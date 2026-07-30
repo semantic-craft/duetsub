@@ -9,7 +9,11 @@ describe('translation cache', () => {
       contentId: 'episode-1',
       trackId: 'en',
       sourceText: '  Hello   world ',
+      sourceStartMs: 1_000,
+      sourceEndMs: 2_500,
       targetLanguage: 'zh-Hant',
+      promptProfile: 'film-tv',
+      promptVersion: 'subtitle-v10-scope-hard-check',
       provider: 'deepseek',
       endpoint: 'https://api.deepseek.com',
       model: 'deepseek-v4-flash',
@@ -22,6 +26,8 @@ describe('translation cache', () => {
       { endpoint: 'https://other.example/v1' },
       { provider: 'openai-compatible' },
       { targetLanguage: 'en' },
+      { promptProfile: 'youtube' },
+      { sourceEndMs: 3_000 },
       { webSearchEnabled: true },
     ]) {
       expect(await translationCacheKey({ ...base, ...changed })).not.toBe(key);

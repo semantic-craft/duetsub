@@ -20,5 +20,15 @@ describe('translation batch scheduling', () => {
     expect(batches[0]?.map((cue) => cue.text)).toContain('cue-10');
     expect(batches.every((batch) => batch.length <= MT_BATCH_SIZE)).toBe(true);
     expect(batches.flat()).toHaveLength(cues.length);
+    expect(
+      batches.every((batch) =>
+        batch.every((cue, index) =>
+          index === 0 || batch[index - 1]!.start <= cue.start
+        )
+      ),
+    ).toBe(true);
+    expect(new Set(batches.flat().map((cue) => cue.text)).size).toBe(
+      cues.length,
+    );
   });
 });

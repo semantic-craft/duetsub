@@ -45,7 +45,7 @@ The menu is generated from the current title instead of a static all-language ca
 
 Two verified official tracks never contact a translation service.
 
-When the standard English / Traditional Chinese fallback needs translation, DuetSub sends only the required subtitle text to the endpoint you explicitly configure and authorize. Qwen uses the Responses API with a Workspace ID supplied by the user; optional Qwen web search is off by default. API keys, preferences, and the local translation cache stay in `chrome.storage.local`.
+When the standard English / Traditional Chinese fallback needs translation, DuetSub sends only the required subtitle text to the endpoint you explicitly configure and authorize. Qwen uses the Responses API with a Workspace ID supplied by the user; new Qwen configurations default to the live-tested `qwen3.7-flash`, while existing saved model choices are preserved. Optional Qwen web search is off by default. API keys, preferences, and the local translation cache stay in `chrome.storage.local`.
 
 The settings interface is available in English, Simplified Chinese, and Traditional Chinese.
 

@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Cue } from '../src/core/contracts';
-import { translateCueBatch } from '../src/mt/translator';
+import {
+  subtitleTranslationSystemPrompt,
+  translateCueBatch,
+} from '../src/mt/translator';
 
 const source: Cue[] = [
   { start: 100, end: 900, text: 'Hello', language: 'en' },
@@ -22,7 +25,8 @@ describe('translation HTTP seam', () => {
         JSON.stringify({
           choices: [{
             message: {
-              content: '{"translations":["你好","世界"]}',
+              content:
+                '{"translations":[{"id":0,"text":"你好"},{"id":1,"text":"世界"}]}',
             },
           }],
         }),
@@ -33,6 +37,7 @@ describe('translation HTTP seam', () => {
       {
         contentId: 'episode',
         trackId: 'en',
+        promptProfile: 'film-tv',
         targetLanguage: 'zh-Hant',
         cues: source,
         config,
@@ -67,20 +72,22 @@ describe('translation HTTP seam', () => {
       'Traditional Chinese (zh-Hant)',
     );
     expect(request.messages?.[0]?.content).toContain(
-      'JSON OUTPUT EXAMPLE',
+      'film and television',
     );
     expect(request.messages?.[0]?.content).toContain(
-      '{"translations":["translated item 1","translated item 2"]}',
+      'duration_ms',
     );
     expect(request.messages?.[1]).toEqual({
       role: 'user',
-      content: '{"texts":["Hello","World"]}',
+      content:
+        '{"cues":[{"id":0,"start_ms":100,"end_ms":900,"duration_ms":800,"max_reading_units":9,"text":"Hello"},{"id":1,"start_ms":1000,"end_ms":1800,"duration_ms":800,"max_reading_units":9,"text":"World"}]}',
     });
   });
 
   it('fails soft when a cloud key is absent', async () => {
     const result = await translateCueBatch(
-      { contentId: 'episode', trackId: 'en', targetLanguage: 'zh-Hant', cues: source,
+      { contentId: 'episode', trackId: 'en', promptProfile: 'film-tv',
+        targetLanguage: 'zh-Hant', cues: source,
         config: { ...config, apiKey: '' } },
       { fetch: vi.fn() },
     );
@@ -149,7 +156,8 @@ describe('translation HTTP seam', () => {
               type: 'message',
               content: [{
                 type: 'output_text',
-                text: '{"translations":["你好","世界"]}',
+                text:
+                  '{"translations":[{"id":0,"text":"你好"},{"id":1,"text":"世界"}]}',
               }],
             },
           ],
@@ -162,6 +170,7 @@ describe('translation HTTP seam', () => {
       {
         contentId: 'episode',
         trackId: 'en',
+        promptProfile: 'youtube',
         targetLanguage: 'zh-Hant',
         cues: source,
         config: {
@@ -191,12 +200,39 @@ describe('translation HTTP seam', () => {
     expect(request.messages).toBeUndefined();
     expect(request.input?.[0]).toEqual({
       role: 'system',
-      content: expect.stringContaining('JSON OUTPUT EXAMPLE'),
+      content: expect.stringContaining('YouTube'),
     });
     expect(request.input?.[1]).toEqual({
       role: 'user',
-      content: '{"texts":["Hello","World"]}',
+      content:
+        '{"cues":[{"id":0,"start_ms":100,"end_ms":900,"duration_ms":800,"max_reading_units":11,"text":"Hello"},{"id":1,"start_ms":1000,"end_ms":1800,"duration_ms":800,"max_reading_units":11,"text":"World"}]}',
     });
+  });
+
+  it('uses separate film/TV and YouTube subtitle prompt contracts', () => {
+    const film = subtitleTranslationSystemPrompt('film-tv', 'en');
+    const youtube = subtitleTranslationSystemPrompt('youtube', 'en');
+
+    expect(film).toContain('character voice');
+    expect(film).toContain('humor');
+    expect(youtube).toContain('tutorial steps');
+    expect(youtube).toContain('software UI labels');
+    expect(
+      subtitleTranslationSystemPrompt('film-tv', 'zh-Hant'),
+    ).toContain('calculated at 9');
+    expect(
+      subtitleTranslationSystemPrompt('youtube', 'zh-Hant'),
+    ).toContain('calculated at 11');
+    expect(film).not.toBe(youtube);
+    for (const prompt of [film, youtube]) {
+      expect(prompt).toContain('start_ms');
+      expect(prompt).toContain('end_ms');
+      expect(prompt).toContain('duration_ms');
+      expect(prompt).toContain('max_reading_units');
+      expect(prompt).toContain('Duration is a display budget');
+      expect(prompt).toContain('at most two lines');
+      expect(prompt).toContain('same cue ids');
+    }
   });
 
   it('bounds 429 retries and makes backoff abortable', async () => {
@@ -208,6 +244,7 @@ describe('translation HTTP seam', () => {
       {
         contentId: 'episode',
         trackId: 'en',
+        promptProfile: 'film-tv',
         targetLanguage: 'zh-Hant',
         cues: source,
         config,
@@ -224,6 +261,7 @@ describe('translation HTTP seam', () => {
       {
         contentId: 'episode',
         trackId: 'en',
+        promptProfile: 'film-tv',
         targetLanguage: 'zh-Hant',
         cues: source,
         config,

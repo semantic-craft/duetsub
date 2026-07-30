@@ -1057,6 +1057,7 @@ class PlaybackController {
         generation,
         contentId: this.#state.contentIdentity ?? `${this.#siteId}:unknown`,
         trackId: plan.trackId,
+        promptProfile: this.#siteId === 'youtube' ? 'youtube' : 'film-tv',
         targetLanguage: plan.targetLanguage,
         cues: batch,
         skipCache,
