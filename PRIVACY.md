@@ -11,16 +11,26 @@ DuetSub processes the following data inside the browser:
 - subtitle text and timing already made available by the supported video site;
 - the current content identity needed to reject stale subtitles after navigation or episode changes;
 - the per-site DuetSub on/off preference;
+- the global top and bottom official-language preference;
 - an optional translation provider, endpoint, model, and API key;
 - translated subtitle text cached in the extension's IndexedDB storage.
 
 Settings and API keys use `chrome.storage.local`, not Chrome Sync. API keys are masked in the settings interface and are not written to extension logs.
 
+## Official language pairs
+
+The manual Official Pair menu contains only machine-verifiable official subtitle
+languages already available to the signed-in viewer for the current title. When
+both selected official tracks resolve, their subtitle text and timing remain in
+the browser and DuetSub does not contact a translation endpoint. The saved
+top/bottom preference is local; each title is checked against its own current
+official-track catalog and fails closed when either selection is unavailable.
+
 ## Optional machine translation
 
-DuetSub does not translate when suitable official English and Chinese tracks are both available.
+DuetSub does not translate when both selected official tracks are available.
 
-When one language is missing, machine translation occurs only if the user has:
+When one selected language is missing, machine translation occurs only if the user has:
 
 1. configured a translation endpoint;
 2. explicitly granted access to that endpoint through Chrome's permission prompt; and

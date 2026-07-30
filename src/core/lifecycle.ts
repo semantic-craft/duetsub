@@ -30,6 +30,7 @@ export type PlaybackLifecycleAction =
   | { readonly type: 'tracks-loading' }
   | { readonly type: 'tracks-ready' }
   | { readonly type: 'selection-changed' }
+  | { readonly type: 'reload-tracks' }
   | { readonly type: 'seeking' }
   | { readonly type: 'seeked' }
   | { readonly type: 'ad-entered' }
@@ -65,6 +66,7 @@ export function reducePlaybackLifecycle(
     case 'tracks-ready':
       return { ...state, tracksReady: true, suspension: 'none' };
     case 'selection-changed':
+    case 'reload-tracks':
       return {
         ...state,
         tracksReady: false,

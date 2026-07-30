@@ -1,6 +1,6 @@
 # Verification ledger
 
-Last updated: July 30, 2026
+Last updated: July 31, 2026
 
 Gate labels are strict:
 
@@ -21,6 +21,46 @@ Run `npm run release:build`. It must pass:
 - archive checks excluding source maps, environment files, and private keys.
 
 The command output for the release commit is the authoritative count; this document does not freeze a stale test total.
+
+## Official Language Pair integration candidate
+
+Runtime candidate `fa0989e` was built into `.output/chrome-mv3`, synchronized to
+the real unpacked-extension loading directory, and compared byte-for-byte after
+the final release build. Prime Video, Netflix, Max, and YouTube were all
+rechecked from that same build.
+
+The integration merge into `main` preserved the independently added
+multilingual UI and passed the automated release gates below. The logged-in
+table remains evidence for exact runtime candidate `fa0989e`; no post-merge
+playback was counted as an exact-candidate human gate.
+
+### Automated
+
+- **PASS — tests and types:** 48 test files / 224 tests and `tsc --noEmit`.
+- **PASS — standalone archive:** `npm run release:build`; SHA-256
+  `4c3e5c7818e417650632d120362044933b0b697ed5f270bfe49b08ade78d60f0`.
+- **PASS — store archive:** `npm run store:build`; SHA-256
+  `402f3ca8f31f430f01e3272489063c55927211e047092ffda116e1e08e35b55a`.
+- **PASS — permissions and contents:** exact required/optional host allowlists,
+  no store `manifest.key`, no source maps/environment/private-key files, no
+  embedded Workspace ID, credential-shaped secret, materialized signed subtitle
+  URL, viewing identifier, logged-in subtitle sample, debug statement,
+  proprietary research file, or static all-language catalog.
+- **PASS — dependency and diff checks:** `npm audit --omit=dev` reported zero
+  vulnerabilities; `git diff --check` passed.
+
+### Same-build logged-in gates
+
+| Site | Final selected pair | Seek / navigation | Native restoration | Ads |
+| --- | --- | --- | --- | --- |
+| Prime Video | PASS — `en-US` top, `zh-Hant` bottom, 100%; manual official-track reload recovered an initial fail-closed restore timeout | PASS — real 10-second seek; earlier same-branch non-default pair and episode replacement also passed | PASS — native selection/renderer and closed-menu state restored, then pair re-enabled | NOT RUN |
+| Netflix | PASS — `en` top, `zh-Hant` bottom, 100% through the verified menu fallback | PASS — real seek; same-branch episode/video replacement passed | PASS — `.player-timedtext` visible when off and hidden only after both tracks were ready | NOT RUN |
+| Max | PASS — `en-US` top, `zh-Hant-TW` bottom, 100% | PASS — real seek; same-branch episode replacement and non-English/Chinese original timing passed | PASS — caption renderer restored; video stayed ready and visible | NOT RUN |
+| YouTube | PASS — creator-official `en` top, `zh-Hant` bottom, 100% on two TED videos | PASS — real seek and cross-video ownership; previous same-branch SPA lifecycle passed | PASS — native caption container restored when off, pair resumed when on | NOT RUN |
+
+Netflix's live manifest fast path and a naturally occurring YouTube one-time
+re-prime were **NOT RUN** on the final candidate and are not reported as PASS or
+WAIVED. **Environmental WAIVED: none.**
 
 ## `v0.1.6` release candidate
 
@@ -47,7 +87,7 @@ The command output for the release commit is the authoritative count; this docum
 - **NOT RUN — exact-candidate Prime/Max/YouTube replay:** the existing logged-in ledger remains historical evidence; those sites were not replayed on the final `0.1.4` package.
 - **NOT RUN — Chrome Web Store dashboard:** the verified upload archive was prepared locally, but dashboard upload, review, and publication remain human-controlled gates.
 
-## Logged-in player gates
+## Historical pre-integration player gates
 
 | Site | Official dual track | Seek | Episode/video replacement | Native subtitle restoration | Ads |
 | --- | --- | --- | --- | --- | --- |

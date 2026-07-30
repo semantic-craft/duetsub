@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { TrackInfo } from '../src/core/contracts';
 import {
   decideSubtitleSources,
+  decideYoutubeSubtitleSources,
   selectBilingualTracks,
   selectOfficialDualTracks,
 } from '../src/core/track-selection';
@@ -196,6 +197,51 @@ describe('selectBilingualTracks', () => {
       english: asrEnglish,
       chinese: translatedChinese,
       missing: [],
+    });
+  });
+});
+
+describe('decideYoutubeSubtitleSources', () => {
+  it('keeps a creator official pair ahead of every fallback', () => {
+    expect(
+      decideYoutubeSubtitleSources([
+        { ...officialEnglish, source: 'asr' },
+        officialEnglish,
+        officialTraditionalChinese,
+      ]),
+    ).toEqual({
+      english: { kind: 'official', track: officialEnglish },
+      chinese: {
+        kind: 'official',
+        track: officialTraditionalChinese,
+      },
+    });
+  });
+
+  it('uses an official source with DuetSub MT when its pair is missing', () => {
+    expect(decideYoutubeSubtitleSources([officialEnglish])).toEqual({
+      english: { kind: 'official', track: officialEnglish },
+      chinese: {
+        kind: 'mt',
+        source: officialEnglish,
+        targetLanguage: 'zh-Hant',
+      },
+    });
+  });
+
+  it('uses ASR only as a last source and labels the other side as MT', () => {
+    const asrEnglish: TrackInfo = {
+      ...officialEnglish,
+      id: 'asr-en',
+      source: 'asr',
+    };
+    expect(decideYoutubeSubtitleSources([asrEnglish])).toEqual({
+      english: { kind: 'official', track: asrEnglish },
+      chinese: {
+        kind: 'mt',
+        source: asrEnglish,
+        targetLanguage: 'zh-Hant',
+      },
     });
   });
 });

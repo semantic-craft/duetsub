@@ -12,6 +12,7 @@ const config = {
   baseUrl: 'https://api.deepseek.com',
   apiKey: 'test-only-token',
   model: 'deepseek-v4-flash',
+  webSearchEnabled: false,
 };
 
 describe('translation HTTP seam', () => {
@@ -84,6 +85,118 @@ describe('translation HTTP seam', () => {
       { fetch: vi.fn() },
     );
     expect(result).toEqual({ status: 'missing-key', cues: [] });
+  });
+
+  it.each([
+    {
+      provider: 'qwen-cn' as const,
+      baseUrl:
+        'https://ws-cn-test.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
+      model: 'qwen3.7-flash',
+      webSearchEnabled: false,
+      expected: {
+        reasoning: { effort: 'none' },
+        store: false,
+      },
+      expectedTools: undefined,
+    },
+    {
+      provider: 'qwen-sg' as const,
+      baseUrl:
+        'https://ws-sg-test.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1',
+      model: 'qwen3.7-plus',
+      webSearchEnabled: true,
+      expected: {
+        reasoning: { effort: 'low' },
+        store: false,
+      },
+      expectedTools: [{ type: 'web_search' }],
+    },
+    {
+      provider: 'doubao' as const,
+      baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+      model: 'doubao-seed-2-1-pro-260628',
+      webSearchEnabled: false,
+      expected: {
+        thinking: { type: 'disabled' },
+        text: { format: { type: 'json_object' } },
+        max_output_tokens: 4_096,
+        store: false,
+      },
+      expectedTools: undefined,
+    },
+  ])('uses deterministic $provider request options', async ({
+    provider,
+    baseUrl,
+    model,
+    webSearchEnabled,
+    expected,
+    expectedTools,
+  }) => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          output: [
+            {
+              type: 'reasoning',
+              summary: [],
+            },
+            {
+              type: 'web_search_call',
+              action: { type: 'search', query: 'subtitle proper noun' },
+            },
+            {
+              type: 'message',
+              content: [{
+                type: 'output_text',
+                text: '{"translations":["你好","世界"]}',
+              }],
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const result = await translateCueBatch(
+      {
+        contentId: 'episode',
+        trackId: 'en',
+        targetLanguage: 'zh-Hant',
+        cues: source,
+        config: {
+          provider,
+          baseUrl,
+          apiKey: 'provider-test-token',
+          model,
+          webSearchEnabled,
+        },
+      },
+      { fetch },
+    );
+
+    expect(result.status).toBe('ok');
+    expect(fetch).toHaveBeenCalledWith(
+      `${baseUrl}/responses`,
+      expect.any(Object),
+    );
+    const request = JSON.parse(
+      String(fetch.mock.calls[0]?.[1]?.body),
+    ) as {
+      input?: Array<{ role?: string; content?: string }>;
+      messages?: unknown;
+    } & Record<string, unknown>;
+    expect(request).toMatchObject(expected);
+    expect(request.tools).toEqual(expectedTools);
+    expect(request.messages).toBeUndefined();
+    expect(request.input?.[0]).toEqual({
+      role: 'system',
+      content: expect.stringContaining('JSON OUTPUT EXAMPLE'),
+    });
+    expect(request.input?.[1]).toEqual({
+      role: 'user',
+      content: '{"texts":["Hello","World"]}',
+    });
   });
 
   it('bounds 429 retries and makes backoff abortable', async () => {

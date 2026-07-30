@@ -13,6 +13,7 @@ describe('translation cache', () => {
       provider: 'deepseek',
       endpoint: 'https://api.deepseek.com',
       model: 'deepseek-v4-flash',
+      webSearchEnabled: false,
     };
     const key = await translationCacheKey(base);
     expect(key).toBe(await translationCacheKey({ ...base }));
@@ -21,6 +22,7 @@ describe('translation cache', () => {
       { endpoint: 'https://other.example/v1' },
       { provider: 'openai-compatible' },
       { targetLanguage: 'en' },
+      { webSearchEnabled: true },
     ]) {
       expect(await translationCacheKey({ ...base, ...changed })).not.toBe(key);
     }

@@ -94,6 +94,47 @@ export function selectBilingualTracks(
   return { english, chinese, missing };
 }
 
+export function decideYoutubeSubtitleSources(
+  tracks: readonly TrackInfo[],
+): SubtitleSourceDecision {
+  const selected = selectBilingualTracks(tracks);
+  if (selected.english !== undefined && selected.chinese !== undefined) {
+    return {
+      english: { kind: 'official', track: selected.english },
+      chinese: { kind: 'official', track: selected.chinese },
+    };
+  }
+
+  const creatorDecision = decideSubtitleSources(tracks);
+  if (
+    creatorDecision.english !== undefined &&
+    creatorDecision.chinese !== undefined
+  ) {
+    return creatorDecision;
+  }
+  if (selected.english !== undefined) {
+    return {
+      english: { kind: 'official', track: selected.english },
+      chinese: {
+        kind: 'mt',
+        source: selected.english,
+        targetLanguage: 'zh-Hant',
+      },
+    };
+  }
+  if (selected.chinese !== undefined) {
+    return {
+      english: {
+        kind: 'mt',
+        source: selected.chinese,
+        targetLanguage: 'en',
+      },
+      chinese: { kind: 'official', track: selected.chinese },
+    };
+  }
+  return { english: undefined, chinese: undefined };
+}
+
 function bestAvailableLanguageMatch(
   tracks: readonly TrackInfo[],
   target: 'en' | 'zh-Hant',

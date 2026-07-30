@@ -4,10 +4,12 @@ import {
   isDuetSubMessage,
   maxSubtitleResponseMessage,
   netflixManifestMessage,
+  netflixTrackRequest,
   netflixTtmlResponseMessage,
   primeTimelineOffsetMessage,
   primeTtmlResponseMessage,
   requestFakeData,
+  requestPrimeCachedTtml,
   requestPrimeTimelineOffset,
   youtubeCaptionsMessage,
   youtubePlayerCommand,
@@ -46,6 +48,35 @@ describe('fake official catalog requests', () => {
 });
 
 describe('Prime MAIN to ISOLATED messages', () => {
+  it('validates Prime TTML request ownership', () => {
+    const generation = {
+      contentGeneration: 4,
+      clockGeneration: 7,
+      selectionGeneration: 2,
+    };
+    const response = primeTtmlResponseMessage(
+      'response-ja',
+      PRIME_TTML_URL,
+      '<tt/>',
+      {
+        requestId: 'observation-request',
+        trackId: 'ja-jp_Subtitle_Dialog',
+        generation,
+      },
+    );
+
+    expect(isDuetSubMessage(response)).toBe(true);
+    expect(
+      isDuetSubMessage({
+        ...response,
+        observation: {
+          ...response.observation,
+          trackId: '',
+        },
+      }),
+    ).toBe(false);
+  });
+
   it('validates the correlated Prime playback clock handshake', () => {
     const request = requestPrimeTimelineOffset('clock-request');
     const response = primeTimelineOffsetMessage('clock-request', 6_000);
@@ -56,6 +87,30 @@ describe('Prime MAIN to ISOLATED messages', () => {
       isDuetSubMessage({
         ...response,
         timelineOffsetMs: Number.POSITIVE_INFINITY,
+      }),
+    ).toBe(false);
+  });
+
+  it('validates cached Prime TTML replay ownership', () => {
+    const generation = {
+      contentGeneration: 4,
+      clockGeneration: 7,
+      selectionGeneration: 2,
+    };
+    const request = requestPrimeCachedTtml(
+      'cached-track-request',
+      'zh-hans_Subtitle_Dialog',
+      generation,
+    );
+
+    expect(isDuetSubMessage(request)).toBe(true);
+    expect(
+      isDuetSubMessage({ ...request, trackId: '' }),
+    ).toBe(false);
+    expect(
+      isDuetSubMessage({
+        ...request,
+        generation: { ...generation, contentGeneration: -1 },
       }),
     ).toBe(false);
   });
@@ -150,18 +205,52 @@ describe('Netflix MAIN to ISOLATED messages', () => {
       timedtexttracks: [],
     };
     const manifestMessage = netflixManifestMessage(manifest);
+    const request = netflixTrackRequest(
+      'request-1',
+      '81262752',
+      {
+        contentGeneration: 1,
+        clockGeneration: 1,
+        selectionGeneration: 2,
+      },
+      { id: 'japanese-cc', kind: 'closed-captions' },
+    );
     const ttmlMessage = netflixTtmlResponseMessage(
       'response-1',
-      '81262752',
+      'https://ipv4-c001-lax001-ix.1.oca.nflxvideo.net/japanese.ttml',
       '<?xml version="1.0"?><tt xmlns="http://www.w3.org/ns/ttml"/>',
+      request,
     );
 
     expect(manifestMessage.manifest).toBe(manifest);
     expect(isDuetSubMessage(manifestMessage)).toBe(true);
+    expect(isDuetSubMessage(request)).toBe(true);
     expect(isDuetSubMessage(ttmlMessage)).toBe(true);
+    expect(ttmlMessage).toMatchObject({
+      requestId: request.requestId,
+      generation: request.generation,
+      trackId: request.trackId,
+      trackKind: request.trackKind,
+    });
   });
 
   it('rejects malformed Netflix observation payloads', () => {
+    const request = netflixTrackRequest(
+      'request-1',
+      '81262752',
+      {
+        contentGeneration: 1,
+        clockGeneration: 1,
+        selectionGeneration: 0,
+      },
+      { id: 'japanese', kind: 'subtitles' },
+    );
+    const response = netflixTtmlResponseMessage(
+      'response-1',
+      'https://ipv4-c001-lax001-ix.1.oca.nflxvideo.net/japanese.ttml',
+      '<tt/>',
+      request,
+    );
     expect(
       isDuetSubMessage(
         netflixManifestMessage({ movieId: 81262752 }),
@@ -169,14 +258,20 @@ describe('Netflix MAIN to ISOLATED messages', () => {
     ).toBe(false);
     expect(
       isDuetSubMessage({
-        ...netflixTtmlResponseMessage('response-1', '81262752', '<tt/>'),
+        ...response,
         raw: '',
       }),
     ).toBe(false);
     expect(
       isDuetSubMessage({
-        ...netflixTtmlResponseMessage('response-1', '81262752', '<tt/>'),
+        ...response,
         contentIdentity: '../other-title',
+      }),
+    ).toBe(false);
+    expect(
+      isDuetSubMessage({
+        ...response,
+        generation: { ...request.generation, selectionGeneration: -1 },
       }),
     ).toBe(false);
   });
@@ -184,6 +279,11 @@ describe('Netflix MAIN to ISOLATED messages', () => {
 
 describe('YouTube MAIN to ISOLATED messages', () => {
   it('accepts guarded raw captions and a same-video POT request snapshot', () => {
+    const generation = {
+      contentGeneration: 3,
+      clockGeneration: 4,
+      selectionGeneration: 5,
+    };
     const captions = youtubeCaptionsMessage('video-one', {
       playerCaptionsTracklistRenderer: { captionTracks: [] },
     });
@@ -194,10 +294,11 @@ describe('YouTube MAIN to ISOLATED messages', () => {
       method: 'GET',
       headers: [['accept', 'application/json']],
       credentials: 'include',
-    });
+    }, generation);
 
     expect(isDuetSubMessage(captions)).toBe(true);
     expect(isDuetSubMessage(request)).toBe(true);
+    expect(request.generation).toEqual(generation);
     expect(
       isDuetSubMessage({
         ...request,
@@ -213,23 +314,43 @@ describe('YouTube MAIN to ISOLATED messages', () => {
         },
       }),
     ).toBe(false);
+    expect(
+      isDuetSubMessage({
+        ...request,
+        generation: { ...generation, selectionGeneration: -1 },
+      }),
+    ).toBe(false);
+    expect(
+      isDuetSubMessage({
+        ...request,
+        generation: undefined,
+      }),
+    ).toBe(false);
   });
 
   it('accepts only explicit JSON-safe player getter and primitive commands', () => {
+    const generation = {
+      contentGeneration: 3,
+      clockGeneration: 4,
+      selectionGeneration: 5,
+    };
     const read = youtubePlayerCommand(
       'request-read',
       'video-one',
+      generation,
       'read-caption-state',
     );
     const set = youtubePlayerCommand(
       'request-set',
       'video-one',
+      generation,
       'set-caption-track',
       { languageCode: 'en', kind: 'asr' },
     );
     const result = youtubePlayerCommandResult(
       'request-set',
       'video-one',
+      generation,
       'set-caption-track',
       true,
       { languageCode: 'en', kind: 'asr' },
@@ -238,6 +359,7 @@ describe('YouTube MAIN to ISOLATED messages', () => {
     expect(isDuetSubMessage(read)).toBe(true);
     expect(isDuetSubMessage(set)).toBe(true);
     expect(isDuetSubMessage(result)).toBe(true);
+    expect(result.generation).toEqual(generation);
     expect(
       isDuetSubMessage({
         ...set,

@@ -30,6 +30,39 @@ describe('parseTtml', () => {
     ]);
   });
 
+  it('skips a Prime paragraph whose browser DOM omits a cue boundary', () => {
+    const parser = {
+      parseFromString(source: string, mimeType: 'application/xml') {
+        const document = new DOMParser().parseFromString(source, mimeType);
+        const paragraph = document
+          .getElementsByTagNameNS('http://www.w3.org/ns/ttml', 'p')
+          .item(0);
+        if (paragraph === null) throw new Error('Fixture paragraph missing');
+        const getAttribute = paragraph.getAttribute.bind(paragraph);
+        paragraph.getAttribute = ((name: string) =>
+          name === 'begin' ? null : getAttribute(name)) as unknown as
+          typeof paragraph.getAttribute;
+        return document;
+      },
+    };
+
+    expect(
+      parseTtml(primeVideoFixture, {
+        language: 'en-US',
+        acceptedSourceLanguages: ['en-US'],
+        parser,
+      }),
+    ).toEqual([
+      {
+        start: 25_000,
+        end: 27_250,
+        text: 'Top cue',
+        language: 'en-US',
+        position: 'top',
+      },
+    ]);
+  });
+
   it('rejects a valid TTML document owned by another language track', () => {
     expect(
       parseTtml(primeVideoFixture, {

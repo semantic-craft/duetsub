@@ -3,13 +3,10 @@ import { describe, expect, it } from 'vitest';
 
 import type { TrackInfo } from '../src/core/contracts';
 import {
-  claimNetflixTtmlResponseForPending,
   consumeNetflixTtmlResponse,
   EMPTY_NETFLIX_TTML_INBOX,
   recordNetflixTtmlResponse,
-  recordNetflixTtmlResponseForUniqueTrack,
   resolveNetflixResponseOwner,
-  resolveNetflixUnownedResponseGeneration,
   retainNetflixTtmlResponsesForGeneration,
 } from '../src/adapters/netflix-responses';
 import netflixFixture from './fixtures/netflix-minimal.ttml?raw';
@@ -27,199 +24,82 @@ const ENGLISH_TRACK_PLAIN: TrackInfo = {
   label: 'English',
   kind: 'subtitles',
 };
-const TRADITIONAL_CHINESE_TRACK: TrackInfo = {
-  id: 'traditional-chinese',
-  language: 'zh-Hant',
-  source: 'official',
-  label: '中文（繁體）',
-  kind: 'subtitles',
-};
-const SIMPLIFIED_CHINESE_TRACK: TrackInfo = {
-  id: 'simplified-chinese',
-  language: 'zh-Hans',
-  source: 'official',
-  label: '中文（簡體）',
-  kind: 'subtitles',
-};
 const EPISODE_ONE = {
   contentGeneration: 1,
   clockGeneration: 1,
   selectionGeneration: 0,
 };
-const UNBOUND_GENERATION = {
-  contentGeneration: 0,
-  clockGeneration: 0,
-  selectionGeneration: 0,
+const PENDING_ENGLISH = {
+  requestId: 'request-english-cc',
+  contentIdentity: '81262752',
+  armed: true,
+  track: ENGLISH_TRACK,
+  generation: EPISODE_ONE,
+};
+const ENGLISH_RESPONSE = {
+  requestId: PENDING_ENGLISH.requestId,
+  responseId: 'response-english-cc',
+  contentIdentity: PENDING_ENGLISH.contentIdentity,
+  url: 'https://ipv4-c001-lax001-ix.1.oca.nflxvideo.net/english.ttml',
+  generation: EPISODE_ONE,
+  trackId: ENGLISH_TRACK.id,
+  trackKind: ENGLISH_TRACK.kind,
+  raw: netflixFixture,
 };
 
 describe('Netflix TTML response ownership', () => {
-  it('gives a current pending fetchTrack exclusive ownership', () => {
+  it('gives an exactly correlated current response exclusive ownership', () => {
     expect(
       resolveNetflixResponseOwner(
         EPISODE_ONE,
-        { track: ENGLISH_TRACK, generation: EPISODE_ONE },
-        [ENGLISH_TRACK, ENGLISH_TRACK_PLAIN],
+        PENDING_ENGLISH,
+        ENGLISH_RESPONSE,
       ),
-    ).toEqual({ track: ENGLISH_TRACK, generation: EPISODE_ONE });
+    ).toEqual(PENDING_ENGLISH);
   });
 
-  it('fails closed for a stale pending request and ambiguous current tracks', () => {
+  it('rejects a response issued before the selection generation changed', () => {
     expect(
       resolveNetflixResponseOwner(
-        { contentGeneration: 2, clockGeneration: 2, selectionGeneration: 0 },
-        { track: ENGLISH_TRACK, generation: EPISODE_ONE },
-        [ENGLISH_TRACK, ENGLISH_TRACK_PLAIN],
+        { ...EPISODE_ONE, selectionGeneration: 1 },
+        PENDING_ENGLISH,
+        ENGLISH_RESPONSE,
       ),
     ).toBeUndefined();
   });
 
-  it('accepts one unambiguous current TrackInfo without a pending request', () => {
+  it('rejects a different request id or subtitle variant', () => {
     expect(
-      resolveNetflixResponseOwner(EPISODE_ONE, undefined, [ENGLISH_TRACK]),
-    ).toEqual({ track: ENGLISH_TRACK, generation: EPISODE_ONE });
+      resolveNetflixResponseOwner(EPISODE_ONE, PENDING_ENGLISH, {
+        ...ENGLISH_RESPONSE,
+        requestId: 'different-request',
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveNetflixResponseOwner(EPISODE_ONE, PENDING_ENGLISH, {
+        ...ENGLISH_RESPONSE,
+        trackId: ENGLISH_TRACK_PLAIN.id,
+        trackKind: ENGLISH_TRACK_PLAIN.kind,
+      }),
+    ).toBeUndefined();
   });
 
-  it('claims an early TTML response after one official track uniquely validates it', () => {
-    const traditionalChineseFixture = netflixFixture.replace(
-      'xml:lang="en"',
-      'xml:lang="zh-Hant"',
-    );
-    const inbox = recordNetflixTtmlResponseForUniqueTrack(
-      EMPTY_NETFLIX_TTML_INBOX,
-      {
-        responseId: 'early-traditional-chinese',
-        raw: traditionalChineseFixture,
-        generation: EPISODE_ONE,
-        candidates: [
-          ENGLISH_TRACK,
-          ENGLISH_TRACK_PLAIN,
-          TRADITIONAL_CHINESE_TRACK,
-          SIMPLIFIED_CHINESE_TRACK,
-        ],
-      },
-      new DOMParser(),
-    );
-
+  it('rejects an otherwise valid response without a pending owner', () => {
     expect(
-      consumeNetflixTtmlResponse(
-        inbox,
-        TRADITIONAL_CHINESE_TRACK,
+      resolveNetflixResponseOwner(
         EPISODE_ONE,
-      ).cues?.[0],
-    ).toMatchObject({
-      start: 22_708,
-      end: 24_708,
-      text: 'Alpha & Beta Gamma\nDelta line',
-      language: 'zh-Hant',
-    });
-  });
-
-  it('keeps an early TTML response unowned when official tracks are ambiguous', () => {
-    expect(
-      recordNetflixTtmlResponseForUniqueTrack(
-        EMPTY_NETFLIX_TTML_INBOX,
-        {
-          responseId: 'ambiguous-english',
-          raw: netflixFixture,
-          generation: EPISODE_ONE,
-          candidates: [ENGLISH_TRACK, ENGLISH_TRACK_PLAIN],
-        },
-        new DOMParser(),
+        undefined,
+        ENGLISH_RESPONSE,
       ),
-    ).toEqual([]);
+    ).toBeUndefined();
   });
 
-  it('claims exactly one buffered response after a pending track supplies ownership', () => {
-    const traditionalChineseFixture = netflixFixture.replace(
-      'xml:lang="en"',
-      'xml:lang="zh-Hant"',
-    );
-    const claimed = claimNetflixTtmlResponseForPending(
-      EMPTY_NETFLIX_TTML_INBOX,
-      [
-        {
-          responseId: 'early-traditional-chinese',
-          raw: traditionalChineseFixture,
-        },
-        {
-          responseId: 'early-english',
-          raw: netflixFixture,
-        },
-      ],
-      {
-        track: ENGLISH_TRACK,
-        generation: EPISODE_ONE,
-      },
-      new DOMParser(),
-    );
-
-    expect(claimed.claimedResponseId).toBe('early-english');
+  it('rejects a response delivered before MAIN acknowledges the request', () => {
     expect(
-      consumeNetflixTtmlResponse(
-        claimed.inbox,
-        ENGLISH_TRACK,
+      resolveNetflixResponseOwner(
         EPISODE_ONE,
-      ).cues?.[0],
-    ).toMatchObject({
-      start: 22_708,
-      end: 24_708,
-      language: 'en-US',
-    });
-  });
-
-  it('leaves multiple matching buffered responses unowned', () => {
-    expect(
-      claimNetflixTtmlResponseForPending(
-        EMPTY_NETFLIX_TTML_INBOX,
-        [
-          { responseId: 'english-cc-or-plain-1', raw: netflixFixture },
-          { responseId: 'english-cc-or-plain-2', raw: netflixFixture },
-        ],
-        {
-          track: ENGLISH_TRACK,
-          generation: EPISODE_ONE,
-        },
-        new DOMParser(),
-      ),
-    ).toEqual({
-      inbox: [],
-      claimedResponseId: undefined,
-    });
-  });
-
-  it('promotes a same-title bootstrap response into the first bound generation', () => {
-    expect(
-      resolveNetflixUnownedResponseGeneration(
-        'netflix:81262752',
-        UNBOUND_GENERATION,
-        'netflix:81262752',
-        EPISODE_ONE,
-      ),
-    ).toEqual(EPISODE_ONE);
-  });
-
-  it('promotes a request-bound response when the same title advances generation', () => {
-    expect(
-      resolveNetflixUnownedResponseGeneration(
-        'netflix:81262753',
-        EPISODE_ONE,
-        'netflix:81262753',
-        { contentGeneration: 2, clockGeneration: 2, selectionGeneration: 0 },
-      ),
-    ).toEqual({
-      contentGeneration: 2,
-      clockGeneration: 2,
-      selectionGeneration: 0,
-    });
-  });
-
-  it('rejects an early response from another title', () => {
-    expect(
-      resolveNetflixUnownedResponseGeneration(
-        'netflix:81262752',
-        UNBOUND_GENERATION,
-        'netflix:81262753',
-        EPISODE_ONE,
+        { ...PENDING_ENGLISH, armed: false },
+        ENGLISH_RESPONSE,
       ),
     ).toBeUndefined();
   });

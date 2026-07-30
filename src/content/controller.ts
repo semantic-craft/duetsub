@@ -1,7 +1,6 @@
 import type { Cue, SiteAdapter, SiteId, TrackInfo } from '../core/contracts';
 import {
-  alignMaxChineseCuesToEnglish,
-  selectMaxEnglishPrimaryTrack,
+  resolveMaxOfficialPairCues,
 } from '../adapters/max-cue-alignment';
 import {
   acceptPlaybackGeneration,
@@ -39,9 +38,8 @@ import {
 } from '../core/synchronizer';
 import {
   decideSubtitleSources,
-  selectBilingualTracks,
+  decideYoutubeSubtitleSources,
   type SubtitleSource,
-  type SubtitleSourceDecision,
 } from '../core/track-selection';
 import {
   languageDisplayName,
@@ -188,6 +186,7 @@ class PlaybackController {
         onSelectLanguagePair: (preference) => {
           void this.#selectLanguagePair(preference);
         },
+        onReloadOfficialTracks: () => this.#reloadOfficialTracks(),
         onRetranslate: () => {
           if (this.#translationPlan === undefined) {
             this.#status = uiMessage('status.noRetranslate');
@@ -245,6 +244,7 @@ class PlaybackController {
       return false;
     }
 
+    this.#overlayView.reanchor(target.player);
     this.#toggleView.reanchor(
       target.controls ?? target.player,
       target.controls === undefined,
@@ -439,6 +439,40 @@ class PlaybackController {
     if (this.#canLoadTracks()) this.#adapter.start();
   }
 
+  #reloadOfficialTracks(): void {
+    this.#interactionRevision += 1;
+    this.#acquisitionRevision += 1;
+    this.#state = reducePlaybackLifecycle(this.#state, {
+      type: 'reload-tracks',
+    });
+    this.#clearTrackData();
+    this.#bindAdapterGeneration();
+
+    if (!this.#state.enabled) {
+      this.#status = uiMessage('status.disabledReloadCleared');
+      this.#render();
+      return;
+    }
+    if (this.#adapter === undefined) {
+      this.#requestFakeData();
+      return;
+    }
+    if (!this.#canLoadTracks()) {
+      this.#status = uiMessage('status.waitingContent', {
+        site: this.#siteLabel,
+      });
+      this.#render();
+      return;
+    }
+
+    this.#status = pairMessage(
+      'status.reloadingPair',
+      this.#languagePairPreference,
+    );
+    this.#render();
+    this.#adapter.start();
+  }
+
   async #selectLanguagePair(
     preference: LanguagePairPreference,
   ): Promise<void> {
@@ -505,7 +539,19 @@ class PlaybackController {
       this.#render();
       return;
     }
-    if (this.#hasSavedLanguagePairPreference) {
+    const youtubeFallback =
+      this.#siteId === 'youtube' &&
+      this.#hasSavedLanguagePairPreference &&
+      isDefaultLanguagePair(this.#languagePairPreference) &&
+      resolveOfficialPair({
+        siteId: this.#siteId,
+        tracks,
+        preference: this.#languagePairPreference,
+      }).kind !== 'ready';
+    if (
+      !youtubeFallback &&
+      (this.#hasSavedLanguagePairPreference || this.#siteId === 'max')
+    ) {
       void this.#acquireSelectedOfficialTracks(
         bindPlaybackGeneration(this.#state, tracks),
         this.#interactionRevision,
@@ -579,9 +625,20 @@ class PlaybackController {
       if (cues.kind !== 'ready') {
         throw new Error(`Selected official pair unavailable: ${cues.reason}`);
       }
+      const maxCues = this.#siteId === 'max'
+        ? resolveMaxOfficialPairCues({
+            top: cues.top,
+            bottom: cues.bottom,
+            topCues: cues.topCues,
+            bottomCues: cues.bottomCues,
+          })
+        : undefined;
+      if (maxCues?.kind === 'unavailable') {
+        throw new Error('Max official pair alignment coverage unavailable');
+      }
 
-      this.#topCues = cues.topCues;
-      this.#bottomCues = cues.bottomCues;
+      this.#topCues = maxCues?.topCues ?? cues.topCues;
+      this.#bottomCues = maxCues?.bottomCues ?? cues.bottomCues;
       this.#topLanguage = cues.top.language;
       this.#bottomLanguage = cues.bottom.language;
       this.#topMachineTranslated = false;
@@ -590,10 +647,15 @@ class PlaybackController {
       this.#state = reducePlaybackLifecycle(this.#state, {
         type: 'tracks-ready',
       });
-      this.#readyStatus = pairMessage(
-        'status.pairReady',
-        this.#languagePairPreference,
-      );
+      const resolvedPreference: LanguagePairPreference = {
+        version: 1,
+        top: cues.top.language,
+        bottom: cues.bottom.language,
+      };
+      this.#readyStatus = maxCues?.policy ===
+          'english-cc-traditional-chinese'
+        ? pairMessage('status.pairAligned', resolvedPreference)
+        : pairMessage('status.pairReady', resolvedPreference);
       this.#status = this.#readyStatus;
       this.#render();
     } catch (error) {
@@ -629,9 +691,7 @@ class PlaybackController {
     if (tracks === undefined) return;
 
     const decision = this.#siteId === 'youtube'
-      ? decideYouTubeSources(tracks)
-      : this.#siteId === 'max'
-      ? decideMaxSources(tracks)
+      ? decideYoutubeSubtitleSources(tracks)
       : decideSubtitleSources(tracks);
     if (decision.english === undefined || decision.chinese === undefined) {
       this.#status = uiMessage('status.noEnglishChinese');
@@ -686,19 +746,8 @@ class PlaybackController {
       const chineseCues = accepted.chinese.kind === 'mt'
         ? []
         : accepted.chinese.cues;
-      const maxEnglishPrimaryAligned =
-        this.#siteId === 'max' &&
-        accepted.english.kind === 'official' &&
-        accepted.chinese.kind !== 'mt';
-      const displayedChineseCues = maxEnglishPrimaryAligned
-        ? alignMaxChineseCuesToEnglish(englishCues, chineseCues)
-        : chineseCues;
-      if (maxEnglishPrimaryAligned && displayedChineseCues.length === 0) {
-        throw new Error('Max English-primary cue alignment unavailable');
-      }
-
       this.#topCues = englishCues;
-      this.#bottomCues = displayedChineseCues;
+      this.#bottomCues = chineseCues;
       this.#topMachineTranslated = accepted.english.kind === 'mt' ||
         (accepted.english.kind === 'official' &&
           accepted.english.trackSource === 'platform-mt');
@@ -715,11 +764,7 @@ class PlaybackController {
         ? { side: 'bottom' as const, value: accepted.chinese }
         : undefined;
       if (mt === undefined) {
-        this.#readyStatus = maxEnglishPrimaryAligned
-          ? accepted.chinese.kind === 'opencc'
-            ? uiMessage('status.maxOpenccReady')
-            : uiMessage('status.maxOfficialReady')
-          : accepted.chinese.kind === 'opencc'
+        this.#readyStatus = accepted.chinese.kind === 'opencc'
           ? uiMessage('status.openccReady')
           : accepted.english.kind === 'official' &&
               accepted.chinese.kind === 'official'
@@ -1152,7 +1197,11 @@ class PlaybackController {
       this.#status(this.#uiLanguage),
       this.#uiLanguage,
       createOfficialTrackCatalog(this.#tracks),
-      this.#languagePairPreference,
+      {
+        version: 1,
+        top: this.#topLanguage,
+        bottom: this.#bottomLanguage,
+      },
     );
   }
 }
@@ -1237,32 +1286,11 @@ function openOptionsPage(): void {
   window.open(chrome.runtime.getURL('options.html'), '_blank', 'noopener');
 }
 
-function decideYouTubeSources(
-  tracks: readonly TrackInfo[],
-): SubtitleSourceDecision {
-  const selected = selectBilingualTracks(tracks);
-  if (selected.english !== undefined && selected.chinese !== undefined) {
-    return {
-      english: { kind: 'official', track: selected.english },
-      chinese: { kind: 'official', track: selected.chinese },
-    };
-  }
-  return decideSubtitleSources(tracks);
-}
-
-function decideMaxSources(
-  tracks: readonly TrackInfo[],
-): SubtitleSourceDecision {
-  const decision = decideSubtitleSources(tracks);
-  const english = selectMaxEnglishPrimaryTrack(tracks);
-  if (english === undefined) return decision;
-
-  return {
-    english: { kind: 'official', track: english },
-    chinese: decision.chinese?.kind === 'mt'
-      ? { ...decision.chinese, source: english }
-      : decision.chinese,
-  };
+function isDefaultLanguagePair(
+  preference: LanguagePairPreference,
+): boolean {
+  return preference.top === DEFAULT_LANGUAGE_PAIR_PREFERENCE.top &&
+    preference.bottom === DEFAULT_LANGUAGE_PAIR_PREFERENCE.bottom;
 }
 
 function selectedTrackStatus(

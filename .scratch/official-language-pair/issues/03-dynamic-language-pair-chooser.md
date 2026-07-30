@@ -6,14 +6,14 @@
 
 **Status:** resolved
 
-- [x] 长按或右键 DuetSub 按钮可打开上方语言、下方语言和交换上下操作。
+- [x] DuetSub 开关旁有始终可见的“语言”按钮；长按或右键开关也可打开相同的上方语言、下方语言和交换上下操作。
 - [x] 两个选择器只展示当前内容真实枚举的官方语言，不展示静态全语言列表、ASR 或任何翻译候选。
 - [x] 完全相同的 canonical tag 不能同时选择；`zh-Hans` 与 `zh-Hant` 可同时选择。
 - [x] 只有两侧均有效时才保存并开始 acquisition；最后一次有效选择存入 `chrome.storage.local`。
 - [x] 没有已保存值时使用 `en` 上、`zh-Hant` 下的内存默认值，首次启动不做隐式写入。
 - [x] 打开选择器可执行 catalog-only enumeration，但不得隐藏原生字幕，并必须恢复站点菜单与原字幕选择。
 - [x] 用户改变语言对时立即清空 overlay、恢复原生字幕；新 pair 双轨 ready 后才能再次隐藏原生字幕。
-- [x] Options 页面显示当前全局偏好并可恢复默认，不承诺某语言在其他节目可用。
+- [x] Options 页面可直接编辑当前全局偏好，也可恢复默认；节目可用性仍由当前 Official Track Catalog 验证。
 - [x] smoke 场景可完整演示选择、交换、刷新后恢复、缺轨提示和旧响应失效。
 
 ## Answer

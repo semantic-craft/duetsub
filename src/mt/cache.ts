@@ -6,6 +6,7 @@ export interface TranslationCacheIdentity {
   readonly provider: string;
   readonly endpoint: string;
   readonly model: string;
+  readonly webSearchEnabled: boolean;
 }
 
 interface CacheRecord {
@@ -26,6 +27,7 @@ export async function translationCacheKey(
     new URL(identity.endpoint).origin +
       new URL(identity.endpoint).pathname.replace(/\/$/, ''),
     identity.model,
+    identity.webSearchEnabled,
   ]);
   const digest = await crypto.subtle.digest(
     'SHA-256',

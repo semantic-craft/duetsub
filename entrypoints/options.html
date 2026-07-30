@@ -12,6 +12,8 @@
       form { display: grid; gap: 1rem; }
       .field { display: grid; gap: .35rem; }
       input, select, button { box-sizing: border-box; min-height: 2.5rem; padding: .55rem .7rem; font: inherit; }
+      .field > span { display: flex; align-items: center; gap: .5rem; }
+      input[type="checkbox"] { width: 1rem; min-height: 1rem; padding: 0; }
       .actions { display: flex; gap: .75rem; }
       output { display: block; min-height: 1.5rem; margin-top: 1rem; }
       section { margin-bottom: 2rem; padding-bottom: 1.5rem; border-bottom: 1px solid color-mix(in srgb, CanvasText 18%, transparent); }
@@ -38,16 +40,40 @@
       <section aria-labelledby="official-language-pair-heading">
         <h2 id="official-language-pair-heading" data-i18n="options.officialHeading">官方字幕語言</h2>
         <output id="official-language-pair" data-i18n="options.loadingPreference">正在讀取本機偏好…</output>
-        <p class="fixed" data-i18n="options.officialHelp">實際可用語言只由播放中的當前節目決定，請在播放器內長按或右鍵 DuetSub 按鈕選擇。</p>
-        <button id="reset-official-language-pair" type="button" data-i18n="options.resetPair">恢復英文在上、繁體中文在下</button>
+        <form id="official-language-pair-form">
+          <label class="field"><span data-i18n="options.topSubtitle">上方字幕</span>
+            <select id="official-language-top"></select>
+            <input id="official-language-top-custom" type="text" autocomplete="off" spellcheck="false" data-i18n-placeholder="options.customLanguagePlaceholder" placeholder="例如：is、uk、yue-Hant" hidden>
+          </label>
+          <label class="field"><span data-i18n="options.bottomSubtitle">下方字幕</span>
+            <select id="official-language-bottom"></select>
+            <input id="official-language-bottom-custom" type="text" autocomplete="off" spellcheck="false" data-i18n-placeholder="options.customLanguagePlaceholder" placeholder="例如：is、uk、yue-Hant" hidden>
+          </label>
+          <div class="actions">
+            <button type="submit" data-i18n="options.savePair">儲存字幕語言</button>
+            <button id="reset-official-language-pair" type="button" data-i18n="options.resetPair">恢復英文在上、繁體中文在下</button>
+          </div>
+        </form>
+        <p class="fixed" data-i18n="options.officialHelp">可從建議清單選擇，也可手動輸入 BCP-47 語言代碼。這是全局偏好；實際可用性仍由播放中的當前節目決定。儲存後請刷新播放頁，也可在播放器內用「語言」按鈕選擇當前節目提供的語言。</p>
       </section>
-      <form>
+      <form id="translation-form">
         <label class="field"><span data-i18n="options.provider">供應商</span>
           <select id="provider">
             <option value="deepseek">DeepSeek</option>
+            <option value="qwen-cn" data-i18n="options.qwenChina">千問（阿里雲百煉·中國區）</option>
+            <option value="qwen-sg" data-i18n="options.qwenSingapore">千問（阿里雲百煉·新加坡區）</option>
+            <option value="doubao" data-i18n="options.doubaoChina">豆包（火山方舟·中國區）</option>
             <option value="openai-compatible" data-i18n="options.openAiCompatible">OpenAI 兼容</option>
             <option value="local" data-i18n="options.localOpenAiCompatible">本地 OpenAI 兼容</option>
           </select>
+        </label>
+        <label id="workspace-id-field" class="field" hidden><span data-i18n="options.workspaceId">百煉 Workspace ID</span>
+          <input id="workspace-id" type="text" required autocomplete="off" spellcheck="false" placeholder="ws-…">
+          <small data-i18n="options.workspaceHelp">只需填寫 ws-…；DuetSub 會按所選地域自動建立 Responses API 位址。</small>
+        </label>
+        <label id="web-search-field" class="field" hidden>
+          <span><input id="web-search" type="checkbox"><span data-i18n="options.webSearch">允許千問按需聯網搜尋</span></span>
+          <small data-i18n="options.webSearchHelp">使用 Responses API 的 web_search 工具並開啟低強度思考；模型自行決定是否搜尋，可能增加延遲與費用，預設關閉。</small>
         </label>
         <label class="field"><span data-i18n="options.baseUrl">Base URL</span>
           <input id="base-url" type="url" required autocomplete="url">
@@ -55,11 +81,23 @@
         <label class="field"><span data-i18n="options.apiKey">API key</span>
           <input id="api-key" type="password" autocomplete="off" spellcheck="false">
         </label>
-        <label class="field"><span data-i18n="options.model">模型</span>
+        <label class="field"><span data-i18n="options.modelOptional">模型（可選或手動輸入）</span>
           <input id="model" required autocomplete="off" spellcheck="false" list="deepseek-models">
           <datalist id="deepseek-models">
             <option value="deepseek-v4-flash"></option>
             <option value="deepseek-v4-pro"></option>
+          </datalist>
+          <datalist id="qwen-models">
+            <option value="qwen3.7-flash"></option>
+            <option value="qwen3.7-plus"></option>
+            <option value="qwen3.7-max"></option>
+            <option value="qwen3.6-flash"></option>
+          </datalist>
+          <datalist id="doubao-models">
+            <option value="doubao-seed-2-1-pro-260628"></option>
+            <option value="doubao-seed-2-0-lite-260215"></option>
+            <option value="doubao-seed-2-0-mini-260215"></option>
+            <option value="doubao-seed-2-0-pro-260215"></option>
           </datalist>
         </label>
         <p class="fixed" data-i18n="options.fallbackTarget">翻譯 fallback 目標：繁體中文 / 英文（與手動官方語言對分離）</p>

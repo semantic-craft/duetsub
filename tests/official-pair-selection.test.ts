@@ -101,12 +101,12 @@ describe('resolveOfficialPair', () => {
     ]);
   });
 
-  it('prefers ordinary subtitles over closed captions without parsing labels', () => {
-    const closedCaptions = track('en-closed-captions', 'en', {
+  it('prefers Max English subtitles and keeps English CC as a fallback', () => {
+    const closedCaptions = track('en-US-closedcaptions', 'en-US', {
       kind: 'closed-captions',
       label: 'English accessibility track',
     });
-    const subtitles = track('en-subtitles', 'en', {
+    const subtitles = track('en-US-subtitles', 'en-US', {
       label: 'English dialogue',
     });
 
@@ -116,13 +116,92 @@ describe('resolveOfficialPair', () => {
         tracks: [
           closedCaptions,
           subtitles,
-          track('zh-Hant-subtitles', 'zh-Hant'),
+          track('zh-Hant-TW-subtitles', 'zh-Hant-TW'),
         ],
         preference: DEFAULT_PAIR,
       }),
     ).toMatchObject({
       kind: 'ready',
       top: subtitles,
+    });
+
+    expect(
+      resolveOfficialPair({
+        siteId: 'max',
+        tracks: [
+          closedCaptions,
+          track('zh-Hant-TW-subtitles', 'zh-Hant-TW'),
+        ],
+        preference: DEFAULT_PAIR,
+      }),
+    ).toMatchObject({
+      kind: 'ready',
+      top: closedCaptions,
+    });
+
+    expect(
+      resolveOfficialPair({
+        siteId: 'max',
+        tracks: [
+          closedCaptions,
+          subtitles,
+          track('japanese', 'ja'),
+        ],
+        preference: {
+          version: 1,
+          top: 'en',
+          bottom: 'ja',
+        },
+      }),
+    ).toMatchObject({
+      kind: 'ready',
+      top: subtitles,
+    });
+  });
+
+  it('does not expand the Max compatibility policy beyond the verified tags', () => {
+    const britishClosedCaptions = track(
+      'en-GB-closedcaptions',
+      'en-GB',
+      { kind: 'closed-captions' },
+    );
+    const britishSubtitles = track('en-GB-subtitles', 'en-GB');
+
+    expect(
+      resolveOfficialPair({
+        siteId: 'max',
+        tracks: [
+          britishClosedCaptions,
+          britishSubtitles,
+          track('zh-Hant-TW-subtitles', 'zh-Hant-TW'),
+        ],
+        preference: DEFAULT_PAIR,
+      }),
+    ).toMatchObject({
+      kind: 'ready',
+      top: britishSubtitles,
+    });
+
+    const englishClosedCaptions = track(
+      'en-US-closedcaptions',
+      'en-US',
+      { kind: 'closed-captions' },
+    );
+    const englishSubtitles = track('en-US-subtitles', 'en-US');
+
+    expect(
+      resolveOfficialPair({
+        siteId: 'max',
+        tracks: [
+          englishClosedCaptions,
+          englishSubtitles,
+          track('zh-HK-subtitles', 'zh-HK'),
+        ],
+        preference: DEFAULT_PAIR,
+      }),
+    ).toMatchObject({
+      kind: 'ready',
+      top: englishSubtitles,
     });
   });
 
@@ -203,6 +282,28 @@ describe('resolveOfficialPair', () => {
     ).toMatchObject({
       kind: 'ready',
       top: britishEnglish,
+    });
+  });
+
+  it('matches a regional preference to the same bare language across sites', () => {
+    const bareEnglish = track('english', 'en');
+
+    expect(
+      resolveOfficialPair({
+        siteId: 'netflix',
+        tracks: [
+          bareEnglish,
+          track('traditional', 'zh-Hant'),
+        ],
+        preference: {
+          version: 1,
+          top: 'en-US',
+          bottom: 'zh-Hant',
+        },
+      }),
+    ).toMatchObject({
+      kind: 'ready',
+      top: bareEnglish,
     });
   });
 

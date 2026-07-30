@@ -10,6 +10,7 @@ import {
   type YoutubeTimedTextRequestData,
 } from '../core/messages';
 import { youtubeVideoIdFromUrl } from '../adapters/youtube-url';
+import type { PlaybackGeneration } from '../core/lifecycle';
 
 const PLAYER_SELECTOR = '#movie_player';
 const CAPTIONS_RETRY_COUNT = 20;
@@ -32,13 +33,20 @@ interface XhrRequestData {
   readonly headers: Array<readonly [string, string]>;
 }
 
+interface CaptionMutationContext {
+  readonly videoId: string;
+  readonly generation: PlaybackGeneration;
+}
+
 const xhrRequests = new WeakMap<XMLHttpRequest, XhrRequestData>();
 let captionsReadSequence = 0;
+let captionMutationContext: CaptionMutationContext | undefined;
 
 export function startYoutubeMainHook(): void {
   patchFetch();
   patchXmlHttpRequest();
   window.addEventListener('message', onPlayerCommand);
+  document.addEventListener('yt-navigate-start', clearCaptionMutationContext);
   document.addEventListener('yt-navigate-finish', scheduleCurrentCaptions);
   scheduleCurrentCaptions();
 }
@@ -116,7 +124,7 @@ function patchXmlHttpRequest(): void {
 
   XMLHttpRequest.prototype.setRequestHeader =
     function duetSubYoutubeSetRequestHeader(name: string, value: string): void {
-      xhrRequests.get(this)?.headers.push([name, value]);
+      xhrRequests.get(this)?.headers.push([String(name), String(value)]);
       originalSetRequestHeader.call(this, name, value);
     };
 
@@ -145,7 +153,13 @@ function forwardTimedTextRequest(
   videoId: string,
   request: YoutubeTimedTextRequestData,
 ): void {
-  postDuetSubMessage(youtubeTimedTextRequestMessage(videoId, request));
+  const generation = captionMutationContext?.videoId === videoId
+    ? captionMutationContext.generation
+    : undefined;
+  if (generation === undefined) return;
+  postDuetSubMessage(
+    youtubeTimedTextRequestMessage(videoId, request, generation),
+  );
 }
 
 function scheduleCurrentCaptions(): void {
@@ -208,6 +222,7 @@ async function executePlayerCommand(
           youtubePlayerCommandResult(
             message.requestId,
             message.videoId,
+            message.generation,
             message.operation,
             ok,
             undefined,
@@ -243,6 +258,10 @@ async function executePlayerCommand(
           postCommandFailure(message, 'caption-set-unavailable');
           return;
         }
+        captionMutationContext = {
+          videoId: message.videoId,
+          generation: message.generation,
+        };
         await current.player.setOption('captions', 'track', message.value);
         const value = readJsonValue(
           current.player.getOption?.('captions', 'track'),
@@ -267,6 +286,7 @@ function postCommandSuccess(
     youtubePlayerCommandResult(
       message.requestId,
       message.videoId,
+      message.generation,
       message.operation,
       true,
       value,
@@ -282,12 +302,17 @@ function postCommandFailure(
     youtubePlayerCommandResult(
       message.requestId,
       message.videoId,
+      message.generation,
       message.operation,
       false,
       undefined,
       error,
     ),
   );
+}
+
+function clearCaptionMutationContext(): void {
+  captionMutationContext = undefined;
 }
 
 function readCurrentPlayer(

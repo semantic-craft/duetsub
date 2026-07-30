@@ -11,7 +11,11 @@ import type { YoutubeTrackHandle } from '../src/adapters/youtube-tracks';
 const VIDEO_ID = 'video-one';
 const CONTEXT: YoutubeRequestContext = {
   videoId: VIDEO_ID,
-  generation: { contentGeneration: 3, clockGeneration: 4 },
+  generation: {
+    contentGeneration: 3,
+    clockGeneration: 4,
+    selectionGeneration: 5,
+  },
 };
 const snapshot: YoutubeTimedTextRequestSnapshot = {
   context: CONTEXT,
@@ -116,6 +120,15 @@ describe('cloneYoutubeTimedTextRequest', () => {
         ...CONTEXT,
         generation: {
           ...CONTEXT.generation,
+          clockGeneration: 6,
+        },
+      }),
+    ).toThrow('stale');
+    expect(() =>
+      cloneYoutubeTimedTextRequest(snapshot, handle, {
+        ...CONTEXT,
+        generation: {
+          ...CONTEXT.generation,
           selectionGeneration: 1,
         },
       }),
@@ -151,5 +164,51 @@ describe('cloneYoutubeTimedTextRequest', () => {
       tlang: 'zh-Hant',
       fmt: 'json3',
     });
+  });
+
+  it('clones both selected creator tracks from one generation-bound POT request', () => {
+    const handles = ['ja', 'zh-CN'].map((languageCode) => ({
+      context: CONTEXT,
+      handle: {
+        videoId: VIDEO_ID,
+        baseUrl:
+          `https://www.youtube.com/api/timedtext?v=${VIDEO_ID}&lang=${languageCode}`,
+        vssId: `.${languageCode}`,
+        languageCode,
+        trackName: '',
+      },
+    }));
+
+    const requests = handles.map((handle) =>
+      cloneYoutubeTimedTextRequest(snapshot, handle, CONTEXT)
+    );
+
+    expect(
+      requests.map((request) => {
+        const url = new URL(request.url);
+        return {
+          lang: url.searchParams.get('lang'),
+          pot: url.searchParams.get('pot'),
+          kind: url.searchParams.get('kind'),
+          tlang: url.searchParams.get('tlang'),
+          fmt: url.searchParams.get('fmt'),
+        };
+      }),
+    ).toEqual([
+      {
+        lang: 'ja',
+        pot: 'POT_PLACEHOLDER',
+        kind: null,
+        tlang: null,
+        fmt: 'json3',
+      },
+      {
+        lang: 'zh-CN',
+        pot: 'POT_PLACEHOLDER',
+        kind: null,
+        tlang: null,
+        fmt: 'json3',
+      },
+    ]);
   });
 });

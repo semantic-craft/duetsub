@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   OVERLAY_CSS,
   OVERLAY_FONT_SIZE,
+  reanchorOverlayHost,
 } from '../src/content/overlay-view';
 
 describe('overlay typography', () => {
@@ -18,5 +19,24 @@ describe('overlay typography', () => {
     expect(OVERLAY_CSS).toContain(':lang(ko)');
     expect(OVERLAY_CSS).not.toContain('.english');
     expect(OVERLAY_CSS).not.toContain('.chinese');
+  });
+
+  it('reconnects a detached overlay to the current player', () => {
+    let parent: HTMLElement | null = null;
+    const host = {
+      get parentElement() {
+        return parent;
+      },
+    } as unknown as HTMLElement;
+    const player = {
+      append(node: HTMLElement) {
+        expect(node).toBe(host);
+        parent = player as unknown as HTMLElement;
+      },
+    } as unknown as HTMLElement;
+
+    reanchorOverlayHost(host, player);
+
+    expect(parent).toBe(player);
   });
 });

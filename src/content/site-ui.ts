@@ -1,4 +1,8 @@
 import type { SiteId } from '../core/contracts';
+import {
+  PRIME_PLAYER_SELECTOR,
+  PRIME_VIDEO_SELECTOR,
+} from '../core/primevideo-dom';
 import { readNetflixWatchIdentity } from '../adapters/netflix-location';
 import { readMaxContentIdentity } from '../adapters/max-location';
 import { youtubeVideoIdFromUrl } from '../adapters/youtube-url';
@@ -19,10 +23,10 @@ const SITE_UI: Record<SiteId, SiteUiBinding> = {
       '.player-timedtext, [data-duetsub-native-captions="netflix"]',
   },
   primevideo: {
-    videoSelector: '#dv-web-player video',
-    playerSelector: '#dv-web-player',
+    videoSelector: PRIME_VIDEO_SELECTOR,
+    playerSelector: PRIME_PLAYER_SELECTOR,
     nativeCaptionSelector:
-      '#dv-web-player .atvwebplayersdk-captions-overlay, [data-duetsub-native-captions="primevideo"]',
+      '.atvwebplayersdk-captions-overlay, [data-duetsub-native-captions="primevideo"]',
   },
   max: {
     videoSelector: '[data-testid="VideoElement"]',
@@ -37,7 +41,8 @@ const SITE_UI: Record<SiteId, SiteUiBinding> = {
     videoSelector: '#movie_player video',
     playerSelector: '#movie_player',
     controlsSelector: '.ytp-right-controls',
-    nativeCaptionSelector: '[data-duetsub-native-captions="youtube"]',
+    nativeCaptionSelector:
+      '.ytp-caption-window-container, [data-duetsub-native-captions="youtube"]',
   },
 };
 

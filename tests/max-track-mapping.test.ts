@@ -18,6 +18,20 @@ const TRADITIONAL_CHINESE: TrackInfo = {
   label: 'Traditional Chinese',
   kind: 'subtitles',
 };
+const JAPANESE: TrackInfo = {
+  id: 'ja-JP-subtitles',
+  language: 'ja-JP',
+  source: 'official',
+  label: '日本語',
+  kind: 'subtitles',
+};
+const SIMPLIFIED_CHINESE: TrackInfo = {
+  id: 'zh-Hans-SG-subtitles',
+  language: 'zh-Hans-SG',
+  source: 'official',
+  label: '简体中文',
+  kind: 'subtitles',
+};
 
 const SYNTHETIC_PLAYBACK_INFO = JSON.stringify({
   manifest: {
@@ -120,6 +134,73 @@ describe('mapMaxTrackResources', () => {
       },
     });
 
+  });
+
+  it('maps an arbitrary BCP-47 pair without English or Traditional Chinese inference', () => {
+    const playbackInfoRaw = JSON.stringify({
+      manifest: {
+        url: 'https://media.example.invalid/title/dash.mpd',
+      },
+      videos: [{
+        textTracks: [
+          {
+            type: 'subtitles',
+            language: 'ja-JP',
+            displayName: '日本語',
+            format: 'webvtt',
+          },
+          {
+            type: 'subtitles',
+            language: 'zh-Hans-SG',
+            displayName: '简体中文',
+            format: 'webvtt',
+          },
+        ],
+      }],
+    });
+    const manifestRaw = `<MPD xmlns="urn:mpeg:dash:schema:mpd:2011">
+  <Period>
+    <AdaptationSet lang="ja-JP" contentType="text">
+      <Role schemeIdUri="urn:mpeg:dash:role:2011" value="subtitle"/>
+      <SegmentTemplate timescale="1000" startNumber="7" media="t/ja/$Number$.vtt">
+        <SegmentTimeline><S t="0" d="2000"/></SegmentTimeline>
+      </SegmentTemplate>
+      <Representation mimeType="text/vtt" id="ja"/>
+    </AdaptationSet>
+    <AdaptationSet lang="zh-Hans-SG" contentType="text">
+      <Role schemeIdUri="urn:mpeg:dash:role:2011" value="subtitle"/>
+      <SegmentTemplate timescale="1000" startNumber="9" media="t/zh/$Number$.vtt">
+        <SegmentTimeline><S t="0" d="2000"/></SegmentTimeline>
+      </SegmentTemplate>
+      <Representation mimeType="text/vtt" id="zh"/>
+    </AdaptationSet>
+  </Period>
+</MPD>`;
+
+    const mapped = mapMaxTrackResources({
+      tracks: [JAPANESE, SIMPLIFIED_CHINESE],
+      playbackInfoRaw,
+      manifestUrl: 'https://media.example.invalid/title/dash.mpd',
+      manifestRaw,
+      parser: new DOMParser(),
+    });
+
+    expect(Object.keys(mapped)).toEqual([
+      JAPANESE.id,
+      SIMPLIFIED_CHINESE.id,
+    ]);
+    expect(mapped[JAPANESE.id]).toMatchObject({
+      track: JAPANESE,
+      segments: [{
+        url: 'https://media.example.invalid/title/t/ja/7.vtt',
+      }],
+    });
+    expect(mapped[SIMPLIFIED_CHINESE.id]).toMatchObject({
+      track: SIMPLIFIED_CHINESE,
+      segments: [{
+        url: 'https://media.example.invalid/title/t/zh/9.vtt',
+      }],
+    });
   });
 
   it('maps the same manifest path after a trusted Max media CDN redirect', () => {

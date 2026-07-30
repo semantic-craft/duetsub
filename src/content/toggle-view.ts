@@ -12,6 +12,7 @@ export interface ToggleViewCallbacks {
   readonly onSelectLanguagePair: (
     preference: LanguagePairPreference,
   ) => void;
+  readonly onReloadOfficialTracks: () => void;
   readonly onRetranslate: () => void;
   readonly onOpenSettings: () => void;
 }
@@ -30,6 +31,29 @@ export interface ToggleView {
     before?: HTMLElement,
   ): void;
   destroy(): void;
+}
+
+export interface PopoverPlacementInput {
+  readonly triggerTop: number;
+  readonly triggerBottom: number;
+  readonly popoverHeight: number;
+  readonly viewportHeight: number;
+  readonly gap: number;
+}
+
+export type PopoverPlacement = 'above' | 'below';
+
+export function choosePopoverPlacement(
+  input: PopoverPlacementInput,
+): PopoverPlacement {
+  const roomAbove = Math.max(0, input.triggerTop - input.gap);
+  const roomBelow = Math.max(
+    0,
+    input.viewportHeight - input.triggerBottom - input.gap,
+  );
+  if (roomAbove >= input.popoverHeight) return 'above';
+  if (roomBelow >= input.popoverHeight) return 'below';
+  return roomBelow >= roomAbove ? 'below' : 'above';
 }
 
 export function createToggleView(
@@ -60,9 +84,20 @@ export function createToggleView(
   button.append(icon);
 
   const popover = document.createElement('div');
+  popover.id = 'language-menu';
   popover.className = 'popover';
   popover.hidden = true;
   popover.setAttribute('role', 'menu');
+
+  const languageButton = document.createElement('button');
+  languageButton.className = 'language-menu-trigger';
+  languageButton.type = 'button';
+  languageButton.title = '選擇字幕語言';
+  languageButton.textContent = '語言';
+  languageButton.setAttribute('aria-label', '選擇 DuetSub 字幕語言');
+  languageButton.setAttribute('aria-haspopup', 'menu');
+  languageButton.setAttribute('aria-controls', popover.id);
+  languageButton.setAttribute('aria-expanded', 'false');
 
   const status = document.createElement('div');
   status.className = 'status';
@@ -74,11 +109,19 @@ export function createToggleView(
   const bottomSelect = languageSelect();
   chooser.append(topSelect.label, bottomSelect.label);
 
-  const swap = menuButton();
-  const retranslate = menuButton();
-  const settings = menuButton();
-  popover.append(status, chooser, swap, retranslate, settings);
-  shadow.append(style, button, popover);
+  const swap = menuButton('交換上下');
+  const reloadOfficial = menuButton('重新載入官方字幕');
+  const retranslate = menuButton('重新翻譯');
+  const settings = menuButton('打開設定');
+  popover.append(
+    status,
+    chooser,
+    swap,
+    reloadOfficial,
+    retranslate,
+    settings,
+  );
+  shadow.append(style, button, languageButton, popover);
   anchor.insertBefore(host, before ?? null);
 
   let longPressTimer: number | undefined;
@@ -89,10 +132,21 @@ export function createToggleView(
 
   const showPopover = () => {
     callbacks.onOpenLanguagePair();
+    popover.dataset.placement = 'below';
     popover.hidden = false;
+    const triggerRect = host.getBoundingClientRect();
+    popover.dataset.placement = choosePopoverPlacement({
+      triggerTop: triggerRect.top,
+      triggerBottom: triggerRect.bottom,
+      popoverHeight: popover.getBoundingClientRect().height,
+      viewportHeight: window.innerHeight,
+      gap: 8,
+    });
+    languageButton.setAttribute('aria-expanded', 'true');
   };
   const hidePopover = () => {
     popover.hidden = true;
+    languageButton.setAttribute('aria-expanded', 'false');
   };
   const cancelLongPress = () => {
     if (longPressTimer !== undefined) window.clearTimeout(longPressTimer);
@@ -137,6 +191,21 @@ export function createToggleView(
     event.preventDefault();
     showPopover();
   });
+  const stopNativeControlEvent = (event: Event) => {
+    event.stopPropagation();
+  };
+  languageButton.addEventListener('pointerdown', stopNativeControlEvent);
+  languageButton.addEventListener('pointerup', stopNativeControlEvent);
+  languageButton.addEventListener('mousedown', stopNativeControlEvent);
+  languageButton.addEventListener('mouseup', stopNativeControlEvent);
+  languageButton.addEventListener('click', (event) => {
+    stopNativeControlEvent(event);
+    if (popover.hidden) {
+      showPopover();
+    } else {
+      hidePopover();
+    }
+  });
   topSelect.select.addEventListener('change', selectPair);
   bottomSelect.select.addEventListener('change', selectPair);
   swap.addEventListener('click', () => {
@@ -146,6 +215,10 @@ export function createToggleView(
       topSelect.select.value,
     );
     if (preference !== undefined) callbacks.onSelectLanguagePair(preference);
+  });
+  reloadOfficial.addEventListener('click', () => {
+    callbacks.onReloadOfficialTracks();
+    hidePopover();
   });
   retranslate.addEventListener('click', () => {
     callbacks.onRetranslate();
@@ -162,6 +235,12 @@ export function createToggleView(
       if (language !== renderedLanguage) {
         renderedLanguage = language;
         button.setAttribute('aria-label', translate(language, 'toggle.aria'));
+        languageButton.title = translate(language, 'toggle.languageTitle');
+        languageButton.textContent = translate(language, 'toggle.language');
+        languageButton.setAttribute(
+          'aria-label',
+          translate(language, 'toggle.languageAria'),
+        );
         setLanguageSelectLabel(
           topSelect,
           translate(language, 'toggle.top'),
@@ -171,6 +250,10 @@ export function createToggleView(
           translate(language, 'toggle.bottom'),
         );
         swap.textContent = translate(language, 'toggle.swap');
+        reloadOfficial.textContent = translate(
+          language,
+          'toggle.reloadOfficial',
+        );
         retranslate.textContent = translate(
           language,
           'toggle.retranslate',
@@ -232,6 +315,7 @@ export function reanchorToggleHost(
 ): void {
   if (
     isFallbackAnchor &&
+    host.isConnected &&
     !host.hasAttribute('data-fallback-anchor')
   ) {
     return;
@@ -253,11 +337,12 @@ function createBar(className: 'english' | 'chinese'): HTMLSpanElement {
   return bar;
 }
 
-function menuButton(): HTMLButtonElement {
+function menuButton(label = ''): HTMLButtonElement {
   const button = document.createElement('button');
   button.className = 'menu-item';
   button.type = 'button';
   button.setAttribute('role', 'menuitem');
+  button.textContent = label;
   return button;
 }
 
@@ -366,6 +451,29 @@ const TOGGLE_CSS = `
     cursor: pointer;
   }
 
+  .language-menu-trigger {
+    align-self: center;
+    min-width: 42px;
+    height: 32px;
+    padding: 0 8px;
+    border: 1px solid rgb(255 255 255 / 34%);
+    border-radius: 6px;
+    background: rgb(10 12 16 / 58%);
+    color: #f6f8fb;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 650;
+    line-height: 30px;
+  }
+
+  .language-menu-trigger:hover,
+  .language-menu-trigger:focus-visible,
+  .language-menu-trigger[aria-expanded="true"] {
+    border-color: rgb(255 194 75 / 78%);
+    background: rgb(24 28 36 / 92%);
+    color: #ffc24b;
+  }
+
   .icon {
     box-sizing: border-box;
     display: grid;
@@ -404,10 +512,10 @@ const TOGGLE_CSS = `
   .popover {
     position: absolute;
     right: 0;
-    bottom: calc(100% + 8px);
-    width: min(24rem, calc(100vw - 2rem));
-    min-width: 13rem;
-    overflow: hidden;
+    width: min(384px, calc(100vw - 16px));
+    max-height: calc(100vh - 16px);
+    overflow-x: hidden;
+    overflow-y: auto;
     border: 1px solid rgb(255 255 255 / 18%);
     border-radius: 8px;
     background: rgb(24 28 36 / 96%);
@@ -415,11 +523,25 @@ const TOGGLE_CSS = `
     color: #fff;
   }
 
+  .popover[data-placement="above"] {
+    top: auto;
+    bottom: calc(100% + 8px);
+  }
+
+  .popover[data-placement="below"] {
+    top: calc(100% + 8px);
+    bottom: auto;
+  }
+
+  :host([data-site="netflix"]) .popover {
+    width: min(480px, calc(100vw - 16px));
+  }
+
   .status,
   .menu-item {
     box-sizing: border-box;
     width: 100%;
-    padding: 0.62rem 0.78rem;
+    padding: 12px 14px;
     color: inherit;
     text-align: left;
   }
@@ -427,32 +549,34 @@ const TOGGLE_CSS = `
   .status {
     border-bottom: 1px solid rgb(255 255 255 / 12%);
     color: rgb(255 255 255 / 76%);
-    font-size: 0.78rem;
+    font-size: 15px;
+    line-height: 1.4;
   }
 
   .chooser {
     display: grid;
-    gap: 0.62rem;
-    padding: 0.7rem 0.78rem;
+    gap: 12px;
+    padding: 13px 14px;
     border-bottom: 1px solid rgb(255 255 255 / 12%);
   }
 
   .language-field {
     display: grid;
-    gap: 0.28rem;
+    gap: 6px;
     color: rgb(255 255 255 / 76%);
-    font-size: 0.75rem;
+    font-size: 14px;
   }
 
   .language-field select {
     width: 100%;
     min-width: 0;
-    padding: 0.38rem 0.46rem;
+    min-height: 44px;
+    padding: 9px 10px;
     border: 1px solid rgb(255 255 255 / 18%);
     border-radius: 4px;
     background: rgb(15 18 24 / 100%);
     color: #fff;
-    font: inherit;
+    font: 16px/1.3 system-ui, -apple-system, "Segoe UI", sans-serif;
   }
 
   .menu-item:disabled {
@@ -465,12 +589,42 @@ const TOGGLE_CSS = `
     border: 0;
     background: transparent;
     cursor: pointer;
-    font-size: 0.86rem;
+    font-size: 16px;
+    line-height: 1.4;
   }
 
   .menu-item:hover,
   .menu-item:focus-visible {
     background: rgb(255 255 255 / 10%);
+  }
+
+  :host([data-site="netflix"]) .status,
+  :host([data-site="netflix"]) .menu-item {
+    padding: 16px 18px;
+  }
+
+  :host([data-site="netflix"]) .status,
+  :host([data-site="netflix"]) .language-field {
+    font-size: 18px;
+  }
+
+  :host([data-site="netflix"]) .chooser {
+    gap: 16px;
+    padding: 18px;
+  }
+
+  :host([data-site="netflix"]) .language-field {
+    gap: 8px;
+  }
+
+  :host([data-site="netflix"]) .language-field select {
+    min-height: 56px;
+    padding: 12px 14px;
+    font-size: 20px;
+  }
+
+  :host([data-site="netflix"]) .menu-item {
+    font-size: 20px;
   }
 
   [hidden] {

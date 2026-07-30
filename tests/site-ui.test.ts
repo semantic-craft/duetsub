@@ -26,8 +26,17 @@ describe('Prime Video site UI', () => {
 
     vi.stubGlobal('document', {
       querySelector: (selector: string) => {
-        if (selector === '#dv-web-player video') return video;
-        if (selector === '#dv-web-player') return player;
+        if (
+          selector ===
+          'div[id^="dv-web-player"].dv-player-fullscreen video'
+        ) {
+          return video;
+        }
+        if (
+          selector === 'div[id^="dv-web-player"].dv-player-fullscreen'
+        ) {
+          return player;
+        }
         return null;
       },
     });
@@ -40,6 +49,9 @@ describe('Prime Video site UI', () => {
 
     expect(target?.controls).toBe(controls);
     expect(target?.toggleBefore).toBe(subtitleWrapper);
+    expect(target?.nativeCaptionSelector).toBe(
+      '.atvwebplayersdk-captions-overlay, [data-duetsub-native-captions="primevideo"]',
+    );
   });
 
   it('uses the visible movie title as the verified content identity', () => {
@@ -56,8 +68,17 @@ describe('Prime Video site UI', () => {
 
     vi.stubGlobal('document', {
       querySelector: (selector: string) => {
-        if (selector === '#dv-web-player video') return video;
-        if (selector === '#dv-web-player') return player;
+        if (
+          selector ===
+          'div[id^="dv-web-player"].dv-player-fullscreen video'
+        ) {
+          return video;
+        }
+        if (
+          selector === 'div[id^="dv-web-player"].dv-player-fullscreen'
+        ) {
+          return player;
+        }
         return null;
       },
     });
@@ -67,6 +88,32 @@ describe('Prime Video site UI', () => {
     }));
 
     expect(findSiteUiTarget('primevideo')?.contentIdentity).toBe('挽救计划');
+  });
+});
+
+describe('YouTube site UI', () => {
+  it('uses the verified native caption window as the suppression target', () => {
+    const player = element();
+    const controls = element(player);
+    const video = element(player) as HTMLVideoElement;
+
+    vi.stubGlobal('window', {
+      location: {
+        href: 'https://www.youtube.com/watch?v=video-one',
+      },
+    });
+    vi.stubGlobal('document', {
+      querySelector: (selector: string) => {
+        if (selector === '#movie_player video') return video;
+        if (selector === '#movie_player') return player;
+        if (selector === '.ytp-right-controls') return controls;
+        return null;
+      },
+    });
+
+    expect(findSiteUiTarget('youtube')?.nativeCaptionSelector).toBe(
+      '.ytp-caption-window-container, [data-duetsub-native-captions="youtube"]',
+    );
   });
 });
 

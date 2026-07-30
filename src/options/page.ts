@@ -1,5 +1,8 @@
 import {
-  DEFAULT_TRANSLATION_CONFIG,
+  QWEN_WORKSPACE_ID_PLACEHOLDER,
+  qwenBaseUrl,
+  qwenWorkspaceId,
+  translationProviderDefault,
   validateTranslationConfig,
   type TranslationConfig,
   type TranslationProvider,
@@ -12,6 +15,7 @@ import {
 import {
   loadLanguagePairPreference,
   resetLanguagePairPreference,
+  saveLanguagePairPreference,
   type LoadedLanguagePairPreference,
 } from '../core/official-pair-preference';
 import {
@@ -26,12 +30,24 @@ import {
   type UiMessageKey,
 } from '../i18n';
 
-const form = document.querySelector<HTMLFormElement>('form')!;
 const uiLanguageSelect = document.querySelector<HTMLSelectElement>(
   '#ui-language',
 )!;
+const form = document.querySelector<HTMLFormElement>('#translation-form')!;
+const languagePairForm = document.querySelector<HTMLFormElement>(
+  '#official-language-pair-form',
+)!;
 const provider = document.querySelector<HTMLSelectElement>('#provider')!;
 const baseUrl = document.querySelector<HTMLInputElement>('#base-url')!;
+const baseUrlField = baseUrl.closest<HTMLElement>('.field')!;
+const workspaceId = document.querySelector<HTMLInputElement>('#workspace-id')!;
+const workspaceIdField = document.querySelector<HTMLElement>(
+  '#workspace-id-field',
+)!;
+const webSearch = document.querySelector<HTMLInputElement>('#web-search')!;
+const webSearchField = document.querySelector<HTMLElement>(
+  '#web-search-field',
+)!;
 const apiKey = document.querySelector<HTMLInputElement>('#api-key')!;
 const model = document.querySelector<HTMLInputElement>('#model')!;
 const status = document.querySelector<HTMLOutputElement>('#status')!;
@@ -39,9 +55,58 @@ const testButton = document.querySelector<HTMLButtonElement>('#test')!;
 const languagePair = document.querySelector<HTMLOutputElement>(
   '#official-language-pair',
 )!;
+const topLanguage = document.querySelector<HTMLSelectElement>(
+  '#official-language-top',
+)!;
+const topLanguageCustom = document.querySelector<HTMLInputElement>(
+  '#official-language-top-custom',
+)!;
+const bottomLanguage = document.querySelector<HTMLSelectElement>(
+  '#official-language-bottom',
+)!;
+const bottomLanguageCustom = document.querySelector<HTMLInputElement>(
+  '#official-language-bottom-custom',
+)!;
 const resetLanguagePair = document.querySelector<HTMLButtonElement>(
   '#reset-official-language-pair',
 )!;
+
+const CUSTOM_LANGUAGE_VALUE = '__custom__';
+const COMMON_LANGUAGE_TAGS = [
+  'en',
+  'zh-Hant',
+  'zh-Hans',
+  'ja',
+  'ko',
+  'es-ES',
+  'es-419',
+  'fr',
+  'de',
+  'it',
+  'pt-BR',
+  'pt-PT',
+  'ar',
+  'hi',
+  'id',
+  'ms',
+  'th',
+  'vi',
+  'tr',
+  'pl',
+  'nl',
+  'sv',
+  'da',
+  'nb',
+  'fi',
+  'cs',
+  'el',
+  'he',
+  'hu',
+  'ro',
+  'ca',
+  'ta',
+  'te',
+] as const;
 
 let uiLanguage = resolveUiLanguage(undefined, browserLanguages());
 let loadedLanguagePair: LoadedLanguagePairPreference | undefined;
@@ -49,6 +114,8 @@ let renderStatusMessage = (language: UiLanguage) =>
   translate(language, 'options.notTested');
 let statusState: boolean | undefined;
 
+populateLanguageSelect(topLanguage);
+populateLanguageSelect(bottomLanguage);
 void initialize();
 
 uiLanguageSelect.addEventListener('change', () => {
@@ -62,6 +129,16 @@ uiLanguageSelect.addEventListener('change', () => {
 provider.addEventListener('change', () =>
   applyProviderDefaults(provider.value as TranslationProvider)
 );
+languagePairForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  void saveCurrentLanguagePair();
+});
+topLanguage.addEventListener('change', () => {
+  updateCustomLanguageField(topLanguage, topLanguageCustom);
+});
+bottomLanguage.addEventListener('change', () => {
+  updateCustomLanguageField(bottomLanguage, bottomLanguageCustom);
+});
 resetLanguagePair.addEventListener('click', () => {
   void (async () => {
     await resetLanguagePairPreference(chrome.storage.local);
@@ -120,31 +197,77 @@ async function saveCurrent(): Promise<void> {
   showMessage(true, 'options.saved');
 }
 
+async function saveCurrentLanguagePair(): Promise<void> {
+  const saved = await saveLanguagePairPreference(chrome.storage.local, {
+    version: 1,
+    top: selectedLanguage(topLanguage, topLanguageCustom),
+    bottom: selectedLanguage(bottomLanguage, bottomLanguageCustom),
+  });
+  if (!saved) {
+    languagePair.dataset.state = 'error';
+    languagePair.value = translate(uiLanguage, 'options.invalidPair');
+    return;
+  }
+  loadedLanguagePair = await loadLanguagePairPreference(chrome.storage.local);
+  renderLanguagePair();
+  languagePair.dataset.state = 'success';
+  showMessage(true, 'options.pairSaved');
+}
+
 function readConfig(): TranslationConfig {
+  const selectedProvider = provider.value as TranslationProvider;
   return {
-    provider: provider.value as TranslationProvider,
-    baseUrl: baseUrl.value,
+    provider: selectedProvider,
+    baseUrl: isQwenProvider(selectedProvider)
+      ? qwenBaseUrl(
+        selectedProvider,
+        workspaceId.value.trim() || QWEN_WORKSPACE_ID_PLACEHOLDER,
+      )
+      : baseUrl.value,
     apiKey: apiKey.value,
     model: model.value,
+    webSearchEnabled: isQwenProvider(selectedProvider) && webSearch.checked,
   };
 }
 
 function renderConfig(config: TranslationConfig): void {
   provider.value = config.provider;
   baseUrl.value = config.baseUrl;
+  const qwen = isQwenProvider(config.provider);
+  const configuredWorkspaceId = qwenWorkspaceId(config);
+  if (configuredWorkspaceId !== '' || !qwen) {
+    workspaceId.value = configuredWorkspaceId;
+  }
   apiKey.value = config.apiKey;
   model.value = config.model;
-  if (config.provider === 'deepseek') {
-    model.setAttribute('list', 'deepseek-models');
-  } else {
+  const modelList = modelListFor(config.provider);
+  if (modelList === undefined) {
     model.removeAttribute('list');
+  } else {
+    model.setAttribute('list', modelList);
   }
-  baseUrl.closest<HTMLElement>('.field')!.hidden = config.provider === 'deepseek';
+  baseUrlField.hidden =
+    config.provider === 'deepseek' || config.provider === 'doubao' || qwen;
+  baseUrl.required = !baseUrlField.hidden;
+  workspaceIdField.hidden = !qwen;
+  workspaceId.required = qwen;
+  webSearchField.hidden = !qwen;
+  webSearch.checked = qwen && config.webSearchEnabled;
 }
 
 function renderLanguagePair(): void {
   if (loadedLanguagePair === undefined) return;
   const { preference } = loadedLanguagePair;
+  renderLanguageSelect(
+    topLanguage,
+    topLanguageCustom,
+    preference.top,
+  );
+  renderLanguageSelect(
+    bottomLanguage,
+    bottomLanguageCustom,
+    preference.bottom,
+  );
   languagePair.value = translate(uiLanguage, 'options.pair', {
     topName: languageDisplayName(uiLanguage, preference.top),
     topCode: preference.top,
@@ -154,17 +277,49 @@ function renderLanguagePair(): void {
       ? ''
       : translate(uiLanguage, 'options.memoryDefault'),
   });
+  delete languagePair.dataset.state;
 }
 
 function applyProviderDefaults(value: TranslationProvider): void {
-  if (value === 'deepseek') {
-    renderConfig({ ...DEFAULT_TRANSLATION_CONFIG, apiKey: apiKey.value });
-  } else {
-    baseUrl.closest<HTMLElement>('.field')!.hidden = false;
-    if (value === 'local' && baseUrl.value.includes('deepseek.com')) {
-      baseUrl.value = 'http://localhost:11434/v1';
-      model.value = '';
-    }
+  const preset = translationProviderDefault(value);
+  if (preset !== undefined) {
+    renderConfig(
+      isQwenProvider(value) && workspaceId.value.trim() !== ''
+        ? {
+          ...preset,
+          baseUrl: qwenBaseUrl(value, workspaceId.value),
+          webSearchEnabled: webSearch.checked,
+        }
+        : preset,
+    );
+    return;
+  }
+  renderConfig({
+    provider: value,
+    baseUrl: value === 'local' ? 'http://localhost:11434/v1' : '',
+    apiKey: '',
+    model: '',
+    webSearchEnabled: false,
+  });
+}
+
+function isQwenProvider(
+  value: TranslationProvider,
+): value is Extract<TranslationProvider, 'qwen-cn' | 'qwen-sg'> {
+  return value === 'qwen-cn' || value === 'qwen-sg';
+}
+
+function modelListFor(provider: TranslationProvider): string | undefined {
+  switch (provider) {
+    case 'deepseek':
+      return 'deepseek-models';
+    case 'qwen-cn':
+    case 'qwen-sg':
+      return 'qwen-models';
+    case 'doubao':
+      return 'doubao-models';
+    default:
+      return undefined;
   }
 }
 
@@ -179,6 +334,18 @@ function applyUiLanguage(): void {
       element.dataset.i18n as UiMessageKey,
     );
   }
+  for (
+    const element of document.querySelectorAll<HTMLInputElement>(
+      '[data-i18n-placeholder]',
+    )
+  ) {
+    element.placeholder = translate(
+      uiLanguage,
+      element.dataset.i18nPlaceholder as UiMessageKey,
+    );
+  }
+  updateLanguageSelectLabels(topLanguage);
+  updateLanguageSelectLabels(bottomLanguage);
   renderLanguagePair();
   renderStatus();
 }
@@ -214,4 +381,57 @@ function renderStatus(): void {
 
 function browserLanguages(): readonly string[] {
   return [...navigator.languages, navigator.language];
+}
+
+function populateLanguageSelect(select: HTMLSelectElement): void {
+  for (const language of COMMON_LANGUAGE_TAGS) {
+    const option = document.createElement('option');
+    option.value = language;
+    select.append(option);
+  }
+  const custom = document.createElement('option');
+  custom.value = CUSTOM_LANGUAGE_VALUE;
+  select.append(custom);
+  updateLanguageSelectLabels(select);
+}
+
+function updateLanguageSelectLabels(select: HTMLSelectElement): void {
+  for (const option of select.options) {
+    option.textContent = option.value === CUSTOM_LANGUAGE_VALUE
+      ? translate(uiLanguage, 'options.otherLanguage')
+      : `${languageDisplayName(uiLanguage, option.value)} (${option.value})`;
+  }
+}
+
+function updateCustomLanguageField(
+  select: HTMLSelectElement,
+  custom: HTMLInputElement,
+): void {
+  custom.hidden = select.value !== CUSTOM_LANGUAGE_VALUE;
+  custom.required = !custom.hidden;
+  if (!custom.hidden) custom.focus();
+}
+
+function selectedLanguage(
+  select: HTMLSelectElement,
+  custom: HTMLInputElement,
+): string {
+  return select.value === CUSTOM_LANGUAGE_VALUE
+    ? custom.value.trim()
+    : select.value;
+}
+
+function renderLanguageSelect(
+  select: HTMLSelectElement,
+  custom: HTMLInputElement,
+  language: string,
+): void {
+  if (COMMON_LANGUAGE_TAGS.some((candidate) => candidate === language)) {
+    select.value = language;
+    custom.value = '';
+  } else {
+    select.value = CUSTOM_LANGUAGE_VALUE;
+    custom.value = language;
+  }
+  updateCustomLanguageField(select, custom);
 }

@@ -8,6 +8,7 @@ describe('toggle view anchoring', () => {
     let parent: HTMLElement | null = {} as HTMLElement;
     let next: ChildNode | null = null;
     const host = {
+      isConnected: true,
       get parentElement() {
         return parent;
       },
@@ -47,5 +48,36 @@ describe('toggle view anchoring', () => {
     expect(fallback).toBe(false);
     expect(parent).toBe(nativeControls);
     expect(next).toBe(fullscreen);
+  });
+
+  it('reconnects a detached native toggle to the fallback player anchor', () => {
+    let fallback = false;
+    let parent: HTMLElement | null = null;
+    const host = {
+      isConnected: false,
+      get parentElement() {
+        return parent;
+      },
+      get nextSibling() {
+        return null;
+      },
+      hasAttribute(name: string) {
+        return name === 'data-fallback-anchor' && fallback;
+      },
+      toggleAttribute(name: string, force: boolean) {
+        if (name === 'data-fallback-anchor') fallback = force;
+      },
+    } as unknown as HTMLElement;
+    const fallbackAnchor = {
+      insertBefore(node: HTMLElement) {
+        expect(node).toBe(host);
+        parent = fallbackAnchor as unknown as HTMLElement;
+      },
+    } as unknown as HTMLElement;
+
+    reanchorToggleHost(host, fallbackAnchor, true);
+
+    expect(fallback).toBe(true);
+    expect(parent).toBe(fallbackAnchor);
   });
 });

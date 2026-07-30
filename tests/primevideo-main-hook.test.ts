@@ -54,6 +54,7 @@ describe('Prime MAIN-world response observation', () => {
     let messageListener:
       | ((event: MessageEvent<unknown>) => void)
       | undefined;
+    let clickListener: ((event: MouseEvent) => void) | undefined;
 
     vi.stubGlobal('window', {
       fetch: originalFetch,
@@ -70,11 +71,27 @@ describe('Prime MAIN-world response observation', () => {
       },
     });
     vi.stubGlobal('XMLHttpRequest', FakeXmlHttpRequest);
+    vi.stubGlobal('HTMLInputElement', class {
+      static [Symbol.hasInstance](value: unknown): boolean {
+        return typeof (value as { matches?: unknown })?.matches === 'function';
+      }
+    });
     vi.stubGlobal('SourceBuffer', FakeSourceBuffer);
     vi.stubGlobal('MediaSource', FakeMediaSource);
     vi.stubGlobal('document', {
+      addEventListener(
+        type: string,
+        listener: (event: MouseEvent) => void,
+      ) {
+        if (type === 'click') clickListener = listener;
+      },
       querySelector(selector: string) {
-        if (selector !== '#dv-web-player video') return null;
+        if (
+          selector !==
+          'div[id^="dv-web-player"].dv-player-fullscreen video'
+        ) {
+          return null;
+        }
         return {
           currentSrc: activeVideoSource,
           src: activeVideoSource,
@@ -123,6 +140,25 @@ describe('Prime MAIN-world response observation', () => {
       timelineOffsetMs: 6_000,
     });
 
+    const observationGeneration = {
+      contentGeneration: 4,
+      clockGeneration: 7,
+      selectionGeneration: 2,
+    };
+    clickListener?.({
+      target: {
+        id: 'en-us_Caption_Dialog',
+        matches: (selector: string) =>
+          selector === 'input[type="radio"][name="subtitle"]',
+        getAttribute: (name: string) =>
+          name === 'data-duetsub-observation-request'
+            ? 'english-observation'
+            : name === 'data-duetsub-observation-generation'
+            ? '4:7:2'
+            : null,
+      },
+    } as unknown as MouseEvent);
+
     await window.fetch(
       new Request(OFF_CAMPUS_TEXT_URL, {
         headers: { range: 'bytes=0-16383' },
@@ -136,6 +172,11 @@ describe('Prime MAIN-world response observation', () => {
       type: 'prime-ttml-response',
       url: OFF_CAMPUS_TEXT_URL,
       raw: completeTrack,
+      observation: {
+        requestId: 'english-observation',
+        trackId: 'en-us_Caption_Dialog',
+        generation: observationGeneration,
+      },
     });
 
     await window.fetch(OFF_CAMPUS_TEXT_URL, {
@@ -150,10 +191,37 @@ describe('Prime MAIN-world response observation', () => {
       url: OFF_CAMPUS_TEXT_URL,
       raw: completeTrack,
     });
+    expect(postMessage.mock.calls[2]?.[0]).not.toHaveProperty('observation');
     expect(originalFetch).toHaveBeenCalledTimes(3);
 
+    messageListener?.({
+      source: window,
+      data: {
+        channel: 'duetsub',
+        version: 1,
+        direction: 'isolated-to-main',
+        type: 'request-prime-cached-ttml',
+        siteId: 'primevideo',
+        requestId: 'cached-english-request',
+        trackId: 'en-us_Caption_Dialog',
+        generation: observationGeneration,
+      },
+    } as unknown as MessageEvent<unknown>);
+    await vi.waitFor(() => {
+      expect(postMessage).toHaveBeenCalledTimes(4);
+    });
+    expect(postMessage.mock.calls[3]?.[0]).toMatchObject({
+      type: 'prime-ttml-response',
+      raw: completeTrack,
+      observation: {
+        requestId: 'cached-english-request',
+        trackId: 'en-us_Caption_Dialog',
+        generation: observationGeneration,
+      },
+    });
+
     const previewMediaSource = new MediaSource();
-    URL.createObjectURL(previewMediaSource);
+    const previewSource = URL.createObjectURL(previewMediaSource);
     const previewAudio = previewMediaSource.addSourceBuffer('audio/mp4');
     const previewVideo = previewMediaSource.addSourceBuffer('video/mp4');
     previewAudio.timestampOffset = 0;
@@ -171,12 +239,28 @@ describe('Prime MAIN-world response observation', () => {
       },
     } as unknown as MessageEvent<unknown>);
     await vi.waitFor(() => {
-      expect(postMessage).toHaveBeenCalledTimes(4);
+      expect(postMessage).toHaveBeenCalledTimes(5);
     });
     expect(postMessage.mock.calls.at(-1)?.[0]).toMatchObject({
       type: 'prime-timeline-offset',
       requestId: 'clock-request',
       timelineOffsetMs: 6_000,
     });
+
+    activeVideoSource = previewSource;
+    messageListener?.({
+      source: window,
+      data: {
+        channel: 'duetsub',
+        version: 1,
+        direction: 'isolated-to-main',
+        type: 'request-prime-cached-ttml',
+        siteId: 'primevideo',
+        requestId: 'preview-cache-request',
+        trackId: 'en-us_Caption_Dialog',
+        generation: observationGeneration,
+      },
+    } as unknown as MessageEvent<unknown>);
+    expect(postMessage).toHaveBeenCalledTimes(5);
   });
 });
