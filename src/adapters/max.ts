@@ -1,5 +1,8 @@
 import type { Cue, SiteAdapter, TrackInfo } from '../core/contracts';
-import type { PlaybackGeneration } from '../core/lifecycle';
+import {
+  samePlaybackGeneration,
+  type PlaybackGeneration,
+} from '../core/lifecycle';
 import { isDuetSubMessage } from '../core/messages';
 import { parseWebVtt } from '../core/webvtt';
 import {
@@ -58,6 +61,7 @@ class MaxAdapter implements SiteAdapter {
   #generation: PlaybackGeneration = {
     contentGeneration: 0,
     clockGeneration: 0,
+    selectionGeneration: 0,
   };
   #inbox: MaxResponseInbox = EMPTY_MAX_RESPONSE_INBOX;
   #tracks: readonly TrackInfo[] = [];
@@ -116,6 +120,7 @@ class MaxAdapter implements SiteAdapter {
         candidate.id === track.id &&
         candidate.language === track.language &&
         candidate.label === track.label &&
+        candidate.kind === track.kind &&
         candidate.source === 'official',
     );
     if (authoritative === undefined) {
@@ -429,7 +434,15 @@ function trackFromButton(button: HTMLButtonElement): TrackInfo | undefined {
   const language = languageFromTrackId(id);
   return language === undefined
     ? undefined
-    : { id, language, source: 'official', label };
+    : {
+        id,
+        language,
+        source: 'official',
+        label,
+        kind: id.endsWith('-closedcaptions')
+          ? 'closed-captions'
+          : 'subtitles',
+      };
 }
 
 function languageFromTrackId(id: string): string | undefined {
@@ -647,8 +660,7 @@ function sameGeneration(
   left: PlaybackGeneration,
   right: PlaybackGeneration,
 ): boolean {
-  return left.contentGeneration === right.contentGeneration &&
-    left.clockGeneration === right.clockGeneration;
+  return samePlaybackGeneration(left, right);
 }
 
 function asError(value: unknown): Error {

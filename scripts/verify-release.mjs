@@ -25,6 +25,12 @@ const expectedId = 'nopbidmmkeonplhniidecfeibhnanmig';
 assert(manifest.manifest_version === 3, 'manifest_version must be 3');
 assert(manifest.version === version, 'package and manifest versions differ');
 assert(
+  manifest.name === '__MSG_extensionName__' &&
+    manifest.description === '__MSG_extensionDescription__' &&
+    manifest.default_locale === 'en',
+  'manifest localization metadata is incomplete',
+);
+assert(
   process.env.RELEASE_TAG === undefined ||
     process.env.RELEASE_TAG === `v${version}`,
   `tag ${process.env.RELEASE_TAG} does not match v${version}`,
@@ -74,6 +80,12 @@ const entries = execFileSync('unzip', ['-Z1', archivePath], {
   encoding: 'utf8',
 }).trim().split('\n');
 assert(entries.includes('manifest.json'), `${archiveName} has no manifest.json`);
+for (const locale of ['en', 'zh_CN', 'zh_TW']) {
+  assert(
+    entries.includes(`_locales/${locale}/messages.json`),
+    `${archiveName} has no ${locale} localization`,
+  );
+}
 const forbidden = entries.filter((entry) =>
   entry.endsWith('.map') ||
   entry.endsWith('.pem') ||

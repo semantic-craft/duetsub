@@ -54,6 +54,43 @@ describe('playback lifecycle', () => {
     expect(isPlaybackOverlayActive(reset)).toBe(false);
   });
 
+  it('invalidates old cues, errors, and status when the selected pair changes', () => {
+    const ready = readyLifecycle();
+    const oldCues = bindPlaybackGeneration(ready, ['old cue']);
+    const oldError = bindPlaybackGeneration(ready, new Error('old failure'));
+    const oldStatus = bindPlaybackGeneration(ready, 'old status');
+
+    const changed = reducePlaybackLifecycle(ready, {
+      type: 'selection-changed',
+    });
+
+    expect(changed.selectionGeneration).toBe(
+      ready.selectionGeneration + 1,
+    );
+    expect(changed.tracksReady).toBe(false);
+    expect(shouldHideNativeCaptions(changed)).toBe(false);
+    expect(acceptPlaybackGeneration(changed, oldCues)).toBeUndefined();
+    expect(acceptPlaybackGeneration(changed, oldError)).toBeUndefined();
+    expect(acceptPlaybackGeneration(changed, oldStatus)).toBeUndefined();
+  });
+
+  it('invalidates the current acquisition when official tracks are manually reloaded', () => {
+    const ready = readyLifecycle();
+    const oldCues = bindPlaybackGeneration(ready, ['cached cue']);
+    const reloading = reducePlaybackLifecycle(ready, {
+      type: 'reload-tracks',
+    });
+
+    expect(reloading.selectionGeneration).toBe(
+      ready.selectionGeneration + 1,
+    );
+    expect(reloading.enabled).toBe(true);
+    expect(reloading.tracksReady).toBe(false);
+    expect(needsTrackAcquisition(reloading)).toBe(true);
+    expect(shouldHideNativeCaptions(reloading)).toBe(false);
+    expect(acceptPlaybackGeneration(reloading, oldCues)).toBeUndefined();
+  });
+
   it('rejects the previous episode response after the verified content identity changes', () => {
     const episodeOne = readyLifecycle(
       reducePlaybackLifecycle(INITIAL_PLAYBACK_LIFECYCLE, {

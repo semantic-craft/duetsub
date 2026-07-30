@@ -123,8 +123,13 @@ describe.skipIf(!runLive)('Qwen 3.7 Flash subtitle prompt live evaluation', () =
   it('passes both prompt profiles in both directions twice', async () => {
     const apiKey = process.env.DASHSCOPE_API_KEY;
     expect(apiKey, 'DASHSCOPE_API_KEY must be present').toBeTruthy();
-    const baseUrl = process.env.QWEN_EVAL_BASE_URL ??
-      'https://dashscope.aliyuncs.com/compatible-mode/v1';
+    const baseUrl = process.env.QWEN_EVAL_BASE_URL;
+    expect(
+      baseUrl,
+      'QWEN_EVAL_BASE_URL must be a workspace-specific Responses API base URL',
+    ).toMatch(
+      /^https:\/\/ws-[a-z0-9-]+\.(?:cn-beijing|ap-southeast-1)\.maas\.aliyuncs\.com\/compatible-mode\/v1$/u,
+    );
     const failures: string[] = [];
     const records: Record<string, unknown>[] = [];
 
@@ -151,9 +156,10 @@ describe.skipIf(!runLive)('Qwen 3.7 Flash subtitle prompt live evaluation', () =
             cues: evalCase.cues,
             config: {
               provider: 'qwen-cn',
-              baseUrl,
+              baseUrl: baseUrl!,
               apiKey: apiKey!,
               model: 'qwen3.7-flash',
+              webSearchEnabled: false,
             },
             skipCache: true,
           },

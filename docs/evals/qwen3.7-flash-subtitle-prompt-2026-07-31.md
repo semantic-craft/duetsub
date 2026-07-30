@@ -15,6 +15,8 @@
 
 账户的模型列表实际包含 `qwen3.7-flash`，最终 8 次响应的 `model` 也均为 `qwen3.7-flash`。
 
+合并主线后，使用北京地域的 Workspace 专属 Responses 地址又执行了一轮 8 次真实请求。首轮有 1 条把“全船人”弱化成 bare `everyone`，严格语义门槛因此判为失败；prompt 加入场所／载体范围硬检查并升至 `subtitle-v10-scope-hard-check` 后，原评分标准不变，完整复跑 8 / 8 通过。
+
 ## 2. 最终自动证据
 
 | 指标 | 结果 |
@@ -30,7 +32,7 @@
 | 固定语义锚点 | 全部通过 |
 | 重试 | 0 |
 
-最终一轮耗时：
+合并前通过轮的耗时基准：
 
 - 中位数：1.988 秒
 - 经验 P95 / 最慢：2.571 秒
@@ -56,14 +58,14 @@
 
 | 校验 | 结果 |
 | --- | --- |
-| `npm test` | 152 项通过；1 项真实 API 测试默认跳过 |
+| `npm test` | 233 项通过；1 项真实 API 测试默认跳过 |
 | `npm run check` | TypeScript 通过 |
 | `npm run build` | Chrome MV3 生产构建通过 |
 | `npm run release:build` | zip 与 release verifier 通过 |
-| 发布包 | `duetsub-0.1.6-chrome.zip`，18 个文件，least-privilege host boundary 通过 |
+| 发布包 | `duetsub-0.1.6-chrome.zip`，25 个文件，least-privilege host boundary 通过 |
 | `git diff --check` | 通过 |
 
-真实 API 测试通过 `RUN_LIVE_QWEN_EVAL=1` 显式开启，因此不会在普通离线回归中意外消耗用户额度。
+真实 API 测试通过 `RUN_LIVE_QWEN_EVAL=1` 显式开启；合入主线后还必须提供 Workspace 专属的 `QWEN_EVAL_BASE_URL`，因此不会在普通离线回归中意外消耗用户额度。
 
 ## 5. 迭代中发现并关闭的问题
 
@@ -76,6 +78,8 @@
 - 模型换行曾拆开 ``npm install``、`USB 3.2`、`799 美元` 与 `M3 MacBook Air`。
 
 最终版本以 profile 专属 prompt 解决语义与语域，以本地确定性排版解决不稳定换行；验证器同时覆盖这些回归点。时间轴从始至终只由源 cue 驱动，模型不生成或修改时间戳。
+
+合并后的 Workspace 首轮再次复现“全船人”范围偶发丢失，证明该门槛不是只对固定旧输出生效。最终版本把此项升级为影视 profile 的输出前硬检查，随后在同一 Workspace、同一模型和同一 8 组请求上全部通过。
 
 ## 6. 默认值决定
 

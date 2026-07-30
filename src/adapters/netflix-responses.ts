@@ -1,5 +1,9 @@
 import type { Cue, TrackInfo } from '../core/contracts';
-import type { PlaybackGeneration } from '../core/lifecycle';
+import {
+  samePlaybackGeneration,
+  type PlaybackGeneration,
+} from '../core/lifecycle';
+import type { NetflixTtmlResponseMessage } from '../core/messages';
 import { parseTtml, type TtmlParserOptions } from '../core/ttml';
 
 const MAX_BUFFERED_RESPONSES = 8;
@@ -22,40 +26,35 @@ export interface NetflixResponseOwner {
 }
 
 export function resolveNetflixResponseOwner(
-  generation: PlaybackGeneration,
-  pending: NetflixResponseOwner | undefined,
-  currentCandidates: readonly TrackInfo[],
-): NetflixResponseOwner | undefined {
-  if (pending !== undefined && sameGeneration(pending.generation, generation)) {
-    return pending;
-  }
-
-  const unique = currentCandidates.filter(
-    (track, index) =>
-      currentCandidates.findIndex(({ id }) => id === track.id) === index,
-  );
-  return unique.length === 1
-    ? bindTrack(generation, unique[0])
-    : undefined;
-}
-
-export function resolveNetflixUnownedResponseGeneration(
-  observedContentIdentity: string | undefined,
-  _observedGeneration: PlaybackGeneration,
-  currentContentIdentity: string | undefined,
   currentGeneration: PlaybackGeneration,
-): PlaybackGeneration | undefined {
-  if (
-    observedContentIdentity === undefined ||
-    currentContentIdentity === undefined ||
-    observedContentIdentity !== currentContentIdentity
-  ) {
-    return undefined;
-  }
-  return {
-    contentGeneration: currentGeneration.contentGeneration,
-    clockGeneration: currentGeneration.clockGeneration,
-  };
+  pending:
+    | (NetflixResponseOwner & {
+        readonly requestId: string;
+        readonly contentIdentity: string;
+        readonly armed: boolean;
+      })
+    | undefined,
+  response: Pick<
+    NetflixTtmlResponseMessage,
+    | 'requestId'
+    | 'contentIdentity'
+    | 'generation'
+    | 'trackId'
+    | 'trackKind'
+  >,
+): NetflixResponseOwner | undefined {
+  return (
+      pending !== undefined &&
+      pending.armed &&
+      pending.requestId === response.requestId &&
+      pending.contentIdentity === response.contentIdentity &&
+      pending.track.id === response.trackId &&
+      pending.track.kind === response.trackKind &&
+      sameGeneration(pending.generation, currentGeneration) &&
+      sameGeneration(response.generation, currentGeneration)
+    )
+    ? pending
+    : undefined;
 }
 
 export function recordNetflixTtmlResponse(
@@ -67,70 +66,11 @@ export function recordNetflixTtmlResponse(
   },
   parser?: NonNullable<TtmlParserOptions['parser']>,
 ): NetflixTtmlResponseInbox {
-  return recordOwnedNetflixTtmlResponse(
-    inbox,
-    response,
-    parser,
-    false,
-    false,
-  );
-}
-
-export function claimNetflixTtmlResponseForSelectedTrack(
-  inbox: NetflixTtmlResponseInbox,
-  responses: readonly {
-    readonly responseId: string;
-    readonly raw: string;
-  }[],
-  owner: NetflixResponseOwner,
-  parser?: NonNullable<TtmlParserOptions['parser']>,
-): {
-  readonly inbox: NetflixTtmlResponseInbox;
-  readonly claimedResponseId: string | undefined;
-} {
-  const matches = responses.flatMap((response) =>
-    recordOwnedNetflixTtmlResponse(
-      EMPTY_NETFLIX_TTML_INBOX,
-      { ...response, owner },
-      parser,
-      true,
-      true,
-    ),
-  );
-  if (matches.length !== 1) {
-    return { inbox, claimedResponseId: undefined };
-  }
-
-  const claimed = matches[0];
-  return {
-    inbox: [
-      ...inbox.filter(
-        ({ responseId }) => responseId !== claimed.responseId,
-      ),
-      claimed,
-    ].slice(-MAX_BUFFERED_RESPONSES),
-    claimedResponseId: claimed.responseId,
-  };
-}
-
-function recordOwnedNetflixTtmlResponse(
-  inbox: NetflixTtmlResponseInbox,
-  response: {
-    readonly responseId: string;
-    readonly raw: string;
-    readonly owner: NetflixResponseOwner;
-  },
-  parser: NonNullable<TtmlParserOptions['parser']> | undefined,
-  allowMissingSourceLanguage: boolean,
-  allowUnderspecifiedSourceLanguage: boolean,
-): NetflixTtmlResponseInbox {
   const cues = parseTtml(response.raw, {
     language: response.owner.track.language,
     acceptedSourceLanguages: acceptedNetflixTtmlLanguages(
       response.owner.track.language,
     ),
-    allowMissingSourceLanguage,
-    allowUnderspecifiedSourceLanguage,
     parser,
   });
   if (!isValidCueSet(cues)) return inbox;
@@ -147,79 +87,6 @@ function recordOwnedNetflixTtmlResponse(
       generation: response.owner.generation,
     },
   ].slice(-MAX_BUFFERED_RESPONSES);
-}
-
-export function recordNetflixTtmlResponseForUniqueTrack(
-  inbox: NetflixTtmlResponseInbox,
-  response: {
-    readonly responseId: string;
-    readonly raw: string;
-    readonly generation: PlaybackGeneration;
-    readonly candidates: readonly TrackInfo[];
-  },
-  parser?: NonNullable<TtmlParserOptions['parser']>,
-): NetflixTtmlResponseInbox {
-  const candidates = response.candidates.filter(
-    (track, index) =>
-      response.candidates.findIndex(({ id }) => id === track.id) === index,
-  );
-  const matches = candidates.flatMap((track) =>
-    recordNetflixTtmlResponse(
-      EMPTY_NETFLIX_TTML_INBOX,
-      {
-        responseId: response.responseId,
-        raw: response.raw,
-        owner: { track, generation: response.generation },
-      },
-      parser,
-    ),
-  );
-  if (matches.length !== 1) return inbox;
-
-  return [
-    ...inbox.filter(
-      ({ responseId }) => responseId !== response.responseId,
-    ),
-    matches[0],
-  ].slice(-MAX_BUFFERED_RESPONSES);
-}
-
-export function claimNetflixTtmlResponseForPending(
-  inbox: NetflixTtmlResponseInbox,
-  responses: readonly {
-    readonly responseId: string;
-    readonly raw: string;
-  }[],
-  owner: NetflixResponseOwner,
-  parser?: NonNullable<TtmlParserOptions['parser']>,
-): {
-  readonly inbox: NetflixTtmlResponseInbox;
-  readonly claimedResponseId: string | undefined;
-} {
-  const matches = responses.flatMap((response) =>
-    recordNetflixTtmlResponse(
-      EMPTY_NETFLIX_TTML_INBOX,
-      {
-        ...response,
-        owner,
-      },
-      parser,
-    ),
-  );
-  if (matches.length !== 1) {
-    return { inbox, claimedResponseId: undefined };
-  }
-
-  const claimed = matches[0];
-  return {
-    inbox: [
-      ...inbox.filter(
-        ({ responseId }) => responseId !== claimed.responseId,
-      ),
-      claimed,
-    ].slice(-MAX_BUFFERED_RESPONSES),
-    claimedResponseId: claimed.responseId,
-  };
 }
 
 export function retainNetflixTtmlResponsesForGeneration(
@@ -246,19 +113,6 @@ export function consumeNetflixTtmlResponse(
   );
   const remaining = inbox.filter((response) => !matches.includes(response));
   return { inbox: remaining, cues: matches.at(-1)?.cues };
-}
-
-function bindTrack(
-  generation: PlaybackGeneration,
-  track: TrackInfo,
-): NetflixResponseOwner {
-  return {
-    generation: {
-      contentGeneration: generation.contentGeneration,
-      clockGeneration: generation.clockGeneration,
-    },
-    track,
-  };
 }
 
 function acceptedNetflixTtmlLanguages(language: string): readonly string[] {
@@ -292,8 +146,5 @@ function sameGeneration(
   left: PlaybackGeneration,
   right: PlaybackGeneration,
 ): boolean {
-  return (
-    left.contentGeneration === right.contentGeneration &&
-    left.clockGeneration === right.clockGeneration
-  );
+  return samePlaybackGeneration(left, right);
 }

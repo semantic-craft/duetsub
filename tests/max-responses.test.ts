@@ -14,6 +14,7 @@ const ENGLISH: TrackInfo = {
   language: 'en-US',
   source: 'official',
   label: 'English',
+  kind: 'subtitles',
 };
 const CURRENT_GENERATION = {
   contentGeneration: 1,
@@ -313,5 +314,73 @@ describe('Max response inbox', () => {
         ),
       ),
     ).toEqual([ENGLISH.id]);
+  });
+
+  it('rebinds complete mapping metadata but drops old VTT across a selection generation', () => {
+    const currentSelection = {
+      contentGeneration: 1,
+      clockGeneration: 1,
+      selectionGeneration: 4,
+    };
+    const withPlayback = recordMaxResponse(EMPTY_MAX_RESPONSE_INBOX, {
+      responseId: 'selection-playback',
+      kind: 'playback-info',
+      url: 'https://api.example.invalid/playbackInfo',
+      raw: SYNTHETIC_PLAYBACK_INFO,
+      generation: currentSelection,
+      contentIdentity: EPISODE_ONE,
+    });
+    const withManifest = recordMaxResponse(withPlayback, {
+      responseId: 'selection-mpd',
+      kind: 'manifest',
+      url: 'https://media.example.invalid/title/dash.mpd',
+      raw: SYNTHETIC_MPD,
+      generation: currentSelection,
+      contentIdentity: EPISODE_ONE,
+    });
+    const withVtt = recordMaxResponse(withManifest, {
+      responseId: 'old-selection-vtt',
+      kind: 'vtt',
+      url: 'https://media.example.invalid/title/t/en/1.vtt',
+      raw: 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nOld pair',
+      generation: currentSelection,
+      contentIdentity: EPISODE_ONE,
+    });
+    const nextSelection = {
+      ...currentSelection,
+      selectionGeneration: 5,
+    };
+
+    const retained = retainMaxResponsesForGeneration(
+      withVtt,
+      nextSelection,
+      EPISODE_ONE,
+    );
+
+    expect(retained.map(({ kind, generation }) => ({
+      kind,
+      generation,
+    }))).toEqual([
+      { kind: 'playback-info', generation: nextSelection },
+      { kind: 'manifest', generation: nextSelection },
+    ]);
+    expect(
+      Object.keys(
+        resolveMaxTrackResources(
+          retained,
+          [ENGLISH],
+          nextSelection,
+          new DOMParser(),
+        ),
+      ),
+    ).toEqual([ENGLISH.id]);
+    expect(
+      resolveMaxTrackResources(
+        retained,
+        [ENGLISH],
+        currentSelection,
+        new DOMParser(),
+      ),
+    ).toEqual({});
   });
 });

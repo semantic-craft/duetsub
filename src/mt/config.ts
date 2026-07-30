@@ -11,6 +11,7 @@ export interface TranslationConfig {
   readonly baseUrl: string;
   readonly apiKey: string;
   readonly model: string;
+  readonly webSearchEnabled: boolean;
 }
 
 export const TRANSLATION_CONFIG_STORAGE_KEY = 'duetsub:translation-config';
@@ -24,6 +25,7 @@ export const QWEN_MODELS = [
   'qwen3.7-max',
   'qwen3.6-flash',
 ] as const;
+export const QWEN_WORKSPACE_ID_PLACEHOLDER = 'YOUR_WORKSPACE_ID';
 export const DOUBAO_MODELS = [
   'doubao-seed-2-1-pro-260628',
   'doubao-seed-2-0-lite-260215',
@@ -35,26 +37,28 @@ export const DEFAULT_TRANSLATION_CONFIG: TranslationConfig = {
   baseUrl: 'https://api.deepseek.com',
   apiKey: '',
   model: DEEPSEEK_MODELS[0],
+  webSearchEnabled: false,
 };
 export const QWEN_CN_TRANSLATION_CONFIG: TranslationConfig = {
   provider: 'qwen-cn',
-  baseUrl:
-    'https://YOUR_WORKSPACE_ID.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
+  baseUrl: qwenBaseUrl('qwen-cn', QWEN_WORKSPACE_ID_PLACEHOLDER),
   apiKey: '',
   model: QWEN_MODELS[0],
+  webSearchEnabled: false,
 };
 export const QWEN_SG_TRANSLATION_CONFIG: TranslationConfig = {
   provider: 'qwen-sg',
-  baseUrl:
-    'https://YOUR_WORKSPACE_ID.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1',
+  baseUrl: qwenBaseUrl('qwen-sg', QWEN_WORKSPACE_ID_PLACEHOLDER),
   apiKey: '',
   model: QWEN_MODELS[0],
+  webSearchEnabled: false,
 };
 export const DOUBAO_TRANSLATION_CONFIG: TranslationConfig = {
   provider: 'doubao',
   baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
   apiKey: '',
   model: DOUBAO_MODELS[0],
+  webSearchEnabled: false,
 };
 
 export type ConfigValidation =
@@ -73,13 +77,8 @@ export function validateTranslationConfig(
   }
   if (url.username || url.password) return failure('Base URL 不得包含憑據');
   if (url.search || url.hash) return failure('Base URL 不得包含查詢或片段');
-  if (
-    (input.provider === 'qwen-cn' || input.provider === 'qwen-sg') &&
-    url.hostname.toLowerCase().includes('your_workspace_id')
-  ) {
-    return failure(
-      '請將 Base URL 中的 YOUR_WORKSPACE_ID 替換為百煉業務空間 ID',
-    );
+  if (isQwenProvider(input.provider) && qwenWorkspaceId(input) === '') {
+    return failure('請填寫有效的百煉 Workspace ID');
   }
   const loopback = isLoopback(url.hostname);
   if (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) {
@@ -117,8 +116,36 @@ export function translationRequestUrl(config: TranslationConfig): string {
 }
 
 export function usesResponsesApi(provider: TranslationProvider): boolean {
-  return provider === 'qwen-cn' || provider === 'qwen-sg' ||
-    provider === 'doubao';
+  return isQwenProvider(provider) || provider === 'doubao';
+}
+
+export function qwenBaseUrl(
+  provider: Extract<TranslationProvider, 'qwen-cn' | 'qwen-sg'>,
+  workspaceId: string,
+): string {
+  return `https://${workspaceId.trim()}.${
+    qwenDomain(provider)
+  }/compatible-mode/v1`;
+}
+
+export function qwenWorkspaceId(config: TranslationConfig): string {
+  if (!isQwenProvider(config.provider)) return '';
+  let url: URL;
+  try {
+    url = new URL(config.baseUrl);
+  } catch {
+    return '';
+  }
+  const suffix = `.${qwenDomain(config.provider)}`;
+  const hostname = url.hostname.toLowerCase();
+  if (
+    !hostname.endsWith(suffix) ||
+    url.pathname.replace(/\/$/, '') !== '/compatible-mode/v1'
+  ) {
+    return '';
+  }
+  const workspaceId = hostname.slice(0, -suffix.length);
+  return /^ws-[a-z0-9-]+$/.test(workspaceId) ? workspaceId : '';
 }
 
 export function translationProviderDefault(
@@ -147,6 +174,20 @@ export function isTranslationProvider(
     value === 'doubao' ||
     value === 'openai-compatible' ||
     value === 'local';
+}
+
+function isQwenProvider(
+  provider: TranslationProvider,
+): provider is Extract<TranslationProvider, 'qwen-cn' | 'qwen-sg'> {
+  return provider === 'qwen-cn' || provider === 'qwen-sg';
+}
+
+function qwenDomain(
+  provider: Extract<TranslationProvider, 'qwen-cn' | 'qwen-sg'>,
+): string {
+  return provider === 'qwen-cn'
+    ? 'cn-beijing.maas.aliyuncs.com'
+    : 'ap-southeast-1.maas.aliyuncs.com';
 }
 
 function isLoopback(hostname: string): boolean {

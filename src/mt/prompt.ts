@@ -1,6 +1,6 @@
 export type SubtitlePromptProfile = 'film-tv' | 'youtube';
 
-export const SUBTITLE_PROMPT_VERSION = 'subtitle-v9-profile-budgets';
+export const SUBTITLE_PROMPT_VERSION = 'subtitle-v10-scope-hard-check';
 
 export function subtitleTranslationSystemPrompt(
   profile: SubtitlePromptProfile,
@@ -66,6 +66,11 @@ export function subtitleTranslationSystemPrompt(
     'FINAL DETAIL CHECK BEFORE OUTPUT',
     'For every cue, compare source and translation once for: negation; who/which group; where; action and object; risk or consequence; direction/comparison; numbers and units.',
     'If the source says everyone aboard/on a vehicle is at risk, the translation must retain both the vehicle/crew scope and the risk—not vague "everyone" and not merely "the crew".',
+    ...(profile === 'film-tv'
+      ? [
+          'FILM/TV SCOPE HARD CHECK: When a group is defined by a place or vehicle—for example 全船人, 全車人, 滿屋人, everyone aboard, everyone on the bus, or everyone in the room—never reduce it to bare "everyone" or "everybody". Retain the setting with a natural phrase such as "everyone aboard", "everyone on the bus", or "everyone in the room", then retain the source action and consequence.',
+        ]
+      : []),
     ...(profile === 'youtube' && targetLanguage === 'zh-Hant'
       ? [
           'YOUTUBE TERMINOLOGY HARD CHECK: If the source says "authoritative" or "source of truth" about a file or workflow, use a natural grammatical template such as "以鎖定檔為準", "鎖定檔是唯一依據", or "把鎖定檔作為依據". Never write 權威, 權威性, or the ungrammatical 保持為準 for this meaning; rewrite it before output if any appears.',

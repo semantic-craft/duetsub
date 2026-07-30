@@ -13,10 +13,11 @@ describe('translation cache', () => {
       sourceEndMs: 2_500,
       targetLanguage: 'zh-Hant',
       promptProfile: 'film-tv',
-      promptVersion: 'subtitle-v5-timed-domain',
+      promptVersion: 'subtitle-v10-scope-hard-check',
       provider: 'deepseek',
       endpoint: 'https://api.deepseek.com',
       model: 'deepseek-v4-flash',
+      webSearchEnabled: false,
     };
     const key = await translationCacheKey(base);
     expect(key).toBe(await translationCacheKey({ ...base }));
@@ -27,6 +28,7 @@ describe('translation cache', () => {
       { targetLanguage: 'en' },
       { promptProfile: 'youtube' },
       { sourceEndMs: 3_000 },
+      { webSearchEnabled: true },
     ]) {
       expect(await translationCacheKey({ ...base, ...changed })).not.toBe(key);
     }

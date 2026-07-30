@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseYoutubeCaptionTracks } from '../src/adapters/youtube-tracks';
+import {
+  parseYoutubeCaptionTracks,
+  parseYoutubeCreatorOfficialCaptionTracks,
+} from '../src/adapters/youtube-tracks';
 
 const VIDEO_ID = 'video-one';
 
@@ -78,12 +81,18 @@ describe('parseYoutubeCaptionTracks', () => {
         source: 'official' as const,
         label,
       })),
-      ...['zh-CN', 'zh-SG', 'zh'].map((label) => ({
+      ...['zh-CN', 'zh-SG'].map((label) => ({
         id: `youtube:.${label}:`,
         language: 'zh-Hans',
         source: 'official' as const,
         label,
       })),
+      {
+        id: 'youtube:.zh:',
+        language: 'zh',
+        source: 'official',
+        label: 'zh',
+      },
     ]);
   });
 
@@ -155,6 +164,84 @@ describe('parseYoutubeCaptionTracks', () => {
         language: 'en',
         source: 'platform-mt',
         tlang: 'en',
+      },
+    ]);
+  });
+
+  it('exposes only creator official captions to the official pair runtime', () => {
+    const parsed = parseYoutubeCreatorOfficialCaptionTracks(
+      {
+        playerCaptionsTracklistRenderer: {
+          captionTracks: [
+            {
+              baseUrl: baseUrl('ja'),
+              vssId: '.ja',
+              languageCode: 'ja',
+              trackName: '',
+              name: { simpleText: '日本語' },
+              isTranslatable: true,
+            },
+            {
+              baseUrl: baseUrl('zh-CN'),
+              vssId: '.zh-CN',
+              languageCode: 'zh-CN',
+              trackName: '',
+              name: { simpleText: '简体中文' },
+            },
+            {
+              baseUrl: `${baseUrl('en')}&kind=asr`,
+              vssId: 'a.en',
+              languageCode: 'en',
+              kind: 'asr',
+              trackName: '',
+              name: { simpleText: 'English (auto-generated)' },
+              isTranslatable: true,
+            },
+            {
+              baseUrl: `${baseUrl('fr')}&kind=asr`,
+              vssId: '.fr',
+              languageCode: 'fr',
+              trackName: '',
+              name: { simpleText: 'Français (auto-generated)' },
+            },
+            {
+              baseUrl: `${baseUrl('de')}&tlang=de`,
+              vssId: '.de',
+              languageCode: 'de',
+              trackName: '',
+              name: { simpleText: 'Deutsch (translated)' },
+            },
+          ],
+          translationLanguages: [
+            {
+              languageCode: 'zh-Hant',
+              languageName: { simpleText: '繁體中文' },
+            },
+          ],
+        },
+      },
+      VIDEO_ID,
+    );
+
+    expect(
+      parsed.map(({ track, handle }) => ({
+        language: track.language,
+        source: track.source,
+        handleKind: handle.kind,
+        tlang: handle.tlang,
+      })),
+    ).toEqual([
+      {
+        language: 'ja',
+        source: 'official',
+        handleKind: undefined,
+        tlang: undefined,
+      },
+      {
+        language: 'zh-Hans',
+        source: 'official',
+        handleKind: undefined,
+        tlang: undefined,
       },
     ]);
   });

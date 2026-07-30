@@ -60,6 +60,7 @@ export function parseYoutubeCaptionTracks(
         language,
         source,
         label,
+        kind: 'subtitles',
       },
       handle: {
         videoId,
@@ -95,6 +96,7 @@ export function parseYoutubeCaptionTracks(
           language,
           source: 'platform-mt',
           label: `${source.track.label} → ${targetLabel}`,
+          kind: 'subtitles',
         },
         handle: {
           ...source.handle,
@@ -104,6 +106,22 @@ export function parseYoutubeCaptionTracks(
     }
   }
   return candidates;
+}
+
+export function parseYoutubeCreatorOfficialCaptionTracks(
+  captions: unknown,
+  videoId: string,
+): YoutubeTrackCandidate[] {
+  return parseYoutubeCaptionTracks(captions, videoId).filter(
+    ({ track, handle }) => {
+      const searchParams = new URL(handle.baseUrl).searchParams;
+      return track.source === 'official' &&
+        handle.kind === undefined &&
+        handle.tlang === undefined &&
+        searchParams.get('kind') !== 'asr' &&
+        !searchParams.has('tlang');
+    },
+  );
 }
 
 export function normalizeYoutubeLanguage(value: string): string | undefined {
@@ -117,7 +135,6 @@ export function normalizeYoutubeLanguage(value: string): string | undefined {
       return 'zh-Hant';
     }
     if (
-      qualifiers.length === 0 ||
       qualifiers.includes('hans') ||
       qualifiers.some((part) => ['cn', 'sg'].includes(part))
     ) {

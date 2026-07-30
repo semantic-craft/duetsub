@@ -1,5 +1,8 @@
 import type { Cue, TrackInfo } from '../core/contracts';
-import type { PlaybackGeneration } from '../core/lifecycle';
+import {
+  samePlaybackGeneration,
+  type PlaybackGeneration,
+} from '../core/lifecycle';
 import { parseTtml, type TtmlParserOptions } from '../core/ttml';
 
 const MAX_BUFFERED_RESPONSES = 8;
@@ -85,8 +88,15 @@ export function consumePrimeTtmlResponse(
 }
 
 function acceptedPrimeTtmlLanguages(language: string): readonly string[] {
-  if (language.toLowerCase() === 'zh-hant') {
+  const normalized = language.toLowerCase();
+  if (normalized === 'zh-hant') {
     return ['zh-Hant', 'cmn-Hant', 'zh-TW', 'cmn-TW'];
+  }
+  if (normalized === 'zh-hans') {
+    return ['zh-Hans', 'cmn-Hans', 'zh-CN', 'cmn-CN'];
+  }
+  if (normalized === 'ja' || normalized === 'ja-jp') {
+    return [language, 'ja', 'jp'];
   }
   return [language];
 }
@@ -120,7 +130,7 @@ function parsePrimeTtmlPayload(
 function normalizePrimeCue(cue: Cue, track: TrackInfo): Cue[] {
   if (
     !track.language.toLowerCase().startsWith('en') ||
-    !/\[CC\]/i.test(track.label)
+    track.kind !== 'closed-captions'
   ) {
     return [cue];
   }
@@ -176,8 +186,5 @@ function sameGeneration(
   left: PlaybackGeneration,
   right: PlaybackGeneration,
 ): boolean {
-  return (
-    left.contentGeneration === right.contentGeneration &&
-    left.clockGeneration === right.clockGeneration
-  );
+  return samePlaybackGeneration(left, right);
 }

@@ -15,6 +15,7 @@ const config = {
   baseUrl: 'https://api.deepseek.com',
   apiKey: 'test-only-token',
   model: 'deepseek-v4-flash',
+  webSearchEnabled: false,
 };
 
 describe('translation HTTP seam', () => {
@@ -99,37 +100,45 @@ describe('translation HTTP seam', () => {
       baseUrl:
         'https://ws-cn-test.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
       model: 'qwen3.7-flash',
+      webSearchEnabled: false,
       expected: {
         reasoning: { effort: 'none' },
         store: false,
       },
+      expectedTools: undefined,
     },
     {
       provider: 'qwen-sg' as const,
       baseUrl:
         'https://ws-sg-test.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1',
       model: 'qwen3.7-plus',
+      webSearchEnabled: true,
       expected: {
-        reasoning: { effort: 'none' },
+        reasoning: { effort: 'low' },
         store: false,
       },
+      expectedTools: [{ type: 'web_search' }],
     },
     {
       provider: 'doubao' as const,
       baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
       model: 'doubao-seed-2-1-pro-260628',
+      webSearchEnabled: false,
       expected: {
         thinking: { type: 'disabled' },
         text: { format: { type: 'json_object' } },
         max_output_tokens: 4_096,
         store: false,
       },
+      expectedTools: undefined,
     },
   ])('uses deterministic $provider request options', async ({
     provider,
     baseUrl,
     model,
+    webSearchEnabled,
     expected,
+    expectedTools,
   }) => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
       new Response(
@@ -138,6 +147,10 @@ describe('translation HTTP seam', () => {
             {
               type: 'reasoning',
               summary: [],
+            },
+            {
+              type: 'web_search_call',
+              action: { type: 'search', query: 'subtitle proper noun' },
             },
             {
               type: 'message',
@@ -165,6 +178,7 @@ describe('translation HTTP seam', () => {
           baseUrl,
           apiKey: 'provider-test-token',
           model,
+          webSearchEnabled,
         },
       },
       { fetch },
@@ -182,6 +196,7 @@ describe('translation HTTP seam', () => {
       messages?: unknown;
     } & Record<string, unknown>;
     expect(request).toMatchObject(expected);
+    expect(request.tools).toEqual(expectedTools);
     expect(request.messages).toBeUndefined();
     expect(request.input?.[0]).toEqual({
       role: 'system',

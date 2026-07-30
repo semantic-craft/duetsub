@@ -150,12 +150,13 @@ interface SiteAdapter {
 
 ### D. 机翻兜底细则（ticket 06 就地拍板）
 
-- **引擎/模型/key**（2026-07-31）：全局默认供应商仍为 DeepSeek；千问（阿里云百炼·中国区/新加坡区）的供应商默认模型改为已实测的 `qwen3.7-flash`，`qwen3.6-flash` 仅保留为可手选候选，不覆盖用户已经保存的显式模型。豆包（火山方舟·中国区）与任意 OpenAI 兼容端点、**本机模型**（Ollama / LM Studio 等）继续支持。模型栏始终可编辑；豆包候选含 `doubao-seed-2-1-pro-260628`。供应商 / Base URL / key / 模型在 options page 配置、存 `chrome.storage.local`（详见 §I）；千问与豆包走各自 OpenAI 兼容 Responses API，DeepSeek、自定义与本机端点保持 Chat Completions。
+- **引擎/模型/key**（2026-07-31）：全局默认供应商仍为 DeepSeek；千问（阿里云百炼·中国区/新加坡区）默认使用已实测的 `qwen3.7-flash`，并提供 `qwen3.7-plus`、`qwen3.7-max` 与 `qwen3.6-flash` 候选，不覆盖用户已经保存的显式模型。模型栏始终可编辑，用户可手动填写其他模型 ID。豆包候选含 `doubao-seed-2-1-pro-260628`。供应商 / Workspace ID（仅千问）/ Base URL / key / 模型 / 联网搜索（仅千问）在 options page 配置、存 `chrome.storage.local`（详见 §I）；千问与豆包走各自 OpenAI 兼容 Responses API，DeepSeek、自定义与本机端点保持 Chat Completions。
 - **繁体产出**：prompt 指定输出繁体中文；所有供应商的 zh-Hant 输出再过一遍 OpenCC(s2t) 作保险，避免偶发简体混入。
-- **请求约束**：字幕翻译按站点选择两套 system prompt：Netflix / Prime Video / Max 使用 `film-tv`，YouTube 使用 `youtube`。请求按时间升序发送 `id/start_ms/end_ms/duration_ms/max_reading_units/text`，响应必须是同 ID、同顺序的 `{"translations":[{"id":0,"text":"…"}]}`；不得增删拆并或跨 cue 搬运信息。千问 Responses 使用 `reasoning.effort: none` 且不存储响应；豆包 Responses 使用 `thinking.type: disabled`、`text.format: json_object` 且不存储响应；DeepSeek 保持现有 JSON Output Chat Completions；自定义端点只发送通用 OpenAI-compatible 字段。
+- **请求约束**：字幕翻译按站点选择两套 system prompt：Netflix / Prime Video / Max 使用 `film-tv`，YouTube 使用 `youtube`。请求按时间升序发送 `id/start_ms/end_ms/duration_ms/max_reading_units/text`，响应必须是同 ID、同顺序的 `{"translations":[{"id":0,"text":"…"}]}`；不得增删拆并或跨 cue 搬运信息。千问 Responses 默认使用 `reasoning.effort: none`，允许联网搜索时切换为 `low`，且始终不存储响应；豆包 Responses 使用 `thinking.type: disabled`、`text.format: json_object` 且不存储响应；DeepSeek 保持现有 JSON Output Chat Completions；自定义端点只发送通用 OpenAI-compatible 字段。
+- **千问联网搜索**：仅作为默认关闭的显式用户选项；启用时按百炼 Responses API 文档添加 `tools: [{"type":"web_search"}]` 与低强度思考，由模型自行决定是否搜索。不得发送 Chat Completions 的 `enable_search`，也不暴露 Responses API 不支持的强制搜索、搜索策略、来源站点或角标来源设置。搜索开关进入翻译缓存身份，开关前后的结果不得互相命中。
 - **批处理**：整轨 **warmup 预热 + 沿播放位置滚动补翻**（承 ticket 02 的 Read Frog 模板）。先按源时间轴组成最多 8 条的连续小批，再按批次与播放头的距离调度；这样既优先当前位置，也让模型始终看到按时间升序的相邻上下文。快进/跳转用 AbortController 取消在途请求。
 - **翻译保时轴与排版**：机翻**逐 cue 翻译、沿用官方源轨的 `start/end`**，不重新拆句、不做时间轴再对齐。译文写回对应 cue 的 `text`，时轴不变；返回后以目标语言感知的确定性排版器限制为最多两行，优先在句末/分句边界换行，并保护内联代码、产品名、房号、数字与单位不被拆开。
-- **缓存**：service worker 侧 IndexedDB 持久化；key 包含 `contentId + trackId + 源文本 + 源 start/end + 目标语言 + prompt profile/version + provider endpoint/model`，因此时间预算、prompt 或模型变化都会自然 miss；容量上限 + LRU 淘汰。
+- **缓存**：service worker 侧 IndexedDB 持久化；key 包含 `contentId + trackId + 源文本 + 源 start/end + 目标语言 + prompt profile/version + provider endpoint/model + 联网搜索开关`，因此时间预算、prompt、模型或搜索设置变化都会自然 miss；容量上限 + LRU 淘汰。
 - **失败降级（fail-soft，永不阻塞官方轨）**：
   - 未配置 key：官方轨照显；需机翻的那侧显示一次性内联提示（点击去 options page），不整屏空白。
   - API 报错/超额：官方侧照显；受影响的机翻 cue 显示不显眼的「翻译失败」占位并静默退避重试；绝不清空整个 overlay。
@@ -174,8 +175,8 @@ zhActive = Chinese cues where start <= t < end
 - 任一侧无 active cue 时另一侧仍单独显示；不得因配对失败丢字幕。
 - 同侧多个 active cue 按源顺序以 `\n` 合并。任一 active cue 为 `top` 时沿用整组置顶规则。
 - 顺播用有序游标；seek 或时间倒退后对两轨二分定位。
-- **Max 官方双轨例外**：英文官方轨是音频主时钟；有官方英文 CC 时优先于普通英文字幕。每条中文 cue 只使用其**原始起点**查找当时唯一 active 的英文 cue；唯一候选存在时，显示副本采用该英文 cue 的完整 `[start,end)`，源 cue 不改写。多个中文 cue 落入同一英文 cue 时按中文源顺序同屏合并；无候选或多候选的中文 cue 不显示，不猜固定延迟、最近邻或文本语义。
-- 当一个中文源 cue 明确含多个对话行、当前英文 cue 的可说话单元不足，且该中文源区间还覆盖后续英文 cue 时，才把溢出行依源顺序移到后续有对白的英文 cue；没有说话人前缀或句末标点的显式换行，也只有在每条溢出行都能一对一落到源区间覆盖的后续英文对白 cue 时才按行拆分。不做翻译语义重排。Max 只有在不少于 **95%** 的中文 cues 都能取得上述唯一候选时才启用英文主轨对齐；低于门槛整条中文轨 fail closed，原生字幕不得提前隐藏。该门槛来自 2026-07-24 两集登录态完整 VTT 的内存核验（258/263，98.10%；英文 CC 310/314，98.73%），不是伪造 fixture。
+- **Max 官方双轨例外**：普通官方英文字幕优先；只有节目没有普通英文字幕时才退回官方英文 CC。英文 CC 可作为音频主时钟尝试受控对齐：每条中文 cue 只使用其**原始起点**查找当时唯一 active 的英文 cue；唯一候选存在时，显示副本采用该英文 cue 的完整 `[start,end)`，源 cue 不改写。多个中文 cue 落入同一英文 cue 时按中文源顺序同屏合并；不猜固定延迟、最近邻或文本语义。
+- 当一个中文源 cue 明确含多个对话行、当前英文 cue 的可说话单元不足，且该中文源区间还覆盖后续英文 cue 时，才把溢出行依源顺序移到后续有对白的英文 cue；没有说话人前缀或句末标点的显式换行，也只有在每条溢出行都能一对一落到源区间覆盖的后续英文对白 cue 时才按行拆分。不做翻译语义重排。Max 只有在不少于 **95%** 的中文 cues 都能取得上述唯一候选时才启用英文主轨对齐；低于门槛时不应用该对齐副本，保留英中两条官方轨各自的原始 cue 区间，不丢弃整对字幕。该门槛来自 2026-07-24 两集登录态完整 VTT 的内存核验（258/263，98.10%；英文 CC 310/314，98.73%），不是伪造 fixture；2026-07-31 登录态节目同时验证了低覆盖率原始时序回退。
 
 ### F. Overlay 渲染规格（ticket 05 基线，2026-07-30 更新字号层级）
 
@@ -208,7 +209,8 @@ zhActive = Chinese cues where start <= t < end
 
 - 标准 MV3 options page（经扩展 action / chrome://extensions 打开）。**翻译服务**区块：
   - **供应商**下拉：`DeepSeek`（默认）/ `千问（阿里云百炼·中国区）` / `千问（阿里云百炼·新加坡区）` / `豆包（火山方舟·中国区）` / `OpenAI 兼容`（自定义云端）/ `本地`（Ollama、LM Studio 等本机 OpenAI 兼容端点）。
-  - **Base URL**：DeepSeek、豆包预设并隐藏；两套千问默认使用阿里云推荐的中国区/新加坡区业务空间专属域名模板，用户须把 `YOUR_WORKSPACE_ID` 替换为控制台中的业务空间 ID；自定义/本地时显示（本地默认形如 `http://localhost:11434/v1`）。
+  - **Workspace ID / Base URL**：DeepSeek、豆包的 Base URL 预设并隐藏；千问显示独立 Workspace ID 输入框，用户只填控制台中的 `ws-…`，扩展按中国区（华北 2）或新加坡区自动生成阿里云推荐的业务空间专属 Responses API 地址，并在重新打开设置时从已存地址回填 Workspace ID；自定义/本地时显示 Base URL（本地默认形如 `http://localhost:11434/v1`）。
+  - **联网搜索**：仅千问显示，默认关闭；开启后使用百炼 Responses API 的 `web_search` 工具和 `reasoning.effort: low`，明确告知搜索由模型按需决定，并提示可能增加延迟与费用。
   - **API Key**（掩码）：云端必填；本地无鉴权时可留空。
   - **模型**：DeepSeek、千问、豆包均给出当前候选；候选不构成锁定，用户可自行选择或手动填写其他模型 ID；自定义/本地同样可填。
   - **测试连接**按钮 + 状态徽标（未配置 / 已配置 / 测试通过）。

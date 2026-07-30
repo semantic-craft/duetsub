@@ -7,6 +7,7 @@ const config = {
   baseUrl: 'http://localhost:11434/v1',
   apiKey: '',
   model: 'qwen',
+  webSearchEnabled: false,
 };
 
 describe('options test connection', () => {

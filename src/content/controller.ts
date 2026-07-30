@@ -1,7 +1,6 @@
 import type { Cue, SiteAdapter, SiteId, TrackInfo } from '../core/contracts';
 import {
-  alignMaxChineseCuesToEnglish,
-  selectMaxEnglishPrimaryTrack,
+  resolveMaxOfficialPairCues,
 } from '../adapters/max-cue-alignment';
 import {
   acceptPlaybackGeneration,
@@ -12,6 +11,7 @@ import {
   reducePlaybackLifecycle,
   shouldHideNativeCaptions,
   type GenerationBound,
+  type PlaybackGeneration,
   type PlaybackLifecycleState,
 } from '../core/lifecycle';
 import {
@@ -21,15 +21,35 @@ import {
 } from '../core/messages';
 import { createOverlayModel } from '../core/overlay-model';
 import {
+  loadLanguagePairPreference,
+  saveLanguagePairPreference,
+} from '../core/official-pair-preference';
+import {
+  createOfficialTrackCatalog,
+  DEFAULT_LANGUAGE_PAIR_PREFERENCE,
+  resolveOfficialPair,
+  resolveOfficialPairCues,
+  type LanguagePairPreference,
+  type OfficialPairUnavailableReason,
+} from '../core/official-pair-selection';
+import {
   synchronizeCues,
   type SynchronizerState,
 } from '../core/synchronizer';
 import {
   decideSubtitleSources,
-  selectBilingualTracks,
+  decideYoutubeSubtitleSources,
   type SubtitleSource,
-  type SubtitleSourceDecision,
 } from '../core/track-selection';
+import {
+  languageDisplayName,
+  loadUiLanguage,
+  resolveUiLanguage,
+  translate,
+  UI_LANGUAGE_STORAGE_KEY,
+  type UiLanguage,
+  type UiMessageKey,
+} from '../i18n';
 import { scheduleTranslationBatches } from '../mt/scheduling';
 import { NativeCaptionVisibility } from './native-captions';
 import { createOverlayView, type OverlayView } from './overlay-view';
@@ -38,6 +58,7 @@ import { createToggleView, type ToggleView } from './toggle-view';
 
 const UPDATE_INTERVAL_MS = 250;
 const CONTROLS_VISIBLE_MS = 2_000;
+type LocalizedText = (language: UiLanguage) => string;
 
 export function startDuetSubContent(
   siteId: SiteId,
@@ -94,14 +115,18 @@ class PlaybackController {
   readonly #restoredPlayerPosition: string | undefined;
 
   #state: PlaybackLifecycleState = INITIAL_PLAYBACK_LIFECYCLE;
-  #englishCues: readonly Cue[] = [];
-  #chineseCues: readonly Cue[] = [];
-  #englishMachineTranslated = false;
-  #chineseMachineTranslated = false;
-  #readyStatus = '官方英文 + 官方繁中 · 100%';
+  #topCues: readonly Cue[] = [];
+  #bottomCues: readonly Cue[] = [];
+  #topLanguage = DEFAULT_LANGUAGE_PAIR_PREFERENCE.top;
+  #bottomLanguage = DEFAULT_LANGUAGE_PAIR_PREFERENCE.bottom;
+  #languagePairPreference = DEFAULT_LANGUAGE_PAIR_PREFERENCE;
+  #hasSavedLanguagePairPreference = false;
+  #topMachineTranslated = false;
+  #bottomMachineTranslated = false;
+  #readyStatus = uiMessage('status.readyDefault');
   #tracks: readonly TrackInfo[] = [];
-  #receivedEnglish = false;
-  #receivedChinese = false;
+  #receivedTopTrackId: string | undefined;
+  #receivedBottomTrackId: string | undefined;
   #requestId = '';
   #requestSequence = 0;
   #interactionRevision = 0;
@@ -113,7 +138,7 @@ class PlaybackController {
     | {
         readonly source: readonly Cue[];
         readonly trackId: string;
-        readonly target: 'english' | 'chinese';
+        readonly target: 'top' | 'bottom';
         readonly targetLanguage: 'en' | 'zh-Hant';
       }
     | undefined;
@@ -121,7 +146,8 @@ class PlaybackController {
   #controlsVisible = false;
   #controlsTimer: number | undefined;
   #updateTimer: number;
-  #status: string;
+  #uiLanguage = resolveUiLanguage(undefined, browserLanguages());
+  #status: LocalizedText;
   #destroyed = false;
 
   constructor(
@@ -133,8 +159,8 @@ class PlaybackController {
     this.#siteLabel = siteLabel(siteId);
     this.#adapter = adapter;
     this.#status = adapter === undefined
-      ? '關閉 · 尚未載入假軌'
-      : '關閉 · 尚未載入官方軌';
+      ? uiMessage('status.disabledFakeNotLoaded')
+      : uiMessage('status.disabledOfficialNotLoaded');
     this.#storageKey = `duetsub:enabled:${siteId}`;
     this.video = target.video;
     this.#player = target.player;
@@ -156,20 +182,26 @@ class PlaybackController {
       siteId,
       {
         onToggle: () => this.#toggle(),
+        onOpenLanguagePair: () => this.#openLanguagePairChooser(),
+        onSelectLanguagePair: (preference) => {
+          void this.#selectLanguagePair(preference);
+        },
+        onReloadOfficialTracks: () => this.#reloadOfficialTracks(),
         onRetranslate: () => {
           if (this.#translationPlan === undefined) {
-            this.#status = '目前使用官方雙軌，無需重新翻譯';
+            this.#status = uiMessage('status.noRetranslate');
             this.#render();
             return;
           }
           this.#cancelTranslations();
           const revision = ++this.#acquisitionRevision;
-          this.#status = '正在跳過快取重新翻譯…';
+          this.#status = uiMessage('status.retranslating');
           this.#render();
           void this.#translatePlan(
             {
               contentGeneration: this.#state.contentGeneration,
               clockGeneration: this.#state.clockGeneration,
+              selectionGeneration: this.#state.selectionGeneration,
             },
             revision,
             true,
@@ -191,6 +223,7 @@ class PlaybackController {
     }
 
     window.addEventListener('message', this.#onMessage);
+    chrome.storage.onChanged.addListener(this.#onStorageChanged);
     this.video.addEventListener('seeking', this.#onSeeking);
     this.video.addEventListener('seeked', this.#onSeeked);
     this.#player.addEventListener('pointermove', this.#onControlsActivity);
@@ -211,6 +244,7 @@ class PlaybackController {
       return false;
     }
 
+    this.#overlayView.reanchor(target.player);
     this.#toggleView.reanchor(
       target.controls ?? target.player,
       target.controls === undefined,
@@ -228,8 +262,8 @@ class PlaybackController {
       this.#clearTrackData();
       this.#bindAdapterGeneration();
       this.#status = target.contentIdentity === undefined
-        ? `開啟 · 等待可驗證的 ${this.#siteLabel} 內容身份`
-        : `開啟 · ${this.#siteLabel} 內容已切換`;
+        ? uiMessage('status.waitingContent', { site: this.#siteLabel })
+        : uiMessage('status.contentChanged', { site: this.#siteLabel });
       contentChanged = true;
     }
 
@@ -256,6 +290,7 @@ class PlaybackController {
       window.clearTimeout(this.#controlsTimer);
     }
     window.removeEventListener('message', this.#onMessage);
+    chrome.storage.onChanged.removeListener(this.#onStorageChanged);
     this.video.removeEventListener('seeking', this.#onSeeking);
     this.video.removeEventListener('seeked', this.#onSeeked);
     this.video.removeEventListener('loadeddata', this.#onVideoReady);
@@ -275,9 +310,18 @@ class PlaybackController {
 
   async #hydrate(): Promise<void> {
     const revision = this.#interactionRevision;
-    const stored = await chrome.storage.local.get(this.#storageKey);
+    const [stored, languagePair, uiLanguage] = await Promise.all([
+      chrome.storage.local.get(this.#storageKey),
+      loadLanguagePairPreference(chrome.storage.local),
+      loadUiLanguage(chrome.storage.local, browserLanguages()),
+    ]);
     if (this.#destroyed || revision !== this.#interactionRevision) return;
 
+    this.#languagePairPreference = languagePair.preference;
+    this.#hasSavedLanguagePairPreference = languagePair.stored;
+    this.#topLanguage = languagePair.preference.top;
+    this.#bottomLanguage = languagePair.preference.bottom;
+    this.#uiLanguage = uiLanguage;
     this.#state = reducePlaybackLifecycle(this.#state, {
       type: 'hydrate',
       enabled: stored[this.#storageKey] === true,
@@ -302,8 +346,8 @@ class PlaybackController {
       }
     } else {
       this.#status = this.#adapter === undefined
-        ? '關閉 · 點擊即可載入假軌'
-        : '關閉 · 點擊即可載入官方軌';
+        ? uiMessage('status.disabledLoadFake')
+        : uiMessage('status.disabledLoadOfficial');
       this.#render();
     }
   }
@@ -315,7 +359,9 @@ class PlaybackController {
     }
 
     if (!this.#canLoadTracks()) {
-      this.#status = `開啟 · 等待可驗證的 ${this.#siteLabel} 內容身份`;
+      this.#status = uiMessage('status.waitingContent', {
+        site: this.#siteLabel,
+      });
       this.#render();
       return;
     }
@@ -325,56 +371,315 @@ class PlaybackController {
       type: 'tracks-loading',
     });
     this.#bindAdapterGeneration();
-    this.#status = `開啟 · 枚舉 ${this.#siteLabel} 字幕軌…`;
+    this.#status = uiMessage('status.enumerating', {
+      site: this.#siteLabel,
+    });
     this.#render();
     this.#adapter.start();
   }
 
-  #requestFakeData(): void {
+  #requestFakeData(catalogOnly = false): void {
     this.#requestSequence += 1;
     this.#requestId = `${Date.now()}-${this.#requestSequence}`;
-    this.#tracks = [];
-    this.#englishCues = [];
-    this.#chineseCues = [];
-    this.#receivedEnglish = false;
-    this.#receivedChinese = false;
-    this.#synchronizerState = undefined;
-    this.#state = reducePlaybackLifecycle(this.#state, {
-      type: 'tracks-loading',
-    });
-    this.#status = '開啟 · 等待 MAIN 假軌';
+    if (!catalogOnly) {
+      this.#tracks = [];
+      this.#clearSelectedPair();
+      this.#state = reducePlaybackLifecycle(this.#state, {
+        type: 'tracks-loading',
+      });
+    }
+    this.#status = catalogOnly
+      ? uiMessage('status.readingOfficial')
+      : uiMessage('status.waitingFakeMain');
     this.#render();
     postDuetSubMessage(
       requestFakeData(
         this.#siteId,
         this.#requestId,
         this.video.currentTime * 1_000,
+        {
+          catalogOnly,
+          preference: this.#languagePairPreference,
+        },
       ),
     );
   }
 
   #clearTrackData(): void {
-    this.#cancelTranslations();
     this.#tracks = [];
-    this.#englishCues = [];
-    this.#chineseCues = [];
-    this.#englishMachineTranslated = false;
-    this.#chineseMachineTranslated = false;
-    this.#readyStatus = '官方英文 + 官方繁中 · 100%';
-    this.#receivedEnglish = false;
-    this.#receivedChinese = false;
+    this.#clearSelectedPair();
+  }
+
+  #clearSelectedPair(): void {
+    this.#cancelTranslations();
+    this.#topCues = [];
+    this.#bottomCues = [];
+    this.#topLanguage = this.#languagePairPreference.top;
+    this.#bottomLanguage = this.#languagePairPreference.bottom;
+    this.#topMachineTranslated = false;
+    this.#bottomMachineTranslated = false;
+    this.#readyStatus = uiMessage('status.readyDefault');
+    this.#receivedTopTrackId = undefined;
+    this.#receivedBottomTrackId = undefined;
     this.#synchronizerState = undefined;
     this.#translationPlan = undefined;
   }
 
+  #openLanguagePairChooser(): void {
+    if (this.#tracks.length > 0) {
+      this.#render();
+      return;
+    }
+    this.#status = uiMessage('status.readingOfficial');
+    this.#render();
+    if (this.#adapter === undefined) {
+      this.#requestFakeData(true);
+      return;
+    }
+    if (this.#canLoadTracks()) this.#adapter.start();
+  }
+
+  #reloadOfficialTracks(): void {
+    this.#interactionRevision += 1;
+    this.#acquisitionRevision += 1;
+    this.#state = reducePlaybackLifecycle(this.#state, {
+      type: 'reload-tracks',
+    });
+    this.#clearTrackData();
+    this.#bindAdapterGeneration();
+
+    if (!this.#state.enabled) {
+      this.#status = uiMessage('status.disabledReloadCleared');
+      this.#render();
+      return;
+    }
+    if (this.#adapter === undefined) {
+      this.#requestFakeData();
+      return;
+    }
+    if (!this.#canLoadTracks()) {
+      this.#status = uiMessage('status.waitingContent', {
+        site: this.#siteLabel,
+      });
+      this.#render();
+      return;
+    }
+
+    this.#status = pairMessage(
+      'status.reloadingPair',
+      this.#languagePairPreference,
+    );
+    this.#render();
+    this.#adapter.start();
+  }
+
+  async #selectLanguagePair(
+    preference: LanguagePairPreference,
+  ): Promise<void> {
+    const resolved = resolveOfficialPair({
+      siteId: this.#siteId,
+      tracks: this.#tracks,
+      preference,
+    });
+    if (resolved.kind !== 'ready') {
+      this.#status = unavailablePairStatus(resolved.reason, preference);
+      this.#render();
+      return;
+    }
+
+    const interactionRevision = ++this.#interactionRevision;
+    this.#acquisitionRevision += 1;
+    this.#languagePairPreference = preference;
+    this.#hasSavedLanguagePairPreference = true;
+    this.#state = reducePlaybackLifecycle(this.#state, {
+      type: 'selection-changed',
+    });
+    this.#clearSelectedPair();
+    this.#bindAdapterGeneration();
+    this.#status = pairMessage('status.switchingPair', preference);
+    this.#render();
+
+    let saved = false;
+    try {
+      saved = await saveLanguagePairPreference(
+        chrome.storage.local,
+        preference,
+      );
+    } catch {
+      // Keep the new generation fail closed if local persistence fails.
+    }
+    if (
+      this.#destroyed ||
+      interactionRevision !== this.#interactionRevision
+    ) {
+      return;
+    }
+    if (!saved) {
+      this.#status = uiMessage('status.savePairFailed');
+      this.#render();
+      return;
+    }
+    if (!this.#state.enabled) {
+      this.#status = pairMessage('status.disabledSelectedPair', preference);
+      this.#render();
+      return;
+    }
+    if (this.#adapter === undefined) {
+      this.#requestFakeData();
+      return;
+    }
+    this.#adapter.start();
+  }
+
   readonly #onAdapterTracks = (tracks: TrackInfo[]) => {
-    if (this.#destroyed || !this.#state.enabled) return;
+    if (this.#destroyed) return;
     this.#tracks = tracks;
+    if (!this.#state.enabled) {
+      this.#status = catalogStatus(tracks);
+      this.#render();
+      return;
+    }
+    const youtubeFallback =
+      this.#siteId === 'youtube' &&
+      this.#hasSavedLanguagePairPreference &&
+      isDefaultLanguagePair(this.#languagePairPreference) &&
+      resolveOfficialPair({
+        siteId: this.#siteId,
+        tracks,
+        preference: this.#languagePairPreference,
+      }).kind !== 'ready';
+    if (
+      !youtubeFallback &&
+      (this.#hasSavedLanguagePairPreference || this.#siteId === 'max')
+    ) {
+      void this.#acquireSelectedOfficialTracks(
+        bindPlaybackGeneration(this.#state, tracks),
+        this.#interactionRevision,
+      );
+      return;
+    }
     void this.#acquireOfficialTracks(
       bindPlaybackGeneration(this.#state, tracks),
       this.#interactionRevision,
     );
   };
+
+  async #acquireSelectedOfficialTracks(
+    generatedTracks: GenerationBound<readonly TrackInfo[]>,
+    interactionRevision: number,
+  ): Promise<void> {
+    const adapter = this.#adapter;
+    if (adapter === undefined) return;
+    const tracks = acceptPlaybackGeneration(this.#state, generatedTracks);
+    if (tracks === undefined) return;
+
+    const pair = resolveOfficialPair({
+      siteId: this.#siteId,
+      tracks,
+      preference: this.#languagePairPreference,
+    });
+    if (pair.kind !== 'ready') {
+      this.#state = reducePlaybackLifecycle(this.#state, {
+        type: 'tracks-loading',
+      });
+      this.#status = unavailablePairStatus(
+        pair.reason,
+        this.#languagePairPreference,
+      );
+      this.#render();
+      return;
+    }
+
+    const acquisitionRevision = ++this.#acquisitionRevision;
+    this.#status = pairMessage(
+      'status.acquiringPair',
+      this.#languagePairPreference,
+    );
+    this.#render();
+
+    try {
+      const fetched = await Promise.all(
+        [pair.top, pair.bottom].map(async (track) =>
+          [track.id, await adapter.fetchTrack(track)] as const
+        ),
+      );
+      const accepted = acceptPlaybackGeneration(
+        this.#state,
+        bindPlaybackGeneration(generatedTracks.generation, new Map(fetched)),
+      );
+      if (
+        accepted === undefined ||
+        this.#destroyed ||
+        !this.#state.enabled ||
+        interactionRevision !== this.#interactionRevision ||
+        acquisitionRevision !== this.#acquisitionRevision
+      ) {
+        return;
+      }
+      const cues = resolveOfficialPairCues({
+        siteId: this.#siteId,
+        tracks,
+        preference: this.#languagePairPreference,
+        cuesByTrack: accepted,
+      });
+      if (cues.kind !== 'ready') {
+        throw new Error(`Selected official pair unavailable: ${cues.reason}`);
+      }
+      const maxCues = this.#siteId === 'max'
+        ? resolveMaxOfficialPairCues({
+            top: cues.top,
+            bottom: cues.bottom,
+            topCues: cues.topCues,
+            bottomCues: cues.bottomCues,
+          })
+        : undefined;
+      if (maxCues?.kind === 'unavailable') {
+        throw new Error('Max official pair alignment coverage unavailable');
+      }
+
+      this.#topCues = maxCues?.topCues ?? cues.topCues;
+      this.#bottomCues = maxCues?.bottomCues ?? cues.bottomCues;
+      this.#topLanguage = cues.top.language;
+      this.#bottomLanguage = cues.bottom.language;
+      this.#topMachineTranslated = false;
+      this.#bottomMachineTranslated = false;
+      this.#synchronizerState = undefined;
+      this.#state = reducePlaybackLifecycle(this.#state, {
+        type: 'tracks-ready',
+      });
+      const resolvedPreference: LanguagePairPreference = {
+        version: 1,
+        top: cues.top.language,
+        bottom: cues.bottom.language,
+      };
+      this.#readyStatus = maxCues?.policy ===
+          'english-cc-traditional-chinese'
+        ? pairMessage('status.pairAligned', resolvedPreference)
+        : pairMessage('status.pairReady', resolvedPreference);
+      this.#status = this.#readyStatus;
+      this.#render();
+    } catch (error) {
+      if (
+        acceptPlaybackGeneration(
+          this.#state,
+          bindPlaybackGeneration(generatedTracks.generation, true),
+        ) !== true ||
+        this.#destroyed ||
+        interactionRevision !== this.#interactionRevision ||
+        acquisitionRevision !== this.#acquisitionRevision
+      ) {
+        return;
+      }
+      console.warn('[DuetSub] Official pair acquisition failed', error);
+      this.#clearSelectedPair();
+      this.#state = reducePlaybackLifecycle(this.#state, {
+        type: 'tracks-loading',
+      });
+      this.#bindAdapterGeneration();
+      this.#status = uiMessage('status.selectedPairFailed');
+      this.#render();
+    }
+  }
 
   async #acquireOfficialTracks(
     generatedTracks: GenerationBound<readonly TrackInfo[]>,
@@ -386,18 +691,16 @@ class PlaybackController {
     if (tracks === undefined) return;
 
     const decision = this.#siteId === 'youtube'
-      ? decideYouTubeSources(tracks)
-      : this.#siteId === 'max'
-      ? decideMaxSources(tracks)
+      ? decideYoutubeSubtitleSources(tracks)
       : decideSubtitleSources(tracks);
     if (decision.english === undefined || decision.chinese === undefined) {
-      this.#status = '開啟 · 沒有可用的英文或中文來源';
+      this.#status = uiMessage('status.noEnglishChinese');
       this.#render();
       return;
     }
 
     const acquisitionRevision = ++this.#acquisitionRevision;
-    this.#status = '開啟 · 正在取得官方字幕…';
+    this.#status = uiMessage('status.acquiringOfficial');
     this.#render();
 
     try {
@@ -443,23 +746,12 @@ class PlaybackController {
       const chineseCues = accepted.chinese.kind === 'mt'
         ? []
         : accepted.chinese.cues;
-      const maxEnglishPrimaryAligned =
-        this.#siteId === 'max' &&
-        accepted.english.kind === 'official' &&
-        accepted.chinese.kind !== 'mt';
-      const displayedChineseCues = maxEnglishPrimaryAligned
-        ? alignMaxChineseCuesToEnglish(englishCues, chineseCues)
-        : chineseCues;
-      if (maxEnglishPrimaryAligned && displayedChineseCues.length === 0) {
-        throw new Error('Max English-primary cue alignment unavailable');
-      }
-
-      this.#englishCues = englishCues;
-      this.#chineseCues = displayedChineseCues;
-      this.#englishMachineTranslated = accepted.english.kind === 'mt' ||
+      this.#topCues = englishCues;
+      this.#bottomCues = chineseCues;
+      this.#topMachineTranslated = accepted.english.kind === 'mt' ||
         (accepted.english.kind === 'official' &&
           accepted.english.trackSource === 'platform-mt');
-      this.#chineseMachineTranslated = accepted.chinese.kind === 'mt' ||
+      this.#bottomMachineTranslated = accepted.chinese.kind === 'mt' ||
         (accepted.chinese.kind === 'official' &&
           accepted.chinese.trackSource === 'platform-mt');
       this.#synchronizerState = undefined;
@@ -467,24 +759,20 @@ class PlaybackController {
         type: 'tracks-ready',
       });
       const mt = accepted.english.kind === 'mt'
-        ? { side: 'english' as const, value: accepted.english }
+        ? { side: 'top' as const, value: accepted.english }
         : accepted.chinese.kind === 'mt'
-        ? { side: 'chinese' as const, value: accepted.chinese }
+        ? { side: 'bottom' as const, value: accepted.chinese }
         : undefined;
       if (mt === undefined) {
-        this.#readyStatus = maxEnglishPrimaryAligned
-          ? accepted.chinese.kind === 'opencc'
-            ? '官方英文主軌 + OpenCC 繁中對齊 · 100%'
-            : '官方英文主軌 + 官方繁中對齊 · 100%'
-          : accepted.chinese.kind === 'opencc'
-          ? '官方簡中 + OpenCC 繁中 · 100%'
+        this.#readyStatus = accepted.chinese.kind === 'opencc'
+          ? uiMessage('status.openccReady')
           : accepted.english.kind === 'official' &&
               accepted.chinese.kind === 'official'
             ? selectedTrackStatus(
                 accepted.english.trackSource,
                 accepted.chinese.trackSource,
               )
-            : '英文 + 繁中 · 100%';
+            : uiMessage('status.englishChineseReady');
         this.#status = this.#readyStatus;
       } else {
         this.#translationPlan = {
@@ -493,8 +781,8 @@ class PlaybackController {
           target: mt.side,
           targetLanguage: mt.value.targetLanguage,
         };
-        this.#readyStatus = '官方字幕 + MT · 100%';
-        this.#status = '官方字幕已顯示 · 翻譯中…';
+        this.#readyStatus = uiMessage('status.officialMtReady');
+        this.#status = uiMessage('status.officialTranslating');
         void this.#translatePlan(
           generatedTracks.generation,
           acquisitionRevision,
@@ -536,7 +824,9 @@ class PlaybackController {
       : reducePlaybackLifecycle(this.#state, { type: 'reset-content' });
     if (reason !== 'seek-flush') this.#clearTrackData();
     this.#bindAdapterGeneration();
-    this.#status = `開啟 · ${this.#siteLabel} 播放狀態已重設`;
+    this.#status = uiMessage('status.playbackReset', {
+      site: this.#siteLabel,
+    });
     this.#render();
   };
 
@@ -555,10 +845,10 @@ class PlaybackController {
         });
     this.#bindAdapterGeneration();
     this.#status = active
-      ? '開啟 · 廣告期間暫停顯示'
+      ? uiMessage('status.adPaused')
       : this.#state.suspension === 'none'
         ? this.#readyStatus
-        : '開啟 · 等待可靠的節目時鐘';
+        : uiMessage('status.waitingClock');
     this.#render();
     if (
       !active &&
@@ -567,6 +857,23 @@ class PlaybackController {
     ) {
       this.#loadTracks();
     }
+  };
+
+  readonly #onStorageChanged = (
+    changes: Record<string, chrome.storage.StorageChange>,
+    areaName: string,
+  ) => {
+    if (
+      areaName !== 'local' ||
+      changes[UI_LANGUAGE_STORAGE_KEY] === undefined
+    ) {
+      return;
+    }
+    this.#uiLanguage = resolveUiLanguage(
+      changes[UI_LANGUAGE_STORAGE_KEY].newValue,
+      browserLanguages(),
+    );
+    this.#render();
   };
 
   readonly #onMessage = (event: MessageEvent<unknown>) => {
@@ -583,26 +890,62 @@ class PlaybackController {
 
     if (message.type === 'tracks') {
       this.#tracks = message.tracks;
-      this.#status = `開啟 · 已收到 ${message.tracks.length} 條假軌`;
-    } else if (message.role === 'english') {
-      this.#englishCues = message.cues;
-      this.#englishMachineTranslated = message.translation === 'mt-fallback';
-      this.#receivedEnglish = true;
+      if (!this.#state.enabled) {
+        this.#status = catalogStatus(message.tracks);
+        this.#render();
+        return;
+      }
+      this.#status = uiMessage('status.fakeTracksReceived', {
+        count: message.tracks.length,
+      });
+    } else if (message.role === 'top') {
+      this.#topCues = message.cues;
+      this.#topMachineTranslated = message.translation === 'mt-fallback';
+      this.#receivedTopTrackId = message.trackId;
     } else {
-      this.#chineseCues = message.cues;
-      this.#chineseMachineTranslated = message.translation === 'mt-fallback';
-      this.#receivedChinese = true;
+      this.#bottomCues = message.cues;
+      this.#bottomMachineTranslated = message.translation === 'mt-fallback';
+      this.#receivedBottomTrackId = message.trackId;
     }
 
-    if (
-      this.#tracks.length === 2 &&
-      this.#receivedEnglish &&
-      this.#receivedChinese
-    ) {
+    const cuesByTrack = new Map<string, readonly Cue[]>();
+    if (this.#receivedTopTrackId !== undefined) {
+      cuesByTrack.set(this.#receivedTopTrackId, this.#topCues);
+    }
+    if (this.#receivedBottomTrackId !== undefined) {
+      cuesByTrack.set(this.#receivedBottomTrackId, this.#bottomCues);
+    }
+    const pair = resolveOfficialPairCues({
+      siteId: this.#siteId,
+      tracks: this.#tracks,
+      preference: this.#languagePairPreference,
+      cuesByTrack,
+    });
+    if (pair.kind === 'ready') {
+      this.#topCues = pair.topCues;
+      this.#bottomCues = pair.bottomCues;
+      this.#topLanguage = pair.top.language;
+      this.#bottomLanguage = pair.bottom.language;
       this.#state = reducePlaybackLifecycle(this.#state, {
         type: 'tracks-ready',
       });
-      this.#status = '假資料：官方英文 + MT 繁中 · 100%';
+      this.#readyStatus = pairMessage(
+        'status.fakeDataReady',
+        this.#languagePairPreference,
+      );
+      this.#status = this.#readyStatus;
+    } else {
+      this.#state = reducePlaybackLifecycle(this.#state, {
+        type: 'tracks-loading',
+      });
+      this.#status = pair.reason === 'top-empty' ||
+          pair.reason === 'bottom-empty' ||
+          pair.reason === 'both-empty'
+        ? pairMessage(
+            'status.waitingFakePair',
+            this.#languagePairPreference,
+          )
+        : unavailablePairStatus(pair.reason, this.#languagePairPreference);
     }
     this.#render();
   };
@@ -614,7 +957,7 @@ class PlaybackController {
     this.#cancelTranslations();
     this.#state = reducePlaybackLifecycle(this.#state, { type: 'seeking' });
     this.#bindAdapterGeneration();
-    this.#status = '開啟 · 拖動中暫停顯示';
+    this.#status = uiMessage('status.seekingPaused');
     this.#render();
   };
 
@@ -626,15 +969,16 @@ class PlaybackController {
       this.#synchronizerState = undefined;
       this.#state = reducePlaybackLifecycle(this.#state, { type: 'seeked' });
       this.#bindAdapterGeneration();
-      this.#status = this.#englishCues.length > 0 && this.#chineseCues.length > 0
+      this.#status = this.#topCues.length > 0 && this.#bottomCues.length > 0
         ? this.#readyStatus
-        : '開啟 · 尚未取得雙軌';
+        : uiMessage('status.notAcquired');
       this.#render();
       if (this.#translationPlan !== undefined) {
         void this.#translatePlan(
           {
             contentGeneration: this.#state.contentGeneration,
             clockGeneration: this.#state.clockGeneration,
+            selectionGeneration: this.#state.selectionGeneration,
           },
           this.#acquisitionRevision,
         );
@@ -659,7 +1003,9 @@ class PlaybackController {
       type: 'video-replaced',
     });
     this.#bindAdapterGeneration();
-    this.#status = `開啟 · ${this.#siteLabel} video 時鐘已替換`;
+    this.#status = uiMessage('status.videoClockReplaced', {
+      site: this.#siteLabel,
+    });
     this.#render();
 
     if (video.readyState >= 2) this.#onVideoReady();
@@ -680,14 +1026,12 @@ class PlaybackController {
     this.#adapter?.bindGeneration?.({
       contentGeneration: this.#state.contentGeneration,
       clockGeneration: this.#state.clockGeneration,
+      selectionGeneration: this.#state.selectionGeneration,
     });
   }
 
   async #translatePlan(
-    generation: {
-      readonly contentGeneration: number;
-      readonly clockGeneration: number;
-    },
+    generation: PlaybackGeneration,
     acquisitionRevision: number,
     skipCache = false,
   ): Promise<void> {
@@ -738,7 +1082,7 @@ class PlaybackController {
       if (response.status === 'missing-key') {
         if (!this.#translationHintShown) {
           this.#translationHintShown = true;
-          this.#status = '官方字幕照常顯示 · 請到設定頁配置翻譯服務';
+          this.#status = uiMessage('status.configureTranslation');
           this.#render();
         }
         return;
@@ -746,7 +1090,7 @@ class PlaybackController {
       if (response.status === 'missing-permission') {
         if (!this.#translationHintShown) {
           this.#translationHintShown = true;
-          this.#status = '官方字幕照常顯示 · 請到設定頁授權翻譯端點';
+          this.#status = uiMessage('status.authorizeTranslation');
           this.#render();
         }
         return;
@@ -755,23 +1099,23 @@ class PlaybackController {
       hadFailure ||= response.status === 'failed';
       this.#mergeTranslatedCues(plan.target, response.cues);
       this.#status = response.status === 'ok'
-        ? '官方字幕 + MT · 翻譯中…'
-        : '官方字幕照常顯示 · 部分翻譯失敗';
+        ? uiMessage('status.mtTranslating')
+        : uiMessage('status.partialTranslationFailed');
       this.#render();
     }
     this.#status = hadFailure
-      ? '官方字幕照常顯示 · 部分翻譯失敗'
+      ? uiMessage('status.partialTranslationFailed')
       : this.#readyStatus;
     this.#render();
   }
 
   #mergeTranslatedCues(
-    target: 'english' | 'chinese',
+    target: 'top' | 'bottom',
     cues: readonly Cue[],
   ): void {
-    const current = target === 'english'
-      ? this.#englishCues
-      : this.#chineseCues;
+    const current = target === 'top'
+      ? this.#topCues
+      : this.#bottomCues;
     const merged = new Map(
       current.map((cue) => [`${cue.start}:${cue.end}:${cue.text}`, cue]),
     );
@@ -786,8 +1130,8 @@ class PlaybackController {
     const result = [...merged.values()].sort((a, b) =>
       a.start - b.start || a.end - b.end
     );
-    if (target === 'english') this.#englishCues = result;
-    else this.#chineseCues = result;
+    if (target === 'top') this.#topCues = result;
+    else this.#bottomCues = result;
     this.#synchronizerState = undefined;
   }
 
@@ -828,8 +1172,8 @@ class PlaybackController {
     const active = isPlaybackOverlayActive(this.#state);
     const synchronized = active
       ? synchronizeCues(
-          this.#englishCues,
-          this.#chineseCues,
+          this.#topCues,
+          this.#bottomCues,
           this.video.currentTime * 1_000,
           this.#synchronizerState,
         )
@@ -839,15 +1183,27 @@ class PlaybackController {
     this.#overlayView.render(
       createOverlayModel({
         active,
-        enActive: synchronized?.enActive ?? [],
-        zhActive: synchronized?.zhActive ?? [],
-        englishMachineTranslated: this.#englishMachineTranslated,
-        chineseMachineTranslated: this.#chineseMachineTranslated,
+        topActive: synchronized?.topActive ?? [],
+        bottomActive: synchronized?.bottomActive ?? [],
+        topLanguage: this.#topLanguage,
+        bottomLanguage: this.#bottomLanguage,
+        topMachineTranslated: this.#topMachineTranslated,
+        bottomMachineTranslated: this.#bottomMachineTranslated,
         controlsVisible: this.#controlsVisible,
       }),
     );
     this.#nativeCaptions.setHidden(shouldHideNativeCaptions(this.#state));
-    this.#toggleView.render(this.#state.enabled, this.#status);
+    this.#toggleView.render(
+      this.#state.enabled,
+      this.#status(this.#uiLanguage),
+      this.#uiLanguage,
+      createOfficialTrackCatalog(this.#tracks),
+      {
+        version: 1,
+        top: this.#topLanguage,
+        bottom: this.#bottomLanguage,
+      },
+    );
   }
 }
 
@@ -931,63 +1287,119 @@ function openOptionsPage(): void {
   window.open(chrome.runtime.getURL('options.html'), '_blank', 'noopener');
 }
 
-function decideYouTubeSources(
-  tracks: readonly TrackInfo[],
-): SubtitleSourceDecision {
-  const selected = selectBilingualTracks(tracks);
-  if (selected.english !== undefined && selected.chinese !== undefined) {
-    return {
-      english: { kind: 'official', track: selected.english },
-      chinese: { kind: 'official', track: selected.chinese },
-    };
-  }
-  return decideSubtitleSources(tracks);
-}
-
-function decideMaxSources(
-  tracks: readonly TrackInfo[],
-): SubtitleSourceDecision {
-  const decision = decideSubtitleSources(tracks);
-  const english = selectMaxEnglishPrimaryTrack(tracks);
-  if (english === undefined) return decision;
-
-  return {
-    english: { kind: 'official', track: english },
-    chinese: decision.chinese?.kind === 'mt'
-      ? { ...decision.chinese, source: english }
-      : decision.chinese,
-  };
+function isDefaultLanguagePair(
+  preference: LanguagePairPreference,
+): boolean {
+  return preference.top === DEFAULT_LANGUAGE_PAIR_PREFERENCE.top &&
+    preference.bottom === DEFAULT_LANGUAGE_PAIR_PREFERENCE.bottom;
 }
 
 function selectedTrackStatus(
   english: TrackInfo['source'],
   chinese: TrackInfo['source'],
-): string {
-  return `${sourceLabel(english, '英文')} + ${sourceLabel(chinese, '繁中')} · 100%`;
+): LocalizedText {
+  return (language) =>
+    `${
+      sourceLabel(language, english, 'language.english')
+    } + ${
+      sourceLabel(language, chinese, 'language.traditionalChinese')
+    } · 100%`;
 }
 
 function sourceLabel(
+  uiLanguage: UiLanguage,
   source: TrackInfo['source'],
-  language: '英文' | '繁中',
+  languageKey: 'language.english' | 'language.traditionalChinese',
 ): string {
+  const language = translate(uiLanguage, languageKey);
   switch (source) {
     case 'official':
-      return `官方${language}`;
+      return translate(uiLanguage, 'source.official', { language });
     case 'asr':
-      return `ASR ${language}`;
+      return translate(uiLanguage, 'source.asr', { language });
     case 'platform-mt':
-      return `平台 MT ${language}`;
+      return translate(uiLanguage, 'source.platformMt', { language });
   }
 }
 
-function acquisitionErrorStatus(error: unknown): string {
+function acquisitionErrorStatus(error: unknown): LocalizedText {
   if (
     error instanceof Error &&
     error.message.includes('手動開啟一次 YouTube 字幕')
   ) {
-    return `開啟 · ${error.message}`;
+    return uiMessage('status.youtubeEnableCaptions');
   }
-  return '開啟 · 無法可靠取得並恢復雙軌';
+  return uiMessage('status.acquisitionFailed');
+}
+
+function catalogStatus(tracks: readonly TrackInfo[]): LocalizedText {
+  const catalog = createOfficialTrackCatalog(tracks);
+  return catalog.length === 0
+    ? uiMessage('status.noOfficialCaptions')
+    : (language) =>
+      translate(language, 'status.available', {
+        labels: catalog.map(({ label }) => label).join(
+          language === 'en' ? ', ' : '、',
+        ),
+      });
+}
+
+function pairLabel(
+  uiLanguage: UiLanguage,
+  preference: LanguagePairPreference,
+): string {
+  return translate(uiLanguage, 'pair.label', {
+    top: languageDisplayName(uiLanguage, preference.top),
+    bottom: languageDisplayName(uiLanguage, preference.bottom),
+  });
+}
+
+function unavailablePairStatus(
+  reason: OfficialPairUnavailableReason,
+  preference: LanguagePairPreference,
+): LocalizedText {
+  switch (reason) {
+    case 'same-language':
+      return uiMessage('status.sameLanguage');
+    case 'top-missing':
+      return (language) =>
+        translate(language, 'status.topMissing', {
+          language: languageDisplayName(language, preference.top),
+        });
+    case 'bottom-missing':
+      return (language) =>
+        translate(language, 'status.bottomMissing', {
+          language: languageDisplayName(language, preference.bottom),
+        });
+    case 'both-missing':
+      return (language) =>
+        translate(language, 'status.bothMissing', {
+          pair: pairLabel(language, preference),
+        });
+    case 'ambiguous-language':
+      return uiMessage('status.ambiguousLanguage');
+  }
+}
+
+function uiMessage(
+  key: UiMessageKey,
+  values: Readonly<Record<string, string | number>> = {},
+): LocalizedText {
+  return (language) => translate(language, key, values);
+}
+
+function pairMessage(
+  key: UiMessageKey,
+  preference: LanguagePairPreference,
+): LocalizedText {
+  return (language) =>
+    translate(language, key, {
+      pair: pairLabel(language, preference),
+    });
+}
+
+function browserLanguages(): readonly string[] {
+  return [...navigator.languages, navigator.language];
 }
 
 function siteLabel(siteId: SiteId): string {

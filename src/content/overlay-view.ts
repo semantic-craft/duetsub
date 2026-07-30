@@ -4,6 +4,7 @@ export const OVERLAY_FONT_SIZE = 'clamp(13.76px, 6.2cqh, 40px)';
 
 export interface OverlayView {
   render(model: OverlayModel): void;
+  reanchor(player: HTMLElement): void;
   destroy(): void;
 }
 
@@ -18,11 +19,11 @@ export function createOverlayView(player: HTMLElement): OverlayView {
   board.className = 'board';
   board.setAttribute('role', 'presentation');
 
-  const english = createLine('english', 'en');
-  const chinese = createLine('chinese', 'zh-Hant');
-  board.append(english.element, chinese.element);
+  const top = createLine('top');
+  const bottom = createLine('bottom');
+  board.append(top.element, bottom.element);
   shadow.append(style, board);
-  player.append(host);
+  reanchorOverlayHost(host, player);
 
   return {
     render(model) {
@@ -31,13 +32,23 @@ export function createOverlayView(player: HTMLElement): OverlayView {
       board.style.bottom =
         model.placement.edge === 'bottom' ? model.placement.offset : '';
 
-      renderLine(english, model.lines[0]);
-      renderLine(chinese, model.lines[1]);
+      renderLine(top, model.lines[0]);
+      renderLine(bottom, model.lines[1]);
+    },
+    reanchor(nextPlayer) {
+      reanchorOverlayHost(host, nextPlayer);
     },
     destroy() {
       host.remove();
     },
   };
+}
+
+export function reanchorOverlayHost(
+  host: HTMLElement,
+  player: HTMLElement,
+): void {
+  if (host.parentElement !== player) player.append(host);
 }
 
 interface LineElements {
@@ -47,12 +58,10 @@ interface LineElements {
 }
 
 function createLine(
-  className: 'english' | 'chinese',
-  lang: 'en' | 'zh-Hant',
+  className: 'top' | 'bottom',
 ): LineElements {
   const element = document.createElement('div');
   element.className = `line ${className}`;
-  element.lang = lang;
 
   const marker = document.createElement('span');
   marker.className = 'mt';
@@ -69,12 +78,14 @@ function renderLine(
   model: OverlayModel['lines'][number],
 ): void {
   elements.element.hidden = model.text.length === 0;
+  elements.element.lang = model.lang;
+  elements.element.dir = model.dir;
   elements.element.style.fontSize = `${model.sizePercent}%`;
   elements.marker.hidden = !model.machineTranslated;
   elements.text.textContent = model.text;
 }
 
-const OVERLAY_CSS = `
+export const OVERLAY_CSS = `
   :host {
     position: absolute;
     inset: 0;
@@ -107,17 +118,27 @@ const OVERLAY_CSS = `
   .line {
     line-height: 1.28;
     white-space: pre-line;
-  }
-
-  .english {
+    unicode-bidi: plaintext;
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   }
 
-  .chinese {
-    font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  :lang(ja) {
+    font-family: "Hiragino Sans", "Yu Gothic", "Noto Sans JP", sans-serif;
   }
 
-  .english:not([hidden]) + .chinese:not([hidden]) {
+  :lang(zh-Hans) {
+    font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  }
+
+  :lang(zh-Hant) {
+    font-family: "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", sans-serif;
+  }
+
+  :lang(ko) {
+    font-family: "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
+  }
+
+  .top:not([hidden]) + .bottom:not([hidden]) {
     margin-top: 0.10em;
   }
 

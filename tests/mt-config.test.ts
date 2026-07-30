@@ -7,6 +7,8 @@ import {
   DOUBAO_TRANSLATION_CONFIG,
   QWEN_CN_TRANSLATION_CONFIG,
   QWEN_SG_TRANSLATION_CONFIG,
+  qwenBaseUrl,
+  qwenWorkspaceId,
   translationProviderDefault,
   translationRequestUrl,
   validateTranslationConfig,
@@ -19,6 +21,7 @@ describe('translation config', () => {
       baseUrl: 'https://api.deepseek.com',
       apiKey: '',
       model: 'deepseek-v4-flash',
+      webSearchEnabled: false,
     });
     expect(chatCompletionsUrl(DEFAULT_TRANSLATION_CONFIG)).toBe(
       'https://api.deepseek.com/chat/completions',
@@ -32,6 +35,7 @@ describe('translation config', () => {
         'https://YOUR_WORKSPACE_ID.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
       apiKey: '',
       model: 'qwen3.7-flash',
+      webSearchEnabled: false,
     });
     expect(translationRequestUrl(QWEN_CN_TRANSLATION_CONFIG)).toBe(
       'https://YOUR_WORKSPACE_ID.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/responses',
@@ -42,6 +46,7 @@ describe('translation config', () => {
         'https://YOUR_WORKSPACE_ID.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1',
       apiKey: '',
       model: 'qwen3.7-flash',
+      webSearchEnabled: false,
     });
     expect(translationRequestUrl(QWEN_SG_TRANSLATION_CONFIG)).toBe(
       'https://YOUR_WORKSPACE_ID.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/responses',
@@ -51,6 +56,7 @@ describe('translation config', () => {
       baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
       apiKey: '',
       model: 'doubao-seed-2-1-pro-260628',
+      webSearchEnabled: false,
     });
     expect(translationRequestUrl(DOUBAO_TRANSLATION_CONFIG)).toBe(
       'https://ark.cn-beijing.volces.com/api/v3/responses',
@@ -73,6 +79,7 @@ describe('translation config', () => {
         baseUrl: 'https://api.example.com/v1',
         apiKey: 'secret',
         model: 'model-a',
+        webSearchEnabled: false,
       }).ok,
     ).toBe(true);
     expect(
@@ -81,7 +88,8 @@ describe('translation config', () => {
         baseUrl:
           'https://ws-test.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
         apiKey: 'secret',
-        model: 'qwen3.6-flash',
+        model: 'qwen3.7-flash',
+        webSearchEnabled: false,
       }).ok,
     ).toBe(true);
     expect(
@@ -90,8 +98,23 @@ describe('translation config', () => {
         baseUrl: 'http://127.0.0.1:11434/v1',
         apiKey: '',
         model: 'qwen',
+        webSearchEnabled: false,
       }).ok,
     ).toBe(true);
+  });
+
+  it('derives recommended Qwen endpoints from the user workspace ID', () => {
+    expect(qwenBaseUrl('qwen-cn', 'ws-test')).toBe(
+      'https://ws-test.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
+    );
+    expect(qwenBaseUrl('qwen-sg', 'ws-test')).toBe(
+      'https://ws-test.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1',
+    );
+    expect(qwenWorkspaceId({
+      ...QWEN_CN_TRANSLATION_CONFIG,
+      baseUrl: qwenBaseUrl('qwen-cn', 'ws-test'),
+    })).toBe('ws-test');
+    expect(qwenWorkspaceId(QWEN_CN_TRANSLATION_CONFIG)).toBe('');
   });
 
   it('requires replacing the Qwen workspace placeholder before use', () => {
@@ -100,7 +123,7 @@ describe('translation config', () => {
       apiKey: 'secret',
     })).toEqual({
       ok: false,
-      error: '請將 Base URL 中的 YOUR_WORKSPACE_ID 替換為百煉業務空間 ID',
+      error: '請填寫有效的百煉 Workspace ID',
     });
   });
 
@@ -111,18 +134,21 @@ describe('translation config', () => {
         baseUrl: 'http://api.example.com/v1',
         apiKey: 'secret',
         model: 'm',
+        webSearchEnabled: false,
       },
       {
         provider: 'local' as const,
         baseUrl: 'http://user:pass@localhost:11434/v1',
         apiKey: '',
         model: 'm',
+        webSearchEnabled: false,
       },
       {
         provider: 'deepseek' as const,
         baseUrl: 'https://api.deepseek.com',
         apiKey: '',
         model: 'deepseek-v4-flash',
+        webSearchEnabled: false,
       },
     ]) {
       expect(validateTranslationConfig(config).ok).toBe(false);
@@ -136,6 +162,7 @@ describe('translation config', () => {
         baseUrl: 'http://localhost:11434/v1',
         apiKey: '',
         model: 'qwen',
+        webSearchEnabled: false,
       }),
     ).toBe('http://localhost/*');
   });

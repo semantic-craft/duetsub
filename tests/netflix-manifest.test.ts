@@ -84,12 +84,14 @@ describe('parseNetflixManifest', () => {
           language: 'en-US',
           source: 'official',
           label: 'English [CC]',
+          kind: 'closed-captions',
         },
         {
           id: 'traditional-chinese',
           language: 'zh-Hant',
           source: 'official',
           label: '中文（繁體）',
+          kind: 'subtitles',
         },
       ],
     });
@@ -112,6 +114,53 @@ describe('parseNetflixManifest', () => {
     ).toMatchObject({
       contentIdentity: 'single-track-title',
       tracks: [{ id: 'english-only', language: 'en' }],
+    });
+  });
+
+  it('catalogs arbitrary canonical languages and rejects forced variants', () => {
+    expect(
+      parseNetflixManifest({
+        movieId: 'non-default-pair',
+        timedtexttracks: [
+          {
+            id: 'japanese',
+            language: 'JA-jp',
+            languageDescription: '日本語',
+            hydrated: true,
+            rawTrackType: 'subtitles',
+            ttDownloadables: TEXT_DOWNLOADABLE,
+          },
+          {
+            id: 'german-cc',
+            language: 'de-de',
+            languageDescription: 'Deutsch',
+            hydrated: true,
+            rawTrackType: 'closedcaptions',
+            ttDownloadables: TEXT_DOWNLOADABLE,
+          },
+          {
+            id: 'forced-french',
+            language: 'fr',
+            languageDescription: 'Français',
+            hydrated: true,
+            rawTrackType: 'forcednarrative',
+            ttDownloadables: TEXT_DOWNLOADABLE,
+          },
+        ],
+      }),
+    ).toMatchObject({
+      tracks: [
+        {
+          id: 'japanese',
+          language: 'ja-JP',
+          kind: 'subtitles',
+        },
+        {
+          id: 'german-cc',
+          language: 'de-DE',
+          kind: 'closed-captions',
+        },
+      ],
     });
   });
 

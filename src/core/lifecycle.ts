@@ -1,6 +1,7 @@
 export interface PlaybackGeneration {
   readonly contentGeneration: number;
   readonly clockGeneration: number;
+  readonly selectionGeneration?: number;
 }
 
 export type PlaybackSuspension =
@@ -11,6 +12,7 @@ export type PlaybackSuspension =
   | 'reset';
 
 export interface PlaybackLifecycleState extends PlaybackGeneration {
+  readonly selectionGeneration: number;
   readonly enabled: boolean;
   readonly tracksReady: boolean;
   readonly suspension: PlaybackSuspension;
@@ -27,6 +29,8 @@ export type PlaybackLifecycleAction =
   | { readonly type: 'toggle' }
   | { readonly type: 'tracks-loading' }
   | { readonly type: 'tracks-ready' }
+  | { readonly type: 'selection-changed' }
+  | { readonly type: 'reload-tracks' }
   | { readonly type: 'seeking' }
   | { readonly type: 'seeked' }
   | { readonly type: 'ad-entered' }
@@ -45,6 +49,7 @@ export const INITIAL_PLAYBACK_LIFECYCLE: PlaybackLifecycleState = {
   suspension: 'none',
   contentGeneration: 0,
   clockGeneration: 0,
+  selectionGeneration: 0,
 };
 
 export function reducePlaybackLifecycle(
@@ -60,6 +65,14 @@ export function reducePlaybackLifecycle(
       return { ...state, tracksReady: false, suspension: 'reset' };
     case 'tracks-ready':
       return { ...state, tracksReady: true, suspension: 'none' };
+    case 'selection-changed':
+    case 'reload-tracks':
+      return {
+        ...state,
+        tracksReady: false,
+        suspension: 'reset',
+        selectionGeneration: state.selectionGeneration + 1,
+      };
     case 'seeking':
       return {
         ...state,
@@ -134,6 +147,7 @@ export function bindPlaybackGeneration<T>(
     generation: {
       contentGeneration: state.contentGeneration,
       clockGeneration: state.clockGeneration,
+      selectionGeneration: state.selectionGeneration ?? 0,
     },
     value,
   };
@@ -143,10 +157,18 @@ export function acceptPlaybackGeneration<T>(
   state: PlaybackGeneration,
   response: GenerationBound<T>,
 ): T | undefined {
-  return state.contentGeneration === response.generation.contentGeneration &&
-    state.clockGeneration === response.generation.clockGeneration
+  return samePlaybackGeneration(state, response.generation)
     ? response.value
     : undefined;
+}
+
+export function samePlaybackGeneration(
+  left: PlaybackGeneration,
+  right: PlaybackGeneration,
+): boolean {
+  return left.contentGeneration === right.contentGeneration &&
+    left.clockGeneration === right.clockGeneration &&
+    (left.selectionGeneration ?? 0) === (right.selectionGeneration ?? 0);
 }
 
 export function isPlaybackOverlayActive(

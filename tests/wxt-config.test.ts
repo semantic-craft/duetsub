@@ -14,6 +14,16 @@ describe('release-channel manifest', () => {
     expect(await manifest(env('production'))).toHaveProperty('key');
   });
 
+  it('declares localized extension metadata', async () => {
+    const value = await manifest(env('production'));
+
+    expect(value).toMatchObject({
+      name: '__MSG_extensionName__',
+      description: '__MSG_extensionDescription__',
+      default_locale: 'en',
+    });
+  });
+
   it('grants the narrow network access required for Prime text MP4s', async () => {
     const value = await manifest(env('production'));
 

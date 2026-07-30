@@ -8,11 +8,15 @@ export interface Cue {
   position?: 'top' | 'bottom';
 }
 
+export type OfficialTrackKind = 'subtitles' | 'closed-captions';
+
 export interface TrackInfo {
   id: string;
   language: string;
   source: 'official' | 'asr' | 'platform-mt';
   label: string;
+  kind: OfficialTrackKind;
+  forcedOnly?: boolean;
 }
 
 export interface SiteAdapter {

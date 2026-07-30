@@ -5,8 +5,9 @@ const STABLE_EXTENSION_PUBLIC_SPKI =
 
 export default defineConfig({
   manifest: ({ mode }) => ({
-    name: 'DuetSub',
-    description: 'Personal bilingual subtitle overlay for supported video sites.',
+    name: '__MSG_extensionName__',
+    description: '__MSG_extensionDescription__',
+    default_locale: 'en',
     version: '0.1.6',
     ...(mode === 'store' ? {} : { key: STABLE_EXTENSION_PUBLIC_SPKI }),
     permissions: ['storage', 'webRequest'],

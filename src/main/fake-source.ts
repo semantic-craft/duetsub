@@ -1,25 +1,47 @@
 import type { Cue, SiteId, TrackInfo } from '../core/contracts';
 import {
+  FIXED_OFFICIAL_PAIR_TRACER_PREFERENCE,
+  resolveOfficialPair,
+  type LanguagePairPreference,
+} from '../core/official-pair-selection';
+import {
   cuesMessage,
   isDuetSubMessage,
   postDuetSubMessage,
   tracksMessage,
+  type CuesMessage,
 } from '../core/messages';
 
 const TRACKS: readonly TrackInfo[] = [
   {
-    id: 'walking-skeleton-en',
-    language: 'en',
+    id: 'official-tracer-ja',
+    language: 'ja',
     source: 'official',
-    label: 'Fake official English',
+    label: 'Fake official Japanese',
+    kind: 'subtitles',
   },
   {
-    id: 'walking-skeleton-zh-Hant',
-    language: 'zh-Hant',
+    id: 'official-tracer-zh-Hans',
+    language: 'zh-Hans',
     source: 'official',
-    label: 'Fake MT Traditional Chinese',
+    label: 'Fake official Simplified Chinese',
+    kind: 'subtitles',
   },
 ];
+
+export const FIXED_OFFICIAL_PAIR_PREFERENCE: LanguagePairPreference =
+  FIXED_OFFICIAL_PAIR_TRACER_PREFERENCE;
+
+type FakeCueMessage = Pick<
+  CuesMessage,
+  'role' | 'trackId' | 'cues' | 'translation'
+>;
+
+export interface FakeOfficialPair {
+  readonly tracks: readonly TrackInfo[];
+  readonly top: FakeCueMessage;
+  readonly bottom: FakeCueMessage;
+}
 
 export function startFakeMainStub(siteId: SiteId): void {
   window.addEventListener('message', (event: MessageEvent<unknown>) => {
@@ -33,58 +55,60 @@ export function startFakeMainStub(siteId: SiteId): void {
     }
 
     const envelope = { siteId, requestId: event.data.requestId };
-    const { english, chinese } = createFakeCues(event.data.anchorTimeMs);
-
     postDuetSubMessage(tracksMessage(envelope, TRACKS));
-    postDuetSubMessage(
-      cuesMessage(
-        envelope,
-        {
-          role: 'english',
-          trackId: TRACKS[0].id,
-          cues: english,
-          translation: 'official',
-        },
-      ),
+    if (event.data.catalogOnly) return;
+    const pair = createFakeOfficialPair(
+      event.data.anchorTimeMs,
+      event.data.preference,
     );
-    postDuetSubMessage(
-      cuesMessage(
-        envelope,
-        {
-          role: 'chinese',
-          trackId: TRACKS[1].id,
-          cues: chinese,
-          translation: 'mt-fallback',
-        },
-      ),
-    );
+    if (pair === undefined) return;
+    postDuetSubMessage(cuesMessage(envelope, pair.top));
+    postDuetSubMessage(cuesMessage(envelope, pair.bottom));
   });
 }
 
-function createFakeCues(anchorTimeMs: number): {
-  english: Cue[];
-  chinese: Cue[];
-} {
+export function createFakeOfficialPair(
+  anchorTimeMs: number,
+  preference: LanguagePairPreference = FIXED_OFFICIAL_PAIR_PREFERENCE,
+): FakeOfficialPair | undefined {
   const at = Math.max(0, Math.round(anchorTimeMs));
+  const pair = resolveOfficialPair({
+    siteId: 'youtube',
+    tracks: TRACKS,
+    preference,
+  });
+  if (pair.kind !== 'ready') return undefined;
   return {
-    english: [
-      cue(at, at + 4_000, 'One English cue spans two Chinese cues.', 'en'),
-      cue(at + 4_000, at + 6_000, 'English-only cue.', 'en'),
-      cue(at + 8_000, at + 12_000, 'English stays above at the top.', 'en'),
-    ],
-    chinese: [
-      cue(at, at + 2_000, '一對多：第一條繁中假字幕。', 'zh-Hant'),
-      cue(at + 2_000, at + 4_000, '一對多：第二條繁中假字幕。', 'zh-Hant'),
-      cue(at + 6_000, at + 8_000, '單側繁中假字幕。', 'zh-Hant'),
-      cue(
-        at + 8_000,
-        at + 12_000,
-        '置頂時仍然是繁中在下。',
-        'zh-Hant',
-        'top',
-      ),
-    ],
+    tracks: TRACKS,
+    top: {
+      role: 'top',
+      trackId: pair.top.id,
+      cues: cuesForTrack(pair.top, at),
+      translation: 'official',
+    },
+    bottom: {
+      role: 'bottom',
+      trackId: pair.bottom.id,
+      cues: cuesForTrack(pair.bottom, at),
+      translation: 'official',
+    },
   };
+}
+
+function cuesForTrack(track: TrackInfo, at: number): Cue[] {
+  if (track.language === 'ja') {
+    return [
+      cue(at, at + 4_000, '一つの日本語字幕が二つの中国語字幕に重なります。', 'ja'),
+      cue(at + 4_000, at + 6_000, '日本語だけの字幕です。', 'ja'),
+      cue(at + 8_000, at + 12_000, '日本語は選択した段に表示されます。', 'ja'),
+    ];
+  }
+  return [
+    cue(at, at + 2_000, '一对多：第一条简中假字幕。', 'zh-Hans'),
+    cue(at + 2_000, at + 4_000, '一对多：第二条简中假字幕。', 'zh-Hans'),
+    cue(at + 6_000, at + 8_000, '单侧简中假字幕。', 'zh-Hans'),
+    cue(at + 8_000, at + 12_000, '简中显示在选择的段位。', 'zh-Hans'),
+  ];
 }
 
 function cue(

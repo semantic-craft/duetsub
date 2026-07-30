@@ -1,9 +1,19 @@
 import type { Cue, SiteAdapter, TrackInfo } from '../core/contracts';
-import type { PlaybackGeneration } from '../core/lifecycle';
+import {
+  samePlaybackGeneration,
+  type PlaybackGeneration,
+} from '../core/lifecycle';
+import {
+  PRIME_SUBTITLE_GROUP_SELECTOR,
+  PRIME_SUBTITLE_MENU_BUTTON_SELECTOR,
+  PRIME_VIDEO_SELECTOR,
+} from '../core/primevideo-dom';
 import {
   isDuetSubMessage,
   postDuetSubMessage,
+  requestPrimeCachedTtml,
   requestPrimeTimelineOffset,
+  type PrimeTtmlResponseMessage,
 } from '../core/messages';
 import {
   alignPrimeChineseCuesToEnglish,
@@ -14,11 +24,10 @@ import {
   type PrimeTtmlResponseInbox,
 } from './primevideo-responses';
 
-const MENU_BUTTON_SELECTOR =
-  '#dv-web-player button[aria-label="Subtitles and Audio Menu"]';
-const SUBTITLE_GROUP_SELECTOR =
-  '#dv-web-player .atvwebplayersdk-subtitle-radio-group';
 const SUBTITLE_RADIO_SELECTOR = 'input[type="radio"][name="subtitle"]';
+const OBSERVATION_REQUEST_ATTRIBUTE = 'data-duetsub-observation-request';
+const OBSERVATION_GENERATION_ATTRIBUTE =
+  'data-duetsub-observation-generation';
 const DOM_TIMEOUT_MS = 8_000;
 const RESPONSE_TIMEOUT_MS = 15_000;
 
@@ -33,6 +42,7 @@ interface PendingResponse {
   readonly track: TrackInfo;
   readonly radio: HTMLInputElement;
   readonly generation: PlaybackGeneration;
+  readonly observationRequestId: string;
   readonly resolve: (cues: Cue[]) => void;
   readonly reject: (error: Error) => void;
   readonly timeout: number;
@@ -41,6 +51,27 @@ interface PendingResponse {
 interface PendingTimelineOffset {
   readonly requestId: string;
   readonly generation: PlaybackGeneration;
+}
+
+export interface PrimeVideoSubtitleTrackMetadata {
+  readonly id: string;
+  readonly label: string;
+}
+
+export interface PrimeVideoTrackAcquisition {
+  readonly tracks: readonly TrackInfo[];
+  readonly isCurrent: () => boolean;
+  readonly capture: (track: TrackInfo) => Promise<Cue[]>;
+  readonly restore: () => Promise<boolean>;
+}
+
+export interface PrimeTimelineOffsetOwnership {
+  readonly current: PlaybackGeneration;
+  readonly pending: PendingTimelineOffset | undefined;
+  readonly response: {
+    readonly requestId: string;
+    readonly timelineOffsetMs: number;
+  };
 }
 
 export function createPrimeVideoAdapter(): SiteAdapter {
@@ -68,6 +99,7 @@ class PrimeVideoAdapter implements SiteAdapter {
   #generation: PlaybackGeneration = {
     contentGeneration: 0,
     clockGeneration: 0,
+    selectionGeneration: 0,
   };
 
   constructor() {
@@ -186,16 +218,15 @@ class PrimeVideoAdapter implements SiteAdapter {
       return;
     }
 
-    const button = await waitForMenuButton().catch(() => undefined);
-    if (button === undefined) {
+    const menuAvailable = await waitForMenuButton().catch(() => undefined);
+    if (menuAvailable === undefined) {
       rejectRequests(requests, new Error('Prime subtitle menu unavailable'));
       return;
     }
 
     const menuWasOpen = isSubtitleMenuOpen();
     let originalId = '';
-    let captured = new Map<string, Cue[]>();
-    let operationError: unknown;
+    let captured: Map<string, Cue[]>;
 
     try {
       await waitForPrimePlayerReady();
@@ -216,7 +247,8 @@ class PrimeVideoAdapter implements SiteAdapter {
           radio === undefined ||
           visibleTrack === undefined ||
           visibleTrack.language !== track.language ||
-          visibleTrack.label !== track.label
+          visibleTrack.label !== track.label ||
+          visibleTrack.kind !== track.kind
         ) {
           throw new Error(`Prime track DOM handle changed: ${track.id}`);
         }
@@ -225,51 +257,21 @@ class PrimeVideoAdapter implements SiteAdapter {
       const orderedTracks = requestedTracks.toSorted((left, right) =>
         left.id === originalId ? 1 : right.id === originalId ? -1 : 0,
       );
-
-      for (const track of orderedTracks) {
-        if (!sameGeneration(this.#generation, generation)) {
-          throw new Error('Prime track request became stale');
-        }
-        const cues = await this.#switchAndCapture(track, generation);
-        captured.set(track.id, cues);
-      }
-
-      const english = requestedTracks.find(isEnglishCcTrack);
-      const chinese = requestedTracks.find(isTraditionalChineseTrack);
-      const englishCues =
-        english === undefined ? undefined : captured.get(english.id);
-      const chineseCues =
-        chinese === undefined ? undefined : captured.get(chinese.id);
-      if (
-        chinese !== undefined &&
-        englishCues !== undefined &&
-        chineseCues !== undefined
-      ) {
-        captured.set(
-          chinese.id,
-          alignPrimeChineseCuesToEnglish(englishCues, chineseCues),
-        );
-      }
+      captured = await acquirePrimeVideoTracks({
+        tracks: orderedTracks,
+        isCurrent: () => sameGeneration(this.#generation, generation),
+        capture: (track) => this.#switchAndCapture(track, generation),
+        restore: async () =>
+          generation.contentGeneration !==
+              this.#generation.contentGeneration ||
+          restorePrimeSubtitleState(originalId, menuWasOpen),
+      });
+      captured = applyPrimeVideoPairAlignmentPolicy(
+        requestedTracks,
+        captured,
+      );
     } catch (error) {
-      operationError = error;
-    }
-
-    const contentIsCurrent =
-      generation.contentGeneration === this.#generation.contentGeneration;
-    const restored =
-      !contentIsCurrent ||
-      (originalId !== '' &&
-        (await restoreOriginalState(button, originalId, menuWasOpen)));
-    if (!restored) {
-      operationError = new Error('Could not restore Prime subtitle state');
-    }
-    if (!sameGeneration(this.#generation, generation)) {
-      operationError = new Error('Prime track request became stale');
-    }
-
-    if (operationError !== undefined) {
-      captured = new Map();
-      rejectRequests(requests, asError(operationError));
+      rejectRequests(requests, asError(error));
       return;
     }
 
@@ -290,7 +292,7 @@ class PrimeVideoAdapter implements SiteAdapter {
     track: TrackInfo,
     generation: PlaybackGeneration,
   ): Promise<Cue[]> {
-    let group = await getSubtitleGroup();
+    let group = await getPrimeSubtitleGroupForSwitch();
     let radio = findRadio(group, track.id);
     if (radio === undefined) throw new Error(`Prime track disappeared: ${track.id}`);
 
@@ -300,16 +302,32 @@ class PrimeVideoAdapter implements SiteAdapter {
         throw new Error('Prime cannot re-request the currently selected track');
       }
       clickRadio(off);
-      await waitUntil(() => off.checked, DOM_TIMEOUT_MS);
-      group = await getSubtitleGroup();
+      await waitUntil(
+        () => isPrimeSubtitleTrackChecked(off.id),
+        DOM_TIMEOUT_MS,
+      );
+      group = await getPrimeSubtitleGroupForSwitch();
       radio = findRadio(group, track.id);
       if (radio === undefined) throw new Error(`Prime track disappeared: ${track.id}`);
     }
 
-    const response = this.#armPending(track, radio, generation);
+    const observationRequestId = crypto.randomUUID();
+    const response = this.#armPending(
+      track,
+      radio,
+      generation,
+      observationRequestId,
+    );
     try {
-      clickRadio(radio);
-      await waitUntil(() => radio.checked, DOM_TIMEOUT_MS);
+      clickRadioForObservation(
+        radio,
+        observationRequestId,
+        generation,
+      );
+      await waitUntil(
+        () => isPrimeSubtitleTrackChecked(radio.id),
+        DOM_TIMEOUT_MS,
+      );
       return await response;
     } catch (error) {
       this.#rejectPending(asError(error));
@@ -321,6 +339,7 @@ class PrimeVideoAdapter implements SiteAdapter {
     track: TrackInfo,
     radio: HTMLInputElement,
     generation: PlaybackGeneration,
+    observationRequestId: string,
   ): Promise<Cue[]> {
     if (this.#pending !== undefined) {
       throw new Error('Prime response ownership is ambiguous');
@@ -332,9 +351,24 @@ class PrimeVideoAdapter implements SiteAdapter {
         this.#pending = undefined;
         reject(new Error(`Prime TTML response timed out: ${track.id}`));
       }, RESPONSE_TIMEOUT_MS);
-      this.#pending = { track, radio, generation, resolve, reject, timeout };
+      this.#pending = {
+        track,
+        radio,
+        generation,
+        observationRequestId,
+        resolve,
+        reject,
+        timeout,
+      };
     });
     this.#requestTimelineOffset(generation);
+    postDuetSubMessage(
+      requestPrimeCachedTtml(
+        observationRequestId,
+        track.id,
+        generation,
+      ),
+    );
     this.#resolvePendingFromInbox();
     return response;
   }
@@ -354,15 +388,13 @@ class PrimeVideoAdapter implements SiteAdapter {
       message.direction === 'main-to-isolated' &&
       message.type === 'prime-timeline-offset'
     ) {
-      const request = this.#pendingTimelineOffset;
-      if (
-        request === undefined ||
-        message.requestId !== request.requestId ||
-        !sameGeneration(this.#generation, request.generation)
-      ) {
-        return;
-      }
-      this.#timelineOffsetMs = message.timelineOffsetMs;
+      const timelineOffsetMs = acceptPrimeTimelineOffset({
+        current: this.#generation,
+        pending: this.#pendingTimelineOffset,
+        response: message,
+      });
+      if (timelineOffsetMs === undefined) return;
+      this.#timelineOffsetMs = timelineOffsetMs;
       this.#pendingTimelineOffset = undefined;
       this.#resolvePendingFromInbox();
       return;
@@ -374,20 +406,18 @@ class PrimeVideoAdapter implements SiteAdapter {
       return;
     }
 
-    const pending = this.#pending;
-    const trackId =
-      pending !== undefined &&
-        pending.radio.checked &&
-        sameGeneration(this.#generation, pending.generation)
-        ? pending.track.id
-        : readCheckedSubtitleTrackId();
-    if (trackId === undefined) return;
+    const observation = acceptPrimeTtmlObservation({
+      current: this.#generation,
+      pending: this.#pending,
+      response: message,
+    });
+    if (observation === undefined) return;
 
     this.#responseInbox = recordPrimeTtmlResponse(this.#responseInbox, {
       responseId: message.responseId,
-      trackId,
+      trackId: observation.trackId,
       raw: message.raw,
-      generation: this.#generation,
+      generation: observation.generation,
     });
     this.#resolvePendingFromInbox();
   };
@@ -432,6 +462,151 @@ class PrimeVideoAdapter implements SiteAdapter {
   }
 }
 
+export function parsePrimeVideoSubtitleTrack(
+  metadata: PrimeVideoSubtitleTrackMetadata,
+): TrackInfo | undefined {
+  const id = metadata.id.trim();
+  const label = metadata.label.trim();
+  const match = id.match(
+    /^([a-z]{2,3}(?:-[a-z0-9]{2,8})*)_([a-z][a-z0-9-]*)(?:_|$)/i,
+  );
+  if (id === '' || label === '' || match === null) return undefined;
+
+  let language: string;
+  try {
+    language = Intl.getCanonicalLocales(match[1])[0];
+  } catch {
+    return undefined;
+  }
+
+  const variant = match[2].toLowerCase();
+  const closedCaptions =
+    variant === 'sdh' ||
+    variant === 'cc' ||
+    variant === 'caption' ||
+    variant === 'closedcaption' ||
+    variant === 'closedcaptions';
+  const forcedOnly = variant === 'forced' || variant === 'forcednarrative';
+  if (!closedCaptions && !forcedOnly && variant !== 'subtitle') {
+    return undefined;
+  }
+
+  return {
+    id,
+    language,
+    source: 'official',
+    label,
+    kind: closedCaptions ? 'closed-captions' : 'subtitles',
+    ...(forcedOnly ? { forcedOnly: true } : {}),
+  };
+}
+
+export async function acquirePrimeVideoTracks(
+  input: PrimeVideoTrackAcquisition,
+): Promise<Map<string, Cue[]>> {
+  const captured = new Map<string, Cue[]>();
+  let operationError: unknown;
+
+  try {
+    for (const track of input.tracks) {
+      if (!input.isCurrent()) {
+        throw new Error('Prime track request became stale');
+      }
+      captured.set(track.id, await input.capture(track));
+      if (!input.isCurrent()) {
+        throw new Error('Prime track request became stale');
+      }
+    }
+  } catch (error) {
+    operationError = error;
+  }
+
+  let restored = false;
+  try {
+    restored = await input.restore();
+  } catch {
+    // Restoration failure takes precedence over the triggering operation.
+  }
+  if (!restored) {
+    operationError = new Error('Could not restore Prime subtitle state');
+  }
+  if (!input.isCurrent()) {
+    operationError = new Error('Prime track request became stale');
+  }
+  if (operationError !== undefined) throw asError(operationError);
+
+  return captured;
+}
+
+export function applyPrimeVideoPairAlignmentPolicy(
+  pair: readonly TrackInfo[],
+  captured: ReadonlyMap<string, Cue[]>,
+): Map<string, Cue[]> {
+  const result = new Map(captured);
+  const [top, bottom] = pair;
+  if (
+    pair.length !== 2 ||
+    top === undefined ||
+    bottom === undefined ||
+    !isEnglishCcTrack(top) ||
+    !isTraditionalChineseTrack(bottom) ||
+    bottom.kind !== 'subtitles'
+  ) {
+    return result;
+  }
+  const topCues = result.get(top.id);
+  const bottomCues = result.get(bottom.id);
+  if (topCues !== undefined && bottomCues !== undefined) {
+    result.set(
+      bottom.id,
+      alignPrimeChineseCuesToEnglish(topCues, bottomCues),
+    );
+  }
+  return result;
+}
+
+export function acceptPrimeTimelineOffset(
+  ownership: PrimeTimelineOffsetOwnership,
+): number | undefined {
+  const pending = ownership.pending;
+  return pending !== undefined &&
+      ownership.response.requestId === pending.requestId &&
+      sameGeneration(ownership.current, pending.generation)
+    ? ownership.response.timelineOffsetMs
+    : undefined;
+}
+
+export function acceptPrimeTtmlObservation(
+  ownership: {
+    readonly current: PlaybackGeneration;
+    readonly pending:
+      | {
+          readonly observationRequestId: string;
+          readonly track: TrackInfo;
+          readonly generation: PlaybackGeneration;
+        }
+      | undefined;
+    readonly response: PrimeTtmlResponseMessage;
+  },
+): {
+  readonly trackId: string;
+  readonly generation: PlaybackGeneration;
+} | undefined {
+  const pending = ownership.pending;
+  const observation = ownership.response.observation;
+  return pending !== undefined &&
+      observation !== undefined &&
+      observation.requestId === pending.observationRequestId &&
+      observation.trackId === pending.track.id &&
+      sameGeneration(observation.generation, pending.generation) &&
+      sameGeneration(ownership.current, pending.generation)
+    ? {
+        trackId: pending.track.id,
+        generation: pending.generation,
+      }
+    : undefined;
+}
+
 function readOfficialTracks(group: HTMLElement): TrackInfo[] {
   const tracks: TrackInfo[] = [];
   for (const radio of readSubtitleRadios(group)) {
@@ -449,38 +624,11 @@ function readSubtitleRadios(group: HTMLElement): HTMLInputElement[] {
   );
 }
 
-function readCheckedSubtitleTrackId(): string | undefined {
-  const group = document.querySelector<HTMLElement>(SUBTITLE_GROUP_SELECTOR);
-  if (group === null) return undefined;
-  const checked = readSubtitleRadios(group).find((radio) => radio.checked);
-  return checked === undefined || checked.id === 'off' || checked.id === ''
-    ? undefined
-    : checked.id;
-}
-
 function trackFromRadio(radio: HTMLInputElement): TrackInfo | undefined {
-  const label = radio.getAttribute('aria-label')?.trim() ?? '';
-  if (radio.id === '' || label === '' || radio.id === 'off') return undefined;
-
-  const language = languageFromRadio(radio.id, label);
-  if (language === undefined) return undefined;
-  return { id: radio.id, language, source: 'official', label };
-}
-
-function languageFromRadio(id: string, label: string): string | undefined {
-  const idLanguage = id.match(/^([a-z]{2,3}(?:-[a-z0-9]{2,8})*)_/i)?.[1];
-  if (idLanguage !== undefined) {
-    try {
-      return Intl.getCanonicalLocales(idLanguage)[0];
-    } catch {
-      // Fall through to the verified accessible label vocabulary.
-    }
-  }
-
-  if (/^English(?:\s|\[|$)/i.test(label)) return 'en';
-  if (/中文[（(](?:繁體|繁体)[）)]/.test(label)) return 'zh-Hant';
-  if (/中文[（(](?:簡體|简体)[）)]/.test(label)) return 'zh-Hans';
-  return undefined;
+  return parsePrimeVideoSubtitleTrack({
+    id: radio.id,
+    label: radio.getAttribute('aria-label') ?? '',
+  });
 }
 
 function uniqueRequestedTracks(requests: readonly TrackRequest[]): TrackInfo[] {
@@ -495,7 +643,7 @@ function isEnglishCcTrack(track: TrackInfo): boolean {
   const language = track.language.toLowerCase();
   return (
     (language === 'en' || language.startsWith('en-')) &&
-    /\[CC\]/i.test(track.label)
+    track.kind === 'closed-captions'
   );
 }
 
@@ -504,33 +652,47 @@ function isTraditionalChineseTrack(track: TrackInfo): boolean {
   return language === 'zh-hant' || language.startsWith('zh-hant-');
 }
 
-async function restoreOriginalState(
-  button: HTMLButtonElement,
+export async function restorePrimeSubtitleState(
   originalId: string,
   menuWasOpen: boolean,
 ): Promise<boolean> {
   try {
-    const group = await getSubtitleGroup();
+    const group = await getPrimeSubtitleGroupForSwitch();
     const original = findRadio(group, originalId);
     if (original === undefined) return false;
     if (!original.checked) {
       clickRadio(original);
-      await waitUntil(() => original.checked, DOM_TIMEOUT_MS);
+      await waitUntil(
+        () => isPrimeSubtitleTrackChecked(originalId),
+        DOM_TIMEOUT_MS,
+      );
     }
-    return await restoreMenuState(button, menuWasOpen);
+    await restoreMenuState(menuWasOpen);
+  } catch {
+    // Prime can replace its menu DOM while the click is still settling.
+  }
+
+  try {
+    await waitUntil(
+      () =>
+        isPrimeSubtitleTrackChecked(originalId) &&
+        isSubtitleMenuOpen() === menuWasOpen,
+      DOM_TIMEOUT_MS,
+    );
+    return true;
   } catch {
     return false;
   }
 }
 
 async function restoreMenuState(
-  button: HTMLButtonElement,
   menuWasOpen: boolean,
 ): Promise<boolean> {
   try {
     if (menuWasOpen) {
-      await ensureSubtitleMenuOpen(button);
+      await ensurePrimeSubtitleMenuOpen();
     } else if (isSubtitleMenuOpen()) {
+      const button = await waitForMenuButton();
       button.click();
       await waitUntil(() => !isSubtitleMenuOpen(), DOM_TIMEOUT_MS);
     }
@@ -540,30 +702,47 @@ async function restoreMenuState(
   }
 }
 
-async function ensureSubtitleMenuOpen(
-  button: HTMLButtonElement,
-): Promise<HTMLElement> {
-  const current = document.querySelector<HTMLElement>(SUBTITLE_GROUP_SELECTOR);
+export async function ensurePrimeSubtitleMenuOpen(): Promise<HTMLElement> {
+  const current = document.querySelector<HTMLElement>(
+    PRIME_SUBTITLE_GROUP_SELECTOR,
+  );
   if (current !== null && isVisible(current)) return current;
+  const button = await waitForMenuButton();
   button.click();
   await waitUntil(() => isSubtitleMenuOpen(), DOM_TIMEOUT_MS);
-  const group = document.querySelector<HTMLElement>(SUBTITLE_GROUP_SELECTOR);
+  const group = document.querySelector<HTMLElement>(
+    PRIME_SUBTITLE_GROUP_SELECTOR,
+  );
   if (group === null) throw new Error('Prime subtitle menu did not open');
   return group;
 }
 
+export async function getPrimeSubtitleGroupForSwitch(): Promise<HTMLElement> {
+  const current = document.querySelector<HTMLElement>(
+    PRIME_SUBTITLE_GROUP_SELECTOR,
+  );
+  if (current !== null && readSubtitleRadios(current).length > 0) {
+    return current;
+  }
+  return ensurePrimeSubtitleMenuOpen();
+}
+
 async function getSubtitleGroup(): Promise<HTMLElement> {
   await waitUntil(
-    () => document.querySelector(SUBTITLE_GROUP_SELECTOR) !== null,
+    () => document.querySelector(PRIME_SUBTITLE_GROUP_SELECTOR) !== null,
     DOM_TIMEOUT_MS,
   );
-  const group = document.querySelector<HTMLElement>(SUBTITLE_GROUP_SELECTOR);
+  const group = document.querySelector<HTMLElement>(
+    PRIME_SUBTITLE_GROUP_SELECTOR,
+  );
   if (group === null) throw new Error('Prime subtitle menu DOM unavailable');
   return group;
 }
 
 function isSubtitleMenuOpen(): boolean {
-  const group = document.querySelector<HTMLElement>(SUBTITLE_GROUP_SELECTOR);
+  const group = document.querySelector<HTMLElement>(
+    PRIME_SUBTITLE_GROUP_SELECTOR,
+  );
   return group !== null && isVisible(group);
 }
 
@@ -578,7 +757,8 @@ function isVisible(element: HTMLElement): boolean {
 
 async function waitForPrimePlayerReady(): Promise<void> {
   await waitUntil(() => {
-    const video = document.querySelector<HTMLVideoElement>('#dv-web-player video');
+    const video =
+      document.querySelector<HTMLVideoElement>(PRIME_VIDEO_SELECTOR);
     return video !== null && isVisible(video) && video.readyState >= 2;
   }, DOM_TIMEOUT_MS);
 }
@@ -608,10 +788,13 @@ async function waitForStableSubtitleSelection(
 
 async function waitForMenuButton(): Promise<HTMLButtonElement> {
   await waitUntil(
-    () => document.querySelector(MENU_BUTTON_SELECTOR) !== null,
+    () =>
+      document.querySelector(PRIME_SUBTITLE_MENU_BUTTON_SELECTOR) !== null,
     DOM_TIMEOUT_MS,
   );
-  const button = document.querySelector<HTMLButtonElement>(MENU_BUTTON_SELECTOR);
+  const button = document.querySelector<HTMLButtonElement>(
+    PRIME_SUBTITLE_MENU_BUTTON_SELECTOR,
+  );
   if (button === null) throw new Error('Prime subtitle menu button unavailable');
   return button;
 }
@@ -623,8 +806,37 @@ function findRadio(
   return readSubtitleRadios(group).find((radio) => radio.id === id);
 }
 
+function isPrimeSubtitleTrackChecked(id: string): boolean {
+  const group = document.querySelector<HTMLElement>(
+    PRIME_SUBTITLE_GROUP_SELECTOR,
+  );
+  return group !== null && findRadio(group, id)?.checked === true;
+}
+
 function clickRadio(radio: HTMLInputElement): void {
   radio.click();
+}
+
+function clickRadioForObservation(
+  radio: HTMLInputElement,
+  requestId: string,
+  generation: PlaybackGeneration,
+): void {
+  radio.setAttribute(OBSERVATION_REQUEST_ATTRIBUTE, requestId);
+  radio.setAttribute(
+    OBSERVATION_GENERATION_ATTRIBUTE,
+    [
+      generation.contentGeneration,
+      generation.clockGeneration,
+      generation.selectionGeneration ?? 0,
+    ].join(':'),
+  );
+  try {
+    clickRadio(radio);
+  } finally {
+    radio.removeAttribute(OBSERVATION_REQUEST_ATTRIBUTE);
+    radio.removeAttribute(OBSERVATION_GENERATION_ATTRIBUTE);
+  }
 }
 
 function waitUntil(predicate: () => boolean, timeoutMs: number): Promise<void> {
@@ -658,6 +870,5 @@ function sameGeneration(
   left: PlaybackGeneration,
   right: PlaybackGeneration,
 ): boolean {
-  return left.contentGeneration === right.contentGeneration &&
-    left.clockGeneration === right.clockGeneration;
+  return samePlaybackGeneration(left, right);
 }

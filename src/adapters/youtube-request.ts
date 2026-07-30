@@ -1,5 +1,8 @@
 import type { YoutubeTrackHandle } from './youtube-tracks';
-import type { PlaybackGeneration } from '../core/lifecycle';
+import {
+  samePlaybackGeneration,
+  type PlaybackGeneration,
+} from '../core/lifecycle';
 
 export interface YoutubeRequestContext {
   readonly videoId: string;
@@ -82,6 +85,5 @@ export function sameYoutubeRequestContext(
   right: YoutubeRequestContext,
 ): boolean {
   return left.videoId === right.videoId &&
-    left.generation.contentGeneration === right.generation.contentGeneration &&
-    left.generation.clockGeneration === right.generation.clockGeneration;
+    samePlaybackGeneration(left.generation, right.generation);
 }
