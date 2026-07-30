@@ -292,7 +292,8 @@ class PrimeVideoAdapter implements SiteAdapter {
     track: TrackInfo,
     generation: PlaybackGeneration,
   ): Promise<Cue[]> {
-    let group = await getSubtitleGroup();
+    const button = await waitForMenuButton();
+    let group = await ensurePrimeSubtitleMenuOpen(button);
     let radio = findRadio(group, track.id);
     if (radio === undefined) throw new Error(`Prime track disappeared: ${track.id}`);
 
@@ -303,7 +304,7 @@ class PrimeVideoAdapter implements SiteAdapter {
       }
       clickRadio(off);
       await waitUntil(() => off.checked, DOM_TIMEOUT_MS);
-      group = await getSubtitleGroup();
+      group = await ensurePrimeSubtitleMenuOpen(button);
       radio = findRadio(group, track.id);
       if (radio === undefined) throw new Error(`Prime track disappeared: ${track.id}`);
     }
@@ -652,7 +653,7 @@ async function restoreOriginalState(
   menuWasOpen: boolean,
 ): Promise<boolean> {
   try {
-    const group = await getSubtitleGroup();
+    const group = await ensurePrimeSubtitleMenuOpen(button);
     const original = findRadio(group, originalId);
     if (original === undefined) return false;
     if (!original.checked) {
@@ -671,7 +672,7 @@ async function restoreMenuState(
 ): Promise<boolean> {
   try {
     if (menuWasOpen) {
-      await ensureSubtitleMenuOpen(button);
+      await ensurePrimeSubtitleMenuOpen(button);
     } else if (isSubtitleMenuOpen()) {
       button.click();
       await waitUntil(() => !isSubtitleMenuOpen(), DOM_TIMEOUT_MS);
@@ -682,7 +683,7 @@ async function restoreMenuState(
   }
 }
 
-async function ensureSubtitleMenuOpen(
+export async function ensurePrimeSubtitleMenuOpen(
   button: HTMLButtonElement,
 ): Promise<HTMLElement> {
   const current = document.querySelector<HTMLElement>(

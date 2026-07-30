@@ -8,6 +8,7 @@ import {
   acquirePrimeVideoTracks,
   applyPrimeVideoPairAlignmentPolicy,
   createPrimeVideoAdapter,
+  ensurePrimeSubtitleMenuOpen,
   parsePrimeVideoSubtitleTrack,
 } from '../src/adapters/primevideo';
 import { primeTtmlResponseMessage } from '../src/core/messages';
@@ -23,6 +24,35 @@ function cues(text: string, language: string): Cue[] {
 }
 
 describe('Prime official subtitle metadata', () => {
+  it('opens a hidden subtitle group before switching the next track', async () => {
+    let open = false;
+    const group = {
+      getClientRects: () => (open ? [{}] : []),
+    };
+    const button = {
+      click: vi.fn(() => {
+        open = true;
+      }),
+    };
+
+    vi.stubGlobal('getComputedStyle', () => ({
+      display: open ? 'block' : 'none',
+      visibility: 'visible',
+    }));
+    vi.stubGlobal('document', {
+      querySelector: (selector: string) =>
+        selector ===
+        'div[id^="dv-web-player"].dv-player-fullscreen .atvwebplayersdk-subtitle-radio-group'
+          ? group
+          : null,
+    });
+
+    await expect(
+      ensurePrimeSubtitleMenuOpen(button as unknown as HTMLButtonElement),
+    ).resolves.toBe(group);
+    expect(button.click).toHaveBeenCalledOnce();
+  });
+
   it('enumerates the visible fullscreen player when Prime keeps a stale hidden player', async () => {
     vi.useFakeTimers();
     const activeVideo = {
