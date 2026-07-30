@@ -25,6 +25,47 @@ export interface OfficialLanguageOption {
   readonly label: string;
 }
 
+export function normalizeLanguagePairPreference(
+  value: unknown,
+): LanguagePairPreference | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const candidate = value as Partial<LanguagePairPreference>;
+  if (
+    candidate.version !== 1 ||
+    typeof candidate.top !== 'string' ||
+    typeof candidate.bottom !== 'string'
+  ) {
+    return undefined;
+  }
+  const top = canonicalLanguage(candidate.top);
+  const bottom = canonicalLanguage(candidate.bottom);
+  return top === undefined || bottom === undefined || top === bottom
+    ? undefined
+    : { version: 1, top, bottom };
+}
+
+export function createLanguagePairPreference(
+  catalog: readonly OfficialLanguageOption[],
+  top: string,
+  bottom: string,
+): LanguagePairPreference | undefined {
+  const preference = normalizeLanguagePairPreference({
+    version: 1,
+    top,
+    bottom,
+  });
+  if (preference === undefined) return undefined;
+  const languages = new Set(
+    catalog.flatMap(({ language }) => {
+      const canonical = canonicalLanguage(language);
+      return canonical === undefined ? [] : [canonical];
+    }),
+  );
+  return languages.has(preference.top) && languages.has(preference.bottom)
+    ? preference
+    : undefined;
+}
+
 export type OfficialPairUnavailableReason =
   | 'same-language'
   | 'top-missing'
@@ -79,16 +120,8 @@ export function resolveOfficialPair(input: {
   readonly tracks: readonly TrackInfo[];
   readonly preference: LanguagePairPreference;
 }): OfficialPairResolution {
-  const tracks: CatalogTrack[] = input.tracks.flatMap((track) => {
-    if (track.source !== 'official' || track.forcedOnly === true) return [];
-    const language = canonicalLanguage(track.language);
-    return language === undefined ? [] : [{ track, language }];
-  });
-  const catalog = tracks.flatMap(({ track, language }, index) =>
-    tracks.findIndex((candidate) => candidate.language === language) === index
-      ? [{ language, label: displayLanguage(language, track.label) }]
-      : []
-  );
+  const tracks = officialCatalogTracks(input.tracks);
+  const catalog = createOfficialTrackCatalog(input.tracks);
   const topLanguage = canonicalLanguage(input.preference.top);
   const bottomLanguage = canonicalLanguage(input.preference.bottom);
   if (
@@ -132,6 +165,19 @@ export function resolveOfficialPair(input: {
         : 'top-missing'
       : 'bottom-missing',
   };
+}
+
+export function createOfficialTrackCatalog(
+  tracks: readonly TrackInfo[],
+): readonly OfficialLanguageOption[] {
+  const catalogTracks = officialCatalogTracks(tracks);
+  return catalogTracks.flatMap(({ track, language }, index) =>
+    catalogTracks.findIndex(
+      (candidate) => candidate.language === language,
+    ) === index
+      ? [{ language, label: displayLanguage(language, track.label) }]
+      : []
+  );
 }
 
 export function resolveOfficialPairCues(input: {
@@ -214,6 +260,16 @@ function selectLanguageTrack(
         ),
         siteId,
       );
+}
+
+function officialCatalogTracks(
+  tracks: readonly TrackInfo[],
+): CatalogTrack[] {
+  return tracks.flatMap((track) => {
+    if (track.source !== 'official' || track.forcedOnly === true) return [];
+    const language = canonicalLanguage(track.language);
+    return language === undefined ? [] : [{ track, language }];
+  });
 }
 
 function selectedVariant(

@@ -9,6 +9,11 @@ import {
   loadTranslationConfig,
   saveTranslationConfig,
 } from './settings';
+import {
+  loadLanguagePairPreference,
+  resetLanguagePairPreference,
+  type LoadedLanguagePairPreference,
+} from '../core/official-pair-preference';
 
 const form = document.querySelector<HTMLFormElement>('form')!;
 const provider = document.querySelector<HTMLSelectElement>('#provider')!;
@@ -17,9 +22,23 @@ const apiKey = document.querySelector<HTMLInputElement>('#api-key')!;
 const model = document.querySelector<HTMLInputElement>('#model')!;
 const status = document.querySelector<HTMLOutputElement>('#status')!;
 const testButton = document.querySelector<HTMLButtonElement>('#test')!;
+const languagePair = document.querySelector<HTMLOutputElement>(
+  '#official-language-pair',
+)!;
+const resetLanguagePair = document.querySelector<HTMLButtonElement>(
+  '#reset-official-language-pair',
+)!;
 
 void loadTranslationConfig(chrome.storage.local).then(renderConfig);
+void loadLanguagePairPreference(chrome.storage.local).then(renderLanguagePair);
 provider.addEventListener('change', () => applyProviderDefaults(provider.value as TranslationProvider));
+resetLanguagePair.addEventListener('click', () => {
+  void (async () => {
+    await resetLanguagePairPreference(chrome.storage.local);
+    renderLanguagePair(await loadLanguagePairPreference(chrome.storage.local));
+    show(true, '官方語言偏好已恢復預設值');
+  })();
+});
 
 form.addEventListener('submit', (event) => {
   event.preventDefault();
@@ -78,6 +97,17 @@ function renderConfig(config: TranslationConfig): void {
   baseUrl.closest<HTMLElement>('.field')!.hidden = config.provider === 'deepseek';
 }
 
+function renderLanguagePair(loaded: LoadedLanguagePairPreference): void {
+  const { preference } = loaded;
+  languagePair.value = `${
+    languageName(preference.top)
+  }（${preference.top}）在上，${
+    languageName(preference.bottom)
+  }（${preference.bottom}）在下${
+    loaded.stored ? '' : '（記憶體預設）'
+  }`;
+}
+
 function applyProviderDefaults(value: TranslationProvider): void {
   if (value === 'deepseek') {
     renderConfig({ ...DEFAULT_TRANSLATION_CONFIG, apiKey: apiKey.value });
@@ -93,4 +123,13 @@ function applyProviderDefaults(value: TranslationProvider): void {
 function show(ok: boolean | undefined, message: string): void {
   status.value = message;
   status.dataset.state = ok === undefined ? 'pending' : ok ? 'success' : 'error';
+}
+
+function languageName(language: string): string {
+  try {
+    return new Intl.DisplayNames(undefined, { type: 'language' }).of(language) ??
+      language;
+  } catch {
+    return language;
+  }
 }

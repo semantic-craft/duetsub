@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import type { TrackInfo } from '../src/core/contracts';
 import {
+  createLanguagePairPreference,
   DEFAULT_LANGUAGE_PAIR_PREFERENCE,
+  normalizeLanguagePairPreference,
   resolveOfficialPair,
   resolveOfficialPairCues,
   type LanguagePairPreference,
@@ -26,6 +28,51 @@ function track(
 }
 
 describe('resolveOfficialPair', () => {
+  it('builds only canonical, distinct choices from the current catalog', () => {
+    const catalog = [
+      { language: 'ja', label: '日本語' },
+      { language: 'zh-Hans', label: '简体中文' },
+      { language: 'zh-Hant', label: '繁體中文' },
+    ];
+
+    expect(createLanguagePairPreference(catalog, 'JA', 'zh-hans')).toEqual({
+      version: 1,
+      top: 'ja',
+      bottom: 'zh-Hans',
+    });
+    expect(createLanguagePairPreference(catalog, 'zh-Hans', 'zh-Hant')).toEqual({
+      version: 1,
+      top: 'zh-Hans',
+      bottom: 'zh-Hant',
+    });
+    expect(createLanguagePairPreference(catalog, 'ja', 'ja')).toBeUndefined();
+    expect(createLanguagePairPreference(catalog, 'ja', 'fr')).toBeUndefined();
+  });
+
+  it('normalizes persisted pairs and rejects malformed or equal tags', () => {
+    expect(
+      normalizeLanguagePairPreference({
+        version: 1,
+        top: 'DE-de',
+        bottom: 'fr-fr',
+      }),
+    ).toEqual({ version: 1, top: 'de-DE', bottom: 'fr-FR' });
+    expect(
+      normalizeLanguagePairPreference({
+        version: 1,
+        top: 'en-us',
+        bottom: 'en-US',
+      }),
+    ).toBeUndefined();
+    expect(
+      normalizeLanguagePairPreference({
+        version: 2,
+        top: 'ja',
+        bottom: 'zh-Hans',
+      }),
+    ).toBeUndefined();
+  });
+
   it('catalogs only official, non-forced subtitle tracks', () => {
     const english = track('official-en', 'en');
     const traditionalChinese = track('official-zh-Hant', 'zh-Hant');

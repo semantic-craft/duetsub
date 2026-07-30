@@ -7,6 +7,7 @@ import {
   netflixTtmlResponseMessage,
   primeTimelineOffsetMessage,
   primeTtmlResponseMessage,
+  requestFakeData,
   requestPrimeTimelineOffset,
   youtubeCaptionsMessage,
   youtubePlayerCommand,
@@ -21,6 +22,28 @@ const PRIME_FRAGMENTED_TEXT_URL =
   'english_text_1.mp4?token=SIGNED_PLACEHOLDER';
 const MAX_CONTENT_IDENTITY =
   '/video/watch/41c7eddd-2eea-4ed3-a299-474d693063f4/35a8260d-3bc6-4b91-b370-a5f3c72ad6d5';
+
+describe('fake official catalog requests', () => {
+  it('validates catalog-only and selected-pair smoke requests', () => {
+    const catalogOnly = requestFakeData('youtube', 'catalog', 0, {
+      catalogOnly: true,
+      preference: { version: 1, top: 'en', bottom: 'zh-Hant' },
+    });
+    const acquire = requestFakeData('youtube', 'acquire', 1_000, {
+      catalogOnly: false,
+      preference: { version: 1, top: 'ja', bottom: 'zh-Hans' },
+    });
+
+    expect(isDuetSubMessage(catalogOnly)).toBe(true);
+    expect(isDuetSubMessage(acquire)).toBe(true);
+    expect(
+      isDuetSubMessage({
+        ...acquire,
+        preference: { version: 1, top: 'ja', bottom: 'JA' },
+      }),
+    ).toBe(false);
+  });
+});
 
 describe('Prime MAIN to ISOLATED messages', () => {
   it('validates the correlated Prime playback clock handshake', () => {

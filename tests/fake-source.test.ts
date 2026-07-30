@@ -8,7 +8,11 @@ import {
 
 describe('fixed official pair smoke tracer', () => {
   it('provides official Japanese and Simplified Chinese cues on the video clock', () => {
-    const fake = createFakeOfficialPair(1_234);
+    const fake = createFakeOfficialPair(1_234, {
+      version: 1,
+      top: 'ja',
+      bottom: 'zh-Hans',
+    })!;
     const pair = resolveOfficialPair({
       siteId: 'youtube',
       tracks: fake.tracks,
@@ -34,5 +38,29 @@ describe('fixed official pair smoke tracer', () => {
     });
     expect(fake.top.translation).toBe('official');
     expect(fake.bottom.translation).toBe('official');
+  });
+
+  it('swaps roles from the chosen catalog pair and fails closed on a missing track', () => {
+    const swapped = createFakeOfficialPair(2_000, {
+      version: 1,
+      top: 'zh-Hans',
+      bottom: 'ja',
+    })!;
+
+    expect(swapped.top).toMatchObject({
+      trackId: 'official-tracer-zh-Hans',
+      role: 'top',
+    });
+    expect(swapped.bottom).toMatchObject({
+      trackId: 'official-tracer-ja',
+      role: 'bottom',
+    });
+    expect(
+      createFakeOfficialPair(2_000, {
+        version: 1,
+        top: 'de',
+        bottom: 'ja',
+      }),
+    ).toBeUndefined();
   });
 });

@@ -14,6 +14,8 @@
       input, select, button { box-sizing: border-box; min-height: 2.5rem; padding: .55rem .7rem; font: inherit; }
       .actions { display: flex; gap: .75rem; }
       output { display: block; min-height: 1.5rem; margin-top: 1rem; }
+      section { margin-bottom: 2rem; padding-bottom: 1.5rem; border-bottom: 1px solid color-mix(in srgb, CanvasText 18%, transparent); }
+      section output { margin: .5rem 0 1rem; }
       output[data-state="success"] { color: #218739; }
       output[data-state="error"] { color: #c43b36; }
       .fixed { opacity: .75; }
@@ -23,6 +25,12 @@
     <main>
       <h1>DuetSub 設定</h1>
       <p>字幕只會傳送到你在此設定並授權的端點。</p>
+      <section aria-labelledby="official-language-pair-heading">
+        <h2 id="official-language-pair-heading">官方字幕語言</h2>
+        <output id="official-language-pair">正在讀取本機偏好…</output>
+        <p class="fixed">實際可用語言只由播放中的當前節目決定，請在播放器內長按或右鍵 DuetSub 按鈕選擇。</p>
+        <button id="reset-official-language-pair" type="button">恢復英文在上、繁體中文在下</button>
+      </section>
       <form>
         <label class="field">供應商
           <select id="provider">
@@ -44,7 +52,7 @@
             <option value="deepseek-v4-pro"></option>
           </datalist>
         </label>
-        <p class="fixed">目標語言：繁體中文 / 英文（依缺失官方軌自動選擇）</p>
+        <p class="fixed">翻譯 fallback 目標：繁體中文 / 英文（與手動官方語言對分離）</p>
         <div class="actions">
           <button type="submit">儲存</button>
           <button id="test" type="button">測試連線</button>

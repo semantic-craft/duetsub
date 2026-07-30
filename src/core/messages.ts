@@ -1,4 +1,8 @@
 import type { Cue, SiteId, TrackInfo } from './contracts';
+import {
+  normalizeLanguagePairPreference,
+  type LanguagePairPreference,
+} from './official-pair-selection';
 
 const CHANNEL = 'duetsub';
 const VERSION = 1;
@@ -20,6 +24,8 @@ export interface RequestFakeDataMessage extends MessageEnvelope {
   readonly direction: 'isolated-to-main';
   readonly type: 'request-fake-data';
   readonly anchorTimeMs: number;
+  readonly catalogOnly: boolean;
+  readonly preference: LanguagePairPreference;
 }
 
 export interface TracksMessage extends MessageEnvelope {
@@ -179,6 +185,7 @@ export function requestFakeData(
   siteId: SiteId,
   requestId: string,
   anchorTimeMs: number,
+  options: Pick<RequestFakeDataMessage, 'catalogOnly' | 'preference'>,
 ): RequestFakeDataMessage {
   return {
     channel: CHANNEL,
@@ -188,6 +195,7 @@ export function requestFakeData(
     siteId,
     requestId,
     anchorTimeMs,
+    ...options,
   };
 }
 
@@ -492,7 +500,9 @@ export function isDuetSubMessage(value: unknown): value is DuetSubMessage {
     return (
       candidate.type === 'request-fake-data' &&
       typeof candidate.anchorTimeMs === 'number' &&
-      Number.isFinite(candidate.anchorTimeMs)
+      Number.isFinite(candidate.anchorTimeMs) &&
+      typeof candidate.catalogOnly === 'boolean' &&
+      normalizeLanguagePairPreference(candidate.preference) !== undefined
     );
   }
   if (candidate.direction !== 'main-to-isolated') return false;

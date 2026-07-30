@@ -1,13 +1,27 @@
 import type { SiteId } from '../core/contracts';
+import {
+  createLanguagePairPreference,
+  type LanguagePairPreference,
+  type OfficialLanguageOption,
+} from '../core/official-pair-selection';
 
 export interface ToggleViewCallbacks {
   readonly onToggle: () => void;
+  readonly onOpenLanguagePair: () => void;
+  readonly onSelectLanguagePair: (
+    preference: LanguagePairPreference,
+  ) => void;
   readonly onRetranslate: () => void;
   readonly onOpenSettings: () => void;
 }
 
 export interface ToggleView {
-  render(enabled: boolean, status: string): void;
+  render(
+    enabled: boolean,
+    status: string,
+    catalog: readonly OfficialLanguageOption[],
+    preference: LanguagePairPreference,
+  ): void;
   reanchor(
     anchor: HTMLElement,
     isFallbackAnchor: boolean,
@@ -53,16 +67,26 @@ export function createToggleView(
   status.className = 'status';
   status.setAttribute('role', 'status');
 
+  const chooser = document.createElement('div');
+  chooser.className = 'chooser';
+  const topSelect = languageSelect('上方字幕');
+  const bottomSelect = languageSelect('下方字幕');
+  chooser.append(topSelect.label, bottomSelect.label);
+
+  const swap = menuButton('交換上下');
   const retranslate = menuButton('重新翻譯（ticket 04）');
   const settings = menuButton('打開設定');
-  popover.append(status, retranslate, settings);
+  popover.append(status, chooser, swap, retranslate, settings);
   shadow.append(style, button, popover);
   anchor.insertBefore(host, before ?? null);
 
   let longPressTimer: number | undefined;
   let suppressClick = false;
+  let catalog: readonly OfficialLanguageOption[] = [];
+  let chooserSignature = '';
 
   const showPopover = () => {
+    callbacks.onOpenLanguagePair();
     popover.hidden = false;
   };
   const hidePopover = () => {
@@ -83,6 +107,19 @@ export function createToggleView(
   const onDocumentPointerDown = (event: PointerEvent) => {
     if (event.target instanceof Node && !host.contains(event.target)) hidePopover();
   };
+  const selectPair = () => {
+    synchronizeDisabledOptions(
+      topSelect.select,
+      bottomSelect.select,
+    );
+    const preference = createLanguagePairPreference(
+      catalog,
+      topSelect.select.value,
+      bottomSelect.select.value,
+    );
+    swap.disabled = preference === undefined;
+    if (preference !== undefined) callbacks.onSelectLanguagePair(preference);
+  };
 
   button.addEventListener('pointerdown', onPointerDown);
   button.addEventListener('pointerup', cancelLongPress);
@@ -98,6 +135,16 @@ export function createToggleView(
     event.preventDefault();
     showPopover();
   });
+  topSelect.select.addEventListener('change', selectPair);
+  bottomSelect.select.addEventListener('change', selectPair);
+  swap.addEventListener('click', () => {
+    const preference = createLanguagePairPreference(
+      catalog,
+      bottomSelect.select.value,
+      topSelect.select.value,
+    );
+    if (preference !== undefined) callbacks.onSelectLanguagePair(preference);
+  });
   retranslate.addEventListener('click', () => {
     callbacks.onRetranslate();
     hidePopover();
@@ -109,10 +156,26 @@ export function createToggleView(
   document.addEventListener('pointerdown', onDocumentPointerDown);
 
   return {
-    render(enabled, statusText) {
+    render(enabled, statusText, nextCatalog, preference) {
       button.classList.toggle('enabled', enabled);
       button.setAttribute('aria-pressed', String(enabled));
       status.textContent = statusText;
+      catalog = nextCatalog;
+      const signature = JSON.stringify([catalog, preference]);
+      if (signature !== chooserSignature) {
+        chooserSignature = signature;
+        renderLanguageSelect(topSelect.select, catalog, preference.top);
+        renderLanguageSelect(bottomSelect.select, catalog, preference.bottom);
+        synchronizeDisabledOptions(
+          topSelect.select,
+          bottomSelect.select,
+        );
+        swap.disabled = createLanguagePairPreference(
+          catalog,
+          preference.bottom,
+          preference.top,
+        ) === undefined;
+      }
     },
     reanchor(nextAnchor, nextIsFallbackAnchor, nextBefore) {
       reanchorToggleHost(
@@ -166,6 +229,56 @@ function menuButton(label: string): HTMLButtonElement {
   button.setAttribute('role', 'menuitem');
   button.textContent = label;
   return button;
+}
+
+function languageSelect(labelText: string): {
+  readonly label: HTMLLabelElement;
+  readonly select: HTMLSelectElement;
+} {
+  const label = document.createElement('label');
+  label.className = 'language-field';
+  const text = document.createElement('span');
+  text.textContent = labelText;
+  const select = document.createElement('select');
+  select.setAttribute('aria-label', labelText);
+  label.append(text, select);
+  return { label, select };
+}
+
+function renderLanguageSelect(
+  select: HTMLSelectElement,
+  catalog: readonly OfficialLanguageOption[],
+  selected: string,
+): void {
+  select.replaceChildren();
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.disabled = true;
+  placeholder.textContent = catalog.length === 0
+    ? '尚未讀取官方字幕'
+    : '目前偏好在本節目不可用';
+  select.append(placeholder);
+  for (const option of catalog) {
+    const element = document.createElement('option');
+    element.value = option.language;
+    element.textContent = `${option.label} · ${option.language}`;
+    select.append(element);
+  }
+  select.value = catalog.some(({ language }) => language === selected)
+    ? selected
+    : '';
+}
+
+function synchronizeDisabledOptions(
+  top: HTMLSelectElement,
+  bottom: HTMLSelectElement,
+): void {
+  for (const option of top.options) {
+    option.disabled = option.value === '' || option.value === bottom.value;
+  }
+  for (const option of bottom.options) {
+    option.disabled = option.value === '' || option.value === top.value;
+  }
 }
 
 const TOGGLE_CSS = `
@@ -275,6 +388,35 @@ const TOGGLE_CSS = `
     border-bottom: 1px solid rgb(255 255 255 / 12%);
     color: rgb(255 255 255 / 76%);
     font-size: 0.78rem;
+  }
+
+  .chooser {
+    display: grid;
+    gap: 0.62rem;
+    padding: 0.7rem 0.78rem;
+    border-bottom: 1px solid rgb(255 255 255 / 12%);
+  }
+
+  .language-field {
+    display: grid;
+    gap: 0.28rem;
+    color: rgb(255 255 255 / 76%);
+    font-size: 0.75rem;
+  }
+
+  .language-field select {
+    min-width: 16rem;
+    padding: 0.38rem 0.46rem;
+    border: 1px solid rgb(255 255 255 / 18%);
+    border-radius: 4px;
+    background: rgb(15 18 24 / 100%);
+    color: #fff;
+    font: inherit;
+  }
+
+  .menu-item:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
   }
 
   .menu-item {
