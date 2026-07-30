@@ -101,7 +101,7 @@ describe('resolveOfficialPair', () => {
     ]);
   });
 
-  it('keeps the verified Max English CC preference inside the default compatibility pair', () => {
+  it('prefers Max English subtitles and keeps English CC as a fallback', () => {
     const closedCaptions = track('en-US-closedcaptions', 'en-US', {
       kind: 'closed-captions',
       label: 'English accessibility track',
@@ -116,6 +116,20 @@ describe('resolveOfficialPair', () => {
         tracks: [
           closedCaptions,
           subtitles,
+          track('zh-Hant-TW-subtitles', 'zh-Hant-TW'),
+        ],
+        preference: DEFAULT_PAIR,
+      }),
+    ).toMatchObject({
+      kind: 'ready',
+      top: subtitles,
+    });
+
+    expect(
+      resolveOfficialPair({
+        siteId: 'max',
+        tracks: [
+          closedCaptions,
           track('zh-Hant-TW-subtitles', 'zh-Hant-TW'),
         ],
         preference: DEFAULT_PAIR,

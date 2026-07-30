@@ -146,27 +146,12 @@ export function resolveOfficialPair(input: {
   ) {
     return { kind: 'unavailable', catalog, reason: 'ambiguous-language' };
   }
-  let top = topSelection.kind === 'selected'
+  const top = topSelection.kind === 'selected'
     ? topSelection.track
     : undefined;
   const bottom = bottomSelection.kind === 'selected'
     ? bottomSelection.track
     : undefined;
-  if (
-    top !== undefined &&
-    bottom?.kind === 'subtitles' &&
-    isMaxEnglishTraditionalChineseLanguagePair(
-      input.siteId,
-      top.language,
-      bottom.language,
-    )
-  ) {
-    top = tracks.find(
-      (candidate) =>
-        candidate.language === 'en-US' &&
-        candidate.track.kind === 'closed-captions',
-    )?.track ?? top;
-  }
 
   if (top !== undefined && bottom !== undefined) {
     return { kind: 'ready', catalog, top, bottom };
