@@ -259,4 +259,34 @@ describe('resolveMaxOfficialPairCues', () => {
       reason: 'alignment-coverage',
     });
   });
+
+  it('fails the verified pair instead of dropping an unmappable overflow line', () => {
+    expect(
+      resolveMaxOfficialPairCues({
+        top: officialTrack(
+          'en-US-closedcaptions',
+          'en-US',
+          'closed-captions',
+        ),
+        bottom: officialTrack(
+          'zh-Hant-TW-subtitles',
+          'zh-Hant-TW',
+        ),
+        topCues: [
+          cue(1_000, 2_000, 'One English cue.', 'en-US'),
+        ],
+        bottomCues: [
+          cue(
+            1_000,
+            2_500,
+            '-第一行\n-無法承接的第二行',
+            'zh-Hant-TW',
+          ),
+        ],
+      }),
+    ).toEqual({
+      kind: 'unavailable',
+      reason: 'alignment-coverage',
+    });
+  });
 });

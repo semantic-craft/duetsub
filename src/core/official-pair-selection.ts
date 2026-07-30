@@ -133,22 +133,12 @@ export function resolveOfficialPair(input: {
   const topSelection = selectLanguageTrack(
     tracks,
     topLanguage,
-    officialTrackKindPreference(
-      input.siteId,
-      topLanguage,
-      bottomLanguage,
-      'top',
-    ),
+    ['subtitles', 'closed-captions'],
   );
   const bottomSelection = selectLanguageTrack(
     tracks,
     bottomLanguage,
-    officialTrackKindPreference(
-      input.siteId,
-      topLanguage,
-      bottomLanguage,
-      'bottom',
-    ),
+    ['subtitles', 'closed-captions'],
   );
   if (
     topSelection.kind === 'ambiguous' ||
@@ -156,12 +146,27 @@ export function resolveOfficialPair(input: {
   ) {
     return { kind: 'unavailable', catalog, reason: 'ambiguous-language' };
   }
-  const top = topSelection.kind === 'selected'
+  let top = topSelection.kind === 'selected'
     ? topSelection.track
     : undefined;
   const bottom = bottomSelection.kind === 'selected'
     ? bottomSelection.track
     : undefined;
+  if (
+    top !== undefined &&
+    bottom?.kind === 'subtitles' &&
+    isMaxEnglishTraditionalChineseLanguagePair(
+      input.siteId,
+      top.language,
+      bottom.language,
+    )
+  ) {
+    top = tracks.find(
+      (candidate) =>
+        candidate.language === 'en-US' &&
+        candidate.track.kind === 'closed-captions',
+    )?.track ?? top;
+  }
 
   if (top !== undefined && bottom !== undefined) {
     return { kind: 'ready', catalog, top, bottom };
@@ -185,11 +190,8 @@ export function isMaxEnglishTraditionalChineseLanguagePair(
   const top = canonicalLanguage(topLanguage);
   const bottom = canonicalLanguage(bottomLanguage);
   return siteId === 'max' &&
-    top !== undefined &&
-    bottom !== undefined &&
-    languageParts(top).language === 'en' &&
-    languageParts(bottom).language === 'zh' &&
-    scriptFamily(languageParts(bottom)) === 'Hant';
+    top === 'en-US' &&
+    bottom === 'zh-Hant-TW';
 }
 
 export function createOfficialTrackCatalog(
@@ -316,27 +318,6 @@ function selectVariant(
       preferredKinds.indexOf(left.track.kind) -
       preferredKinds.indexOf(right.track.kind),
   )[0]?.track;
-}
-
-function officialTrackKindPreference(
-  siteId: SiteId,
-  topLanguage: CanonicalLanguageTag | undefined,
-  bottomLanguage: CanonicalLanguageTag | undefined,
-  side: 'top' | 'bottom',
-): readonly TrackInfo['kind'][] {
-  if (
-    side === 'top' &&
-    topLanguage !== undefined &&
-    bottomLanguage !== undefined &&
-    isMaxEnglishTraditionalChineseLanguagePair(
-      siteId,
-      topLanguage,
-      bottomLanguage,
-    )
-  ) {
-    return ['closed-captions', 'subtitles'];
-  }
-  return ['subtitles', 'closed-captions'];
 }
 
 interface LanguageParts {

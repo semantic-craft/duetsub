@@ -102,11 +102,11 @@ describe('resolveOfficialPair', () => {
   });
 
   it('keeps the verified Max English CC preference inside the default compatibility pair', () => {
-    const closedCaptions = track('en-closed-captions', 'en', {
+    const closedCaptions = track('en-US-closedcaptions', 'en-US', {
       kind: 'closed-captions',
       label: 'English accessibility track',
     });
-    const subtitles = track('en-subtitles', 'en', {
+    const subtitles = track('en-US-subtitles', 'en-US', {
       label: 'English dialogue',
     });
 
@@ -116,7 +116,7 @@ describe('resolveOfficialPair', () => {
         tracks: [
           closedCaptions,
           subtitles,
-          track('zh-Hant-subtitles', 'zh-Hant'),
+          track('zh-Hant-TW-subtitles', 'zh-Hant-TW'),
         ],
         preference: DEFAULT_PAIR,
       }),
@@ -142,6 +142,52 @@ describe('resolveOfficialPair', () => {
     ).toMatchObject({
       kind: 'ready',
       top: subtitles,
+    });
+  });
+
+  it('does not expand the Max compatibility policy beyond the verified tags', () => {
+    const britishClosedCaptions = track(
+      'en-GB-closedcaptions',
+      'en-GB',
+      { kind: 'closed-captions' },
+    );
+    const britishSubtitles = track('en-GB-subtitles', 'en-GB');
+
+    expect(
+      resolveOfficialPair({
+        siteId: 'max',
+        tracks: [
+          britishClosedCaptions,
+          britishSubtitles,
+          track('zh-Hant-TW-subtitles', 'zh-Hant-TW'),
+        ],
+        preference: DEFAULT_PAIR,
+      }),
+    ).toMatchObject({
+      kind: 'ready',
+      top: britishSubtitles,
+    });
+
+    const englishClosedCaptions = track(
+      'en-US-closedcaptions',
+      'en-US',
+      { kind: 'closed-captions' },
+    );
+    const englishSubtitles = track('en-US-subtitles', 'en-US');
+
+    expect(
+      resolveOfficialPair({
+        siteId: 'max',
+        tracks: [
+          englishClosedCaptions,
+          englishSubtitles,
+          track('zh-HK-subtitles', 'zh-HK'),
+        ],
+        preference: DEFAULT_PAIR,
+      }),
+    ).toMatchObject({
+      kind: 'ready',
+      top: englishSubtitles,
     });
   });
 

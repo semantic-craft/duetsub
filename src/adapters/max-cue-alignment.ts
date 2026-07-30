@@ -86,14 +86,15 @@ function alignMaxChineseCuesToEnglish(
         : undefined;
     if (primary === undefined) continue;
 
-    uniquelyAlignedCount += 1;
-    aligned.push(
-      ...alignChineseCue(
-        chineseCue,
-        englishCues,
-        englishCues.indexOf(primary),
-      ),
+    const alignedCue = alignChineseCue(
+      chineseCue,
+      englishCues,
+      englishCues.indexOf(primary),
     );
+    if (alignedCue === undefined) return [];
+
+    uniquelyAlignedCount += 1;
+    aligned.push(...alignedCue);
   }
 
   return chineseCues.length > 0 &&
@@ -131,7 +132,7 @@ function alignChineseCue(
   chineseCue: Cue,
   englishCues: readonly Cue[],
   primaryIndex: number,
-): Cue[] {
+): Cue[] | undefined {
   const primary = englishCues[primaryIndex];
   const primaryCapacity = spokenUnitCount(primary.text);
   const parsedUnits = splitDialogueUnits(chineseCue.text);
@@ -168,6 +169,7 @@ function alignChineseCue(
   let nextEnglishIndex = primaryIndex + 1;
 
   for (const unit of chineseUnits.slice(primaryCapacity)) {
+    let alignedUnit = false;
     while (nextEnglishIndex < englishCues.length) {
       const candidate = englishCues[nextEnglishIndex];
       nextEnglishIndex += 1;
@@ -182,9 +184,11 @@ function alignChineseCue(
           end: candidate.end,
           text: unit,
         });
+        alignedUnit = true;
         break;
       }
     }
+    if (!alignedUnit) return undefined;
   }
 
   return aligned;
