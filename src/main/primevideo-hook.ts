@@ -4,16 +4,25 @@ import {
   postDuetSubMessage,
   primeTimelineOffsetMessage,
   primeTtmlResponseMessage,
+  type PrimeTtmlObservationOwnership,
 } from '../core/messages';
 
 const xhrUrls = new WeakMap<XMLHttpRequest, string>();
 const completeFragmentedTextPayloads = new Map<string, Promise<string>>();
 const PRIME_ZERO_OFFSET_STABILITY_MS = 2_000;
+const PRIME_SUBTITLE_RADIO_SELECTOR =
+  'input[type="radio"][name="subtitle"]';
+const OBSERVATION_REQUEST_ATTRIBUTE = 'data-duetsub-observation-request';
+const OBSERVATION_GENERATION_ATTRIBUTE =
+  'data-duetsub-observation-generation';
 let readPrimeTimelineOffsetMs: () => number | undefined = () => undefined;
+let activePrimeTtmlObservation: PrimeTtmlObservationOwnership | undefined;
 
 export function startPrimeVideoMainHook(): void {
+  activePrimeTtmlObservation = undefined;
   readPrimeTimelineOffsetMs = observePrimePlaybackTimeline();
   window.addEventListener('message', respondWithPrimeTimelineOffset);
+  document.addEventListener('click', observePrimeSubtitleClick, true);
   const originalFetch = patchFetch();
   patchXmlHttpRequest(originalFetch);
 }
@@ -168,12 +177,15 @@ function patchFetch(): typeof window.fetch {
     const url = requestUrl(input);
 
     if (url !== undefined && isPrimeTtmlUrl(url)) {
+      const observation = takePrimeTtmlObservation();
       void result.then(
         (response) => {
           if (isFragmentedTextUrl(url)) {
-            void observeFragmentedTextResponse(response, url, originalFetch);
+            void observeFragmentedTextResponse(
+              response, url, originalFetch, observation,
+            );
           } else {
-            void observeFetchResponse(response, url);
+            void observeFetchResponse(response, url, observation);
           }
         },
         () => undefined,
@@ -211,13 +223,16 @@ function patchXmlHttpRequest(originalFetch: typeof window.fetch): void {
   ): void {
     const url = xhrUrls.get(this);
     if (url !== undefined) {
+      const observation = takePrimeTtmlObservation();
       this.addEventListener(
         'load',
         () => {
           if (isFragmentedTextUrl(url)) {
-            void observeFragmentedTextXhr(this, url, originalFetch);
+            void observeFragmentedTextXhr(
+              this, url, originalFetch, observation,
+            );
           } else {
-            void observeXhrResponse(this, url);
+            void observeXhrResponse(this, url, observation);
           }
         },
         { once: true },
@@ -232,46 +247,60 @@ async function observeFragmentedTextResponse(
   response: Response,
   url: string,
   originalFetch: typeof window.fetch,
+  observation: PrimeTtmlObservationOwnership | undefined,
 ): Promise<void> {
   if (!response.ok) return;
   if (response.status === 200) {
-    await observeCompleteFragmentedText(url, () => response.clone().text());
+    await observeCompleteFragmentedText(
+      url, () => response.clone().text(), observation,
+    );
     return;
   }
-  await fetchCompleteFragmentedText(url, originalFetch);
+  await fetchCompleteFragmentedText(url, originalFetch, observation);
 }
 
 async function observeFragmentedTextXhr(
   xhr: XMLHttpRequest,
   url: string,
   originalFetch: typeof window.fetch,
+  observation: PrimeTtmlObservationOwnership | undefined,
 ): Promise<void> {
   if (xhr.status < 200 || xhr.status >= 300) return;
   if (xhr.status === 200) {
-    await observeCompleteFragmentedText(url, async () => {
-      const raw = await readXhrBody(xhr);
-      if (raw === undefined) throw new Error('Prime text MP4 body unavailable');
-      return raw;
-    });
+    await observeCompleteFragmentedText(
+      url,
+      async () => {
+        const raw = await readXhrBody(xhr);
+        if (raw === undefined) throw new Error('Prime text MP4 body unavailable');
+        return raw;
+      },
+      observation,
+    );
     return;
   }
-  await fetchCompleteFragmentedText(url, originalFetch);
+  await fetchCompleteFragmentedText(url, originalFetch, observation);
 }
 
 async function fetchCompleteFragmentedText(
   url: string,
   originalFetch: typeof window.fetch,
+  observation: PrimeTtmlObservationOwnership | undefined,
 ): Promise<void> {
-  await observeCompleteFragmentedText(url, async () => {
-    const response = await originalFetch.call(window, url);
-    if (!response.ok) throw new Error('Prime text MP4 request failed');
-    return response.text();
-  });
+  await observeCompleteFragmentedText(
+    url,
+    async () => {
+      const response = await originalFetch.call(window, url);
+      if (!response.ok) throw new Error('Prime text MP4 request failed');
+      return response.text();
+    },
+    observation,
+  );
 }
 
 async function observeCompleteFragmentedText(
   url: string,
   read: () => Promise<string>,
+  observation: PrimeTtmlObservationOwnership | undefined,
 ): Promise<void> {
   let payload = completeFragmentedTextPayloads.get(url);
   if (payload === undefined) {
@@ -279,7 +308,7 @@ async function observeCompleteFragmentedText(
     completeFragmentedTextPayloads.set(url, payload);
   }
   try {
-    forwardRawResponse(url, await payload);
+    forwardRawResponse(url, await payload, observation);
   } catch {
     if (completeFragmentedTextPayloads.get(url) === payload) {
       completeFragmentedTextPayloads.delete(url);
@@ -290,9 +319,10 @@ async function observeCompleteFragmentedText(
 async function observeFetchResponse(
   response: Response,
   url: string,
+  observation: PrimeTtmlObservationOwnership | undefined,
 ): Promise<void> {
   try {
-    forwardRawResponse(url, await response.clone().text());
+    forwardRawResponse(url, await response.clone().text(), observation);
   } catch {
     // Observing must never affect the page's original response.
   }
@@ -301,10 +331,11 @@ async function observeFetchResponse(
 async function observeXhrResponse(
   xhr: XMLHttpRequest,
   url: string,
+  observation: PrimeTtmlObservationOwnership | undefined,
 ): Promise<void> {
   try {
     const raw = await readXhrBody(xhr);
-    if (raw !== undefined) forwardRawResponse(url, raw);
+    if (raw !== undefined) forwardRawResponse(url, raw, observation);
   } catch {
     // Observing must never affect the page's original response.
   }
@@ -319,11 +350,63 @@ function readXhrBody(xhr: XMLHttpRequest): string | Promise<string> | undefined 
   return undefined;
 }
 
-function forwardRawResponse(url: string, raw: string): void {
+function forwardRawResponse(
+  url: string,
+  raw: string,
+  observation: PrimeTtmlObservationOwnership | undefined,
+): void {
   if (raw.length === 0 || raw.length > 2_000_000) return;
   postDuetSubMessage(
-    primeTtmlResponseMessage(crypto.randomUUID(), url, raw),
+    primeTtmlResponseMessage(crypto.randomUUID(), url, raw, observation),
   );
+}
+
+function takePrimeTtmlObservation(): PrimeTtmlObservationOwnership | undefined {
+  const observation = activePrimeTtmlObservation;
+  activePrimeTtmlObservation = undefined;
+  return observation;
+}
+
+function observePrimeSubtitleClick(event: MouseEvent): void {
+  const radio = event.target;
+  if (
+    !(radio instanceof HTMLInputElement) ||
+    radio.id === '' ||
+    !radio.matches(PRIME_SUBTITLE_RADIO_SELECTOR)
+  ) {
+    return;
+  }
+  const requestId = radio.getAttribute(OBSERVATION_REQUEST_ATTRIBUTE);
+  const generation = parseObservationGeneration(
+    radio.getAttribute(OBSERVATION_GENERATION_ATTRIBUTE),
+  );
+  if (requestId === null || requestId === '' || generation === undefined) return;
+  const observation = {
+    requestId,
+    trackId: radio.id,
+    generation,
+  };
+  activePrimeTtmlObservation = observation;
+  setTimeout(() => {
+    if (activePrimeTtmlObservation === observation) {
+      activePrimeTtmlObservation = undefined;
+    }
+  }, 0);
+}
+
+function parseObservationGeneration(
+  value: string | null,
+): PrimeTtmlObservationOwnership['generation'] | undefined {
+  const match = value?.match(/^(\d+):(\d+):(\d+)$/);
+  if (match === undefined || match === null) return undefined;
+  const generation = match.slice(1).map(Number);
+  return generation.every((part) => Number.isSafeInteger(part))
+    ? {
+        contentGeneration: generation[0],
+        clockGeneration: generation[1],
+        selectionGeneration: generation[2],
+      }
+    : undefined;
 }
 
 function isFragmentedTextUrl(value: string): boolean {

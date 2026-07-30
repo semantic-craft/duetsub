@@ -54,6 +54,7 @@ describe('Prime MAIN-world response observation', () => {
     let messageListener:
       | ((event: MessageEvent<unknown>) => void)
       | undefined;
+    let clickListener: ((event: MouseEvent) => void) | undefined;
 
     vi.stubGlobal('window', {
       fetch: originalFetch,
@@ -70,9 +71,20 @@ describe('Prime MAIN-world response observation', () => {
       },
     });
     vi.stubGlobal('XMLHttpRequest', FakeXmlHttpRequest);
+    vi.stubGlobal('HTMLInputElement', class {
+      static [Symbol.hasInstance](value: unknown): boolean {
+        return typeof (value as { matches?: unknown })?.matches === 'function';
+      }
+    });
     vi.stubGlobal('SourceBuffer', FakeSourceBuffer);
     vi.stubGlobal('MediaSource', FakeMediaSource);
     vi.stubGlobal('document', {
+      addEventListener(
+        type: string,
+        listener: (event: MouseEvent) => void,
+      ) {
+        if (type === 'click') clickListener = listener;
+      },
       querySelector(selector: string) {
         if (selector !== '#dv-web-player video') return null;
         return {
@@ -123,6 +135,25 @@ describe('Prime MAIN-world response observation', () => {
       timelineOffsetMs: 6_000,
     });
 
+    const observationGeneration = {
+      contentGeneration: 4,
+      clockGeneration: 7,
+      selectionGeneration: 2,
+    };
+    clickListener?.({
+      target: {
+        id: 'en-us_Caption_Dialog',
+        matches: (selector: string) =>
+          selector === 'input[type="radio"][name="subtitle"]',
+        getAttribute: (name: string) =>
+          name === 'data-duetsub-observation-request'
+            ? 'english-observation'
+            : name === 'data-duetsub-observation-generation'
+            ? '4:7:2'
+            : null,
+      },
+    } as unknown as MouseEvent);
+
     await window.fetch(
       new Request(OFF_CAMPUS_TEXT_URL, {
         headers: { range: 'bytes=0-16383' },
@@ -136,6 +167,11 @@ describe('Prime MAIN-world response observation', () => {
       type: 'prime-ttml-response',
       url: OFF_CAMPUS_TEXT_URL,
       raw: completeTrack,
+      observation: {
+        requestId: 'english-observation',
+        trackId: 'en-us_Caption_Dialog',
+        generation: observationGeneration,
+      },
     });
 
     await window.fetch(OFF_CAMPUS_TEXT_URL, {
@@ -150,6 +186,7 @@ describe('Prime MAIN-world response observation', () => {
       url: OFF_CAMPUS_TEXT_URL,
       raw: completeTrack,
     });
+    expect(postMessage.mock.calls[2]?.[0]).not.toHaveProperty('observation');
     expect(originalFetch).toHaveBeenCalledTimes(3);
 
     const previewMediaSource = new MediaSource();

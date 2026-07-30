@@ -46,6 +46,35 @@ describe('fake official catalog requests', () => {
 });
 
 describe('Prime MAIN to ISOLATED messages', () => {
+  it('validates Prime TTML request ownership', () => {
+    const generation = {
+      contentGeneration: 4,
+      clockGeneration: 7,
+      selectionGeneration: 2,
+    };
+    const response = primeTtmlResponseMessage(
+      'response-ja',
+      PRIME_TTML_URL,
+      '<tt/>',
+      {
+        requestId: 'observation-request',
+        trackId: 'ja-jp_Subtitle_Dialog',
+        generation,
+      },
+    );
+
+    expect(isDuetSubMessage(response)).toBe(true);
+    expect(
+      isDuetSubMessage({
+        ...response,
+        observation: {
+          ...response.observation,
+          trackId: '',
+        },
+      }),
+    ).toBe(false);
+  });
+
   it('validates the correlated Prime playback clock handshake', () => {
     const request = requestPrimeTimelineOffset('clock-request');
     const response = primeTimelineOffsetMessage('clock-request', 6_000);

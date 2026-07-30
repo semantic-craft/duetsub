@@ -7,6 +7,7 @@ import {
   isDuetSubMessage,
   postDuetSubMessage,
   requestPrimeTimelineOffset,
+  type PrimeTtmlResponseMessage,
 } from '../core/messages';
 import {
   alignPrimeChineseCuesToEnglish,
@@ -22,6 +23,9 @@ const MENU_BUTTON_SELECTOR =
 const SUBTITLE_GROUP_SELECTOR =
   '#dv-web-player .atvwebplayersdk-subtitle-radio-group';
 const SUBTITLE_RADIO_SELECTOR = 'input[type="radio"][name="subtitle"]';
+const OBSERVATION_REQUEST_ATTRIBUTE = 'data-duetsub-observation-request';
+const OBSERVATION_GENERATION_ATTRIBUTE =
+  'data-duetsub-observation-generation';
 const DOM_TIMEOUT_MS = 8_000;
 const RESPONSE_TIMEOUT_MS = 15_000;
 
@@ -36,6 +40,7 @@ interface PendingResponse {
   readonly track: TrackInfo;
   readonly radio: HTMLInputElement;
   readonly generation: PlaybackGeneration;
+  readonly observationRequestId: string;
   readonly resolve: (cues: Cue[]) => void;
   readonly reject: (error: Error) => void;
   readonly timeout: number;
@@ -301,9 +306,19 @@ class PrimeVideoAdapter implements SiteAdapter {
       if (radio === undefined) throw new Error(`Prime track disappeared: ${track.id}`);
     }
 
-    const response = this.#armPending(track, radio, generation);
+    const observationRequestId = crypto.randomUUID();
+    const response = this.#armPending(
+      track,
+      radio,
+      generation,
+      observationRequestId,
+    );
     try {
-      clickRadio(radio);
+      clickRadioForObservation(
+        radio,
+        observationRequestId,
+        generation,
+      );
       await waitUntil(() => radio.checked, DOM_TIMEOUT_MS);
       return await response;
     } catch (error) {
@@ -316,6 +331,7 @@ class PrimeVideoAdapter implements SiteAdapter {
     track: TrackInfo,
     radio: HTMLInputElement,
     generation: PlaybackGeneration,
+    observationRequestId: string,
   ): Promise<Cue[]> {
     if (this.#pending !== undefined) {
       throw new Error('Prime response ownership is ambiguous');
@@ -327,7 +343,15 @@ class PrimeVideoAdapter implements SiteAdapter {
         this.#pending = undefined;
         reject(new Error(`Prime TTML response timed out: ${track.id}`));
       }, RESPONSE_TIMEOUT_MS);
-      this.#pending = { track, radio, generation, resolve, reject, timeout };
+      this.#pending = {
+        track,
+        radio,
+        generation,
+        observationRequestId,
+        resolve,
+        reject,
+        timeout,
+      };
     });
     this.#requestTimelineOffset(generation);
     this.#resolvePendingFromInbox();
@@ -367,20 +391,18 @@ class PrimeVideoAdapter implements SiteAdapter {
       return;
     }
 
-    const pending = this.#pending;
-    const trackId =
-      pending !== undefined &&
-        pending.radio.checked &&
-        sameGeneration(this.#generation, pending.generation)
-        ? pending.track.id
-        : readCheckedSubtitleTrackId();
-    if (trackId === undefined) return;
+    const observation = acceptPrimeTtmlObservation({
+      current: this.#generation,
+      pending: this.#pending,
+      response: message,
+    });
+    if (observation === undefined) return;
 
     this.#responseInbox = recordPrimeTtmlResponse(this.#responseInbox, {
       responseId: message.responseId,
-      trackId,
+      trackId: observation.trackId,
       raw: message.raw,
-      generation: this.#generation,
+      generation: observation.generation,
     });
     this.#resolvePendingFromInbox();
   };
@@ -539,6 +561,37 @@ export function acceptPrimeTimelineOffset(
     : undefined;
 }
 
+export function acceptPrimeTtmlObservation(
+  ownership: {
+    readonly current: PlaybackGeneration;
+    readonly pending:
+      | {
+          readonly observationRequestId: string;
+          readonly track: TrackInfo;
+          readonly generation: PlaybackGeneration;
+        }
+      | undefined;
+    readonly response: PrimeTtmlResponseMessage;
+  },
+): {
+  readonly trackId: string;
+  readonly generation: PlaybackGeneration;
+} | undefined {
+  const pending = ownership.pending;
+  const observation = ownership.response.observation;
+  return pending !== undefined &&
+      observation !== undefined &&
+      observation.requestId === pending.observationRequestId &&
+      observation.trackId === pending.track.id &&
+      sameGeneration(observation.generation, pending.generation) &&
+      sameGeneration(ownership.current, pending.generation)
+    ? {
+        trackId: pending.track.id,
+        generation: pending.generation,
+      }
+    : undefined;
+}
+
 function readOfficialTracks(group: HTMLElement): TrackInfo[] {
   const tracks: TrackInfo[] = [];
   for (const radio of readSubtitleRadios(group)) {
@@ -554,15 +607,6 @@ function readSubtitleRadios(group: HTMLElement): HTMLInputElement[] {
   return Array.from(
     group.querySelectorAll<HTMLInputElement>(SUBTITLE_RADIO_SELECTOR),
   );
-}
-
-function readCheckedSubtitleTrackId(): string | undefined {
-  const group = document.querySelector<HTMLElement>(SUBTITLE_GROUP_SELECTOR);
-  if (group === null) return undefined;
-  const checked = readSubtitleRadios(group).find((radio) => radio.checked);
-  return checked === undefined || checked.id === 'off' || checked.id === ''
-    ? undefined
-    : checked.id;
 }
 
 function trackFromRadio(radio: HTMLInputElement): TrackInfo | undefined {
@@ -714,6 +758,28 @@ function findRadio(
 
 function clickRadio(radio: HTMLInputElement): void {
   radio.click();
+}
+
+function clickRadioForObservation(
+  radio: HTMLInputElement,
+  requestId: string,
+  generation: PlaybackGeneration,
+): void {
+  radio.setAttribute(OBSERVATION_REQUEST_ATTRIBUTE, requestId);
+  radio.setAttribute(
+    OBSERVATION_GENERATION_ATTRIBUTE,
+    [
+      generation.contentGeneration,
+      generation.clockGeneration,
+      generation.selectionGeneration ?? 0,
+    ].join(':'),
+  );
+  try {
+    clickRadio(radio);
+  } finally {
+    radio.removeAttribute(OBSERVATION_REQUEST_ATTRIBUTE);
+    radio.removeAttribute(OBSERVATION_GENERATION_ATTRIBUTE);
+  }
 }
 
 function waitUntil(predicate: () => boolean, timeoutMs: number): Promise<void> {

@@ -1,4 +1,5 @@
 import type { Cue, SiteId, TrackInfo } from './contracts';
+import type { PlaybackGeneration } from './lifecycle';
 import {
   normalizeLanguagePairPreference,
   type LanguagePairPreference,
@@ -50,6 +51,13 @@ export interface PrimeTtmlResponseMessage extends UncorrelatedMessageEnvelope {
   readonly responseId: string;
   readonly url: string;
   readonly raw: string;
+  readonly observation?: PrimeTtmlObservationOwnership;
+}
+
+export interface PrimeTtmlObservationOwnership {
+  readonly requestId: string;
+  readonly trackId: string;
+  readonly generation: PlaybackGeneration;
 }
 
 export interface PrimeTimelineOffsetRequestMessage extends MessageEnvelope {
@@ -234,6 +242,7 @@ export function primeTtmlResponseMessage(
   responseId: string,
   url: string,
   raw: string,
+  observation?: PrimeTtmlObservationOwnership,
 ): PrimeTtmlResponseMessage {
   return {
     channel: CHANNEL,
@@ -244,6 +253,7 @@ export function primeTtmlResponseMessage(
     responseId,
     url,
     raw,
+    ...(observation === undefined ? {} : { observation }),
   };
 }
 
@@ -419,7 +429,9 @@ export function isDuetSubMessage(value: unknown): value is DuetSubMessage {
       isPrimeTtmlUrl(candidate.url) &&
       typeof candidate.raw === 'string' &&
       candidate.raw.length > 0 &&
-      candidate.raw.length <= 2_000_000
+      candidate.raw.length <= 2_000_000 &&
+      (candidate.observation === undefined ||
+        isPrimeTtmlObservationOwnership(candidate.observation))
     );
   }
   if (candidate.type === 'max-subtitle-response') {
@@ -637,6 +649,43 @@ function isTimelineOffsetMs(value: unknown): value is number {
     typeof value === 'number' &&
     Number.isFinite(value) &&
     Math.abs(value) <= 86_400_000
+  );
+}
+
+function isPrimeTtmlObservationOwnership(
+  value: unknown,
+): value is PrimeTtmlObservationOwnership {
+  if (typeof value !== 'object' || value === null) return false;
+  const ownership = value as Partial<PrimeTtmlObservationOwnership>;
+  return (
+    typeof ownership.requestId === 'string' &&
+    ownership.requestId.length > 0 &&
+    ownership.requestId.length <= 128 &&
+    isTrackId(ownership.trackId) &&
+    isPlaybackGeneration(ownership.generation)
+  );
+}
+
+function isPlaybackGeneration(value: unknown): value is PlaybackGeneration {
+  if (typeof value !== 'object' || value === null) return false;
+  const generation = value as Partial<PlaybackGeneration>;
+  return (
+    isGenerationNumber(generation.contentGeneration) &&
+    isGenerationNumber(generation.clockGeneration) &&
+    isGenerationNumber(generation.selectionGeneration)
+  );
+}
+
+function isGenerationNumber(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= 0;
+}
+
+function isTrackId(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= 512 &&
+    !/[\u0000-\u001f\u007f]/u.test(value)
   );
 }
 

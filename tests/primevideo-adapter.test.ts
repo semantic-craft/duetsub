@@ -3,11 +3,13 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Cue, TrackInfo } from '../src/core/contracts';
 import { resolveOfficialPair } from '../src/core/official-pair-selection';
 import {
+  acceptPrimeTtmlObservation,
   acceptPrimeTimelineOffset,
   acquirePrimeVideoTracks,
   applyPrimeVideoPairAlignmentPolicy,
   parsePrimeVideoSubtitleTrack,
 } from '../src/adapters/primevideo';
+import { primeTtmlResponseMessage } from '../src/core/messages';
 
 function cues(text: string, language: string): Cue[] {
   return [{ start: 0, end: 1_000, text, language }];
@@ -285,5 +287,57 @@ describe('Prime pair acquisition ownership', () => {
         },
       }),
     ).toBe(6_000);
+  });
+
+  it('rejects a late TTML observation instead of relabeling it as the current selection', () => {
+    const previous = {
+      contentGeneration: 4,
+      clockGeneration: 7,
+      selectionGeneration: 1,
+    };
+    const current = { ...previous, selectionGeneration: 2 };
+    const currentPending = {
+      observationRequestId: 'current-request',
+      track: simplifiedChinese,
+      generation: current,
+    };
+    const late = primeTtmlResponseMessage(
+      'late-previous-selection',
+      'https://cf-timedtext.aux.pv-cdn.net/example/previous.ttml2',
+      '<?xml version="1.0"?><tt xmlns="http://www.w3.org/ns/ttml" xml:lang="ja-JP"/>',
+      {
+        requestId: 'previous-request',
+        trackId: japanese.id,
+        generation: previous,
+      },
+    );
+    const owned = primeTtmlResponseMessage(
+      'current-selection',
+      'https://cf-timedtext.aux.pv-cdn.net/example/current.ttml2',
+      '<?xml version="1.0"?><tt xmlns="http://www.w3.org/ns/ttml" xml:lang="zh-Hans"/>',
+      {
+        requestId: currentPending.observationRequestId,
+        trackId: simplifiedChinese.id,
+        generation: current,
+      },
+    );
+
+    expect(
+      acceptPrimeTtmlObservation({
+        current,
+        pending: currentPending,
+        response: late,
+      }),
+    ).toBeUndefined();
+    expect(
+      acceptPrimeTtmlObservation({
+        current,
+        pending: currentPending,
+        response: owned,
+      }),
+    ).toEqual({
+      trackId: simplifiedChinese.id,
+      generation: current,
+    });
   });
 });
