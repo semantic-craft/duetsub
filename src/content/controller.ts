@@ -43,6 +43,15 @@ import {
   type SubtitleSource,
   type SubtitleSourceDecision,
 } from '../core/track-selection';
+import {
+  languageDisplayName,
+  loadUiLanguage,
+  resolveUiLanguage,
+  translate,
+  UI_LANGUAGE_STORAGE_KEY,
+  type UiLanguage,
+  type UiMessageKey,
+} from '../i18n';
 import { scheduleTranslationBatches } from '../mt/scheduling';
 import { NativeCaptionVisibility } from './native-captions';
 import { createOverlayView, type OverlayView } from './overlay-view';
@@ -51,6 +60,7 @@ import { createToggleView, type ToggleView } from './toggle-view';
 
 const UPDATE_INTERVAL_MS = 250;
 const CONTROLS_VISIBLE_MS = 2_000;
+type LocalizedText = (language: UiLanguage) => string;
 
 export function startDuetSubContent(
   siteId: SiteId,
@@ -115,7 +125,7 @@ class PlaybackController {
   #hasSavedLanguagePairPreference = false;
   #topMachineTranslated = false;
   #bottomMachineTranslated = false;
-  #readyStatus = '官方英文 + 官方繁中 · 100%';
+  #readyStatus = uiMessage('status.readyDefault');
   #tracks: readonly TrackInfo[] = [];
   #receivedTopTrackId: string | undefined;
   #receivedBottomTrackId: string | undefined;
@@ -138,7 +148,8 @@ class PlaybackController {
   #controlsVisible = false;
   #controlsTimer: number | undefined;
   #updateTimer: number;
-  #status: string;
+  #uiLanguage = resolveUiLanguage(undefined, browserLanguages());
+  #status: LocalizedText;
   #destroyed = false;
 
   constructor(
@@ -150,8 +161,8 @@ class PlaybackController {
     this.#siteLabel = siteLabel(siteId);
     this.#adapter = adapter;
     this.#status = adapter === undefined
-      ? '關閉 · 尚未載入假軌'
-      : '關閉 · 尚未載入官方軌';
+      ? uiMessage('status.disabledFakeNotLoaded')
+      : uiMessage('status.disabledOfficialNotLoaded');
     this.#storageKey = `duetsub:enabled:${siteId}`;
     this.video = target.video;
     this.#player = target.player;
@@ -179,13 +190,13 @@ class PlaybackController {
         },
         onRetranslate: () => {
           if (this.#translationPlan === undefined) {
-            this.#status = '目前使用官方雙軌，無需重新翻譯';
+            this.#status = uiMessage('status.noRetranslate');
             this.#render();
             return;
           }
           this.#cancelTranslations();
           const revision = ++this.#acquisitionRevision;
-          this.#status = '正在跳過快取重新翻譯…';
+          this.#status = uiMessage('status.retranslating');
           this.#render();
           void this.#translatePlan(
             {
@@ -213,6 +224,7 @@ class PlaybackController {
     }
 
     window.addEventListener('message', this.#onMessage);
+    chrome.storage.onChanged.addListener(this.#onStorageChanged);
     this.video.addEventListener('seeking', this.#onSeeking);
     this.video.addEventListener('seeked', this.#onSeeked);
     this.#player.addEventListener('pointermove', this.#onControlsActivity);
@@ -250,8 +262,8 @@ class PlaybackController {
       this.#clearTrackData();
       this.#bindAdapterGeneration();
       this.#status = target.contentIdentity === undefined
-        ? `開啟 · 等待可驗證的 ${this.#siteLabel} 內容身份`
-        : `開啟 · ${this.#siteLabel} 內容已切換`;
+        ? uiMessage('status.waitingContent', { site: this.#siteLabel })
+        : uiMessage('status.contentChanged', { site: this.#siteLabel });
       contentChanged = true;
     }
 
@@ -278,6 +290,7 @@ class PlaybackController {
       window.clearTimeout(this.#controlsTimer);
     }
     window.removeEventListener('message', this.#onMessage);
+    chrome.storage.onChanged.removeListener(this.#onStorageChanged);
     this.video.removeEventListener('seeking', this.#onSeeking);
     this.video.removeEventListener('seeked', this.#onSeeked);
     this.video.removeEventListener('loadeddata', this.#onVideoReady);
@@ -297,9 +310,10 @@ class PlaybackController {
 
   async #hydrate(): Promise<void> {
     const revision = this.#interactionRevision;
-    const [stored, languagePair] = await Promise.all([
+    const [stored, languagePair, uiLanguage] = await Promise.all([
       chrome.storage.local.get(this.#storageKey),
       loadLanguagePairPreference(chrome.storage.local),
+      loadUiLanguage(chrome.storage.local, browserLanguages()),
     ]);
     if (this.#destroyed || revision !== this.#interactionRevision) return;
 
@@ -307,6 +321,7 @@ class PlaybackController {
     this.#hasSavedLanguagePairPreference = languagePair.stored;
     this.#topLanguage = languagePair.preference.top;
     this.#bottomLanguage = languagePair.preference.bottom;
+    this.#uiLanguage = uiLanguage;
     this.#state = reducePlaybackLifecycle(this.#state, {
       type: 'hydrate',
       enabled: stored[this.#storageKey] === true,
@@ -331,8 +346,8 @@ class PlaybackController {
       }
     } else {
       this.#status = this.#adapter === undefined
-        ? '關閉 · 點擊即可載入假軌'
-        : '關閉 · 點擊即可載入官方軌';
+        ? uiMessage('status.disabledLoadFake')
+        : uiMessage('status.disabledLoadOfficial');
       this.#render();
     }
   }
@@ -344,7 +359,9 @@ class PlaybackController {
     }
 
     if (!this.#canLoadTracks()) {
-      this.#status = `開啟 · 等待可驗證的 ${this.#siteLabel} 內容身份`;
+      this.#status = uiMessage('status.waitingContent', {
+        site: this.#siteLabel,
+      });
       this.#render();
       return;
     }
@@ -354,7 +371,9 @@ class PlaybackController {
       type: 'tracks-loading',
     });
     this.#bindAdapterGeneration();
-    this.#status = `開啟 · 枚舉 ${this.#siteLabel} 字幕軌…`;
+    this.#status = uiMessage('status.enumerating', {
+      site: this.#siteLabel,
+    });
     this.#render();
     this.#adapter.start();
   }
@@ -370,8 +389,8 @@ class PlaybackController {
       });
     }
     this.#status = catalogOnly
-      ? '正在讀取當前節目的官方字幕…'
-      : '開啟 · 等待 MAIN 假軌';
+      ? uiMessage('status.readingOfficial')
+      : uiMessage('status.waitingFakeMain');
     this.#render();
     postDuetSubMessage(
       requestFakeData(
@@ -399,7 +418,7 @@ class PlaybackController {
     this.#bottomLanguage = this.#languagePairPreference.bottom;
     this.#topMachineTranslated = false;
     this.#bottomMachineTranslated = false;
-    this.#readyStatus = '官方英文 + 官方繁中 · 100%';
+    this.#readyStatus = uiMessage('status.readyDefault');
     this.#receivedTopTrackId = undefined;
     this.#receivedBottomTrackId = undefined;
     this.#synchronizerState = undefined;
@@ -411,7 +430,7 @@ class PlaybackController {
       this.#render();
       return;
     }
-    this.#status = '正在讀取當前節目的官方字幕…';
+    this.#status = uiMessage('status.readingOfficial');
     this.#render();
     if (this.#adapter === undefined) {
       this.#requestFakeData(true);
@@ -443,7 +462,7 @@ class PlaybackController {
     });
     this.#clearSelectedPair();
     this.#bindAdapterGeneration();
-    this.#status = `正在切換為 ${pairLabel(preference)}…`;
+    this.#status = pairMessage('status.switchingPair', preference);
     this.#render();
 
     let saved = false;
@@ -462,12 +481,12 @@ class PlaybackController {
       return;
     }
     if (!saved) {
-      this.#status = '無法在本機儲存官方語言偏好';
+      this.#status = uiMessage('status.savePairFailed');
       this.#render();
       return;
     }
     if (!this.#state.enabled) {
-      this.#status = `關閉 · 已選擇 ${pairLabel(preference)}`;
+      this.#status = pairMessage('status.disabledSelectedPair', preference);
       this.#render();
       return;
     }
@@ -526,7 +545,10 @@ class PlaybackController {
     }
 
     const acquisitionRevision = ++this.#acquisitionRevision;
-    this.#status = `正在取得 ${pairLabel(this.#languagePairPreference)}…`;
+    this.#status = pairMessage(
+      'status.acquiringPair',
+      this.#languagePairPreference,
+    );
     this.#render();
 
     try {
@@ -568,7 +590,10 @@ class PlaybackController {
       this.#state = reducePlaybackLifecycle(this.#state, {
         type: 'tracks-ready',
       });
-      this.#readyStatus = `${pairLabel(this.#languagePairPreference)} · 100%`;
+      this.#readyStatus = pairMessage(
+        'status.pairReady',
+        this.#languagePairPreference,
+      );
       this.#status = this.#readyStatus;
       this.#render();
     } catch (error) {
@@ -589,7 +614,7 @@ class PlaybackController {
         type: 'tracks-loading',
       });
       this.#bindAdapterGeneration();
-      this.#status = '無法可靠取得並恢復所選官方字幕';
+      this.#status = uiMessage('status.selectedPairFailed');
       this.#render();
     }
   }
@@ -609,13 +634,13 @@ class PlaybackController {
       ? decideMaxSources(tracks)
       : decideSubtitleSources(tracks);
     if (decision.english === undefined || decision.chinese === undefined) {
-      this.#status = '開啟 · 沒有可用的英文或中文來源';
+      this.#status = uiMessage('status.noEnglishChinese');
       this.#render();
       return;
     }
 
     const acquisitionRevision = ++this.#acquisitionRevision;
-    this.#status = '開啟 · 正在取得官方字幕…';
+    this.#status = uiMessage('status.acquiringOfficial');
     this.#render();
 
     try {
@@ -692,17 +717,17 @@ class PlaybackController {
       if (mt === undefined) {
         this.#readyStatus = maxEnglishPrimaryAligned
           ? accepted.chinese.kind === 'opencc'
-            ? '官方英文主軌 + OpenCC 繁中對齊 · 100%'
-            : '官方英文主軌 + 官方繁中對齊 · 100%'
+            ? uiMessage('status.maxOpenccReady')
+            : uiMessage('status.maxOfficialReady')
           : accepted.chinese.kind === 'opencc'
-          ? '官方簡中 + OpenCC 繁中 · 100%'
+          ? uiMessage('status.openccReady')
           : accepted.english.kind === 'official' &&
               accepted.chinese.kind === 'official'
             ? selectedTrackStatus(
                 accepted.english.trackSource,
                 accepted.chinese.trackSource,
               )
-            : '英文 + 繁中 · 100%';
+            : uiMessage('status.englishChineseReady');
         this.#status = this.#readyStatus;
       } else {
         this.#translationPlan = {
@@ -711,8 +736,8 @@ class PlaybackController {
           target: mt.side,
           targetLanguage: mt.value.targetLanguage,
         };
-        this.#readyStatus = '官方字幕 + MT · 100%';
-        this.#status = '官方字幕已顯示 · 翻譯中…';
+        this.#readyStatus = uiMessage('status.officialMtReady');
+        this.#status = uiMessage('status.officialTranslating');
         void this.#translatePlan(
           generatedTracks.generation,
           acquisitionRevision,
@@ -754,7 +779,9 @@ class PlaybackController {
       : reducePlaybackLifecycle(this.#state, { type: 'reset-content' });
     if (reason !== 'seek-flush') this.#clearTrackData();
     this.#bindAdapterGeneration();
-    this.#status = `開啟 · ${this.#siteLabel} 播放狀態已重設`;
+    this.#status = uiMessage('status.playbackReset', {
+      site: this.#siteLabel,
+    });
     this.#render();
   };
 
@@ -773,10 +800,10 @@ class PlaybackController {
         });
     this.#bindAdapterGeneration();
     this.#status = active
-      ? '開啟 · 廣告期間暫停顯示'
+      ? uiMessage('status.adPaused')
       : this.#state.suspension === 'none'
         ? this.#readyStatus
-        : '開啟 · 等待可靠的節目時鐘';
+        : uiMessage('status.waitingClock');
     this.#render();
     if (
       !active &&
@@ -785,6 +812,23 @@ class PlaybackController {
     ) {
       this.#loadTracks();
     }
+  };
+
+  readonly #onStorageChanged = (
+    changes: Record<string, chrome.storage.StorageChange>,
+    areaName: string,
+  ) => {
+    if (
+      areaName !== 'local' ||
+      changes[UI_LANGUAGE_STORAGE_KEY] === undefined
+    ) {
+      return;
+    }
+    this.#uiLanguage = resolveUiLanguage(
+      changes[UI_LANGUAGE_STORAGE_KEY].newValue,
+      browserLanguages(),
+    );
+    this.#render();
   };
 
   readonly #onMessage = (event: MessageEvent<unknown>) => {
@@ -806,7 +850,9 @@ class PlaybackController {
         this.#render();
         return;
       }
-      this.#status = `開啟 · 已收到 ${message.tracks.length} 條假軌`;
+      this.#status = uiMessage('status.fakeTracksReceived', {
+        count: message.tracks.length,
+      });
     } else if (message.role === 'top') {
       this.#topCues = message.cues;
       this.#topMachineTranslated = message.translation === 'mt-fallback';
@@ -838,7 +884,10 @@ class PlaybackController {
       this.#state = reducePlaybackLifecycle(this.#state, {
         type: 'tracks-ready',
       });
-      this.#readyStatus = `假資料：${pairLabel(this.#languagePairPreference)} · 100%`;
+      this.#readyStatus = pairMessage(
+        'status.fakeDataReady',
+        this.#languagePairPreference,
+      );
       this.#status = this.#readyStatus;
     } else {
       this.#state = reducePlaybackLifecycle(this.#state, {
@@ -847,7 +896,10 @@ class PlaybackController {
       this.#status = pair.reason === 'top-empty' ||
           pair.reason === 'bottom-empty' ||
           pair.reason === 'both-empty'
-        ? `開啟 · 等待完整的 ${pairLabel(this.#languagePairPreference)} 假軌`
+        ? pairMessage(
+            'status.waitingFakePair',
+            this.#languagePairPreference,
+          )
         : unavailablePairStatus(pair.reason, this.#languagePairPreference);
     }
     this.#render();
@@ -860,7 +912,7 @@ class PlaybackController {
     this.#cancelTranslations();
     this.#state = reducePlaybackLifecycle(this.#state, { type: 'seeking' });
     this.#bindAdapterGeneration();
-    this.#status = '開啟 · 拖動中暫停顯示';
+    this.#status = uiMessage('status.seekingPaused');
     this.#render();
   };
 
@@ -874,7 +926,7 @@ class PlaybackController {
       this.#bindAdapterGeneration();
       this.#status = this.#topCues.length > 0 && this.#bottomCues.length > 0
         ? this.#readyStatus
-        : '開啟 · 尚未取得雙軌';
+        : uiMessage('status.notAcquired');
       this.#render();
       if (this.#translationPlan !== undefined) {
         void this.#translatePlan(
@@ -906,7 +958,9 @@ class PlaybackController {
       type: 'video-replaced',
     });
     this.#bindAdapterGeneration();
-    this.#status = `開啟 · ${this.#siteLabel} video 時鐘已替換`;
+    this.#status = uiMessage('status.videoClockReplaced', {
+      site: this.#siteLabel,
+    });
     this.#render();
 
     if (video.readyState >= 2) this.#onVideoReady();
@@ -982,7 +1036,7 @@ class PlaybackController {
       if (response.status === 'missing-key') {
         if (!this.#translationHintShown) {
           this.#translationHintShown = true;
-          this.#status = '官方字幕照常顯示 · 請到設定頁配置翻譯服務';
+          this.#status = uiMessage('status.configureTranslation');
           this.#render();
         }
         return;
@@ -990,7 +1044,7 @@ class PlaybackController {
       if (response.status === 'missing-permission') {
         if (!this.#translationHintShown) {
           this.#translationHintShown = true;
-          this.#status = '官方字幕照常顯示 · 請到設定頁授權翻譯端點';
+          this.#status = uiMessage('status.authorizeTranslation');
           this.#render();
         }
         return;
@@ -999,12 +1053,12 @@ class PlaybackController {
       hadFailure ||= response.status === 'failed';
       this.#mergeTranslatedCues(plan.target, response.cues);
       this.#status = response.status === 'ok'
-        ? '官方字幕 + MT · 翻譯中…'
-        : '官方字幕照常顯示 · 部分翻譯失敗';
+        ? uiMessage('status.mtTranslating')
+        : uiMessage('status.partialTranslationFailed');
       this.#render();
     }
     this.#status = hadFailure
-      ? '官方字幕照常顯示 · 部分翻譯失敗'
+      ? uiMessage('status.partialTranslationFailed')
       : this.#readyStatus;
     this.#render();
   }
@@ -1095,7 +1149,8 @@ class PlaybackController {
     this.#nativeCaptions.setHidden(shouldHideNativeCaptions(this.#state));
     this.#toggleView.render(
       this.#state.enabled,
-      this.#status,
+      this.#status(this.#uiLanguage),
+      this.#uiLanguage,
       createOfficialTrackCatalog(this.#tracks),
       this.#languagePairPreference,
     );
@@ -1213,72 +1268,109 @@ function decideMaxSources(
 function selectedTrackStatus(
   english: TrackInfo['source'],
   chinese: TrackInfo['source'],
-): string {
-  return `${sourceLabel(english, '英文')} + ${sourceLabel(chinese, '繁中')} · 100%`;
+): LocalizedText {
+  return (language) =>
+    `${
+      sourceLabel(language, english, 'language.english')
+    } + ${
+      sourceLabel(language, chinese, 'language.traditionalChinese')
+    } · 100%`;
 }
 
 function sourceLabel(
+  uiLanguage: UiLanguage,
   source: TrackInfo['source'],
-  language: '英文' | '繁中',
+  languageKey: 'language.english' | 'language.traditionalChinese',
 ): string {
+  const language = translate(uiLanguage, languageKey);
   switch (source) {
     case 'official':
-      return `官方${language}`;
+      return translate(uiLanguage, 'source.official', { language });
     case 'asr':
-      return `ASR ${language}`;
+      return translate(uiLanguage, 'source.asr', { language });
     case 'platform-mt':
-      return `平台 MT ${language}`;
+      return translate(uiLanguage, 'source.platformMt', { language });
   }
 }
 
-function acquisitionErrorStatus(error: unknown): string {
+function acquisitionErrorStatus(error: unknown): LocalizedText {
   if (
     error instanceof Error &&
     error.message.includes('手動開啟一次 YouTube 字幕')
   ) {
-    return `開啟 · ${error.message}`;
+    return uiMessage('status.youtubeEnableCaptions');
   }
-  return '開啟 · 無法可靠取得並恢復雙軌';
+  return uiMessage('status.acquisitionFailed');
 }
 
-function catalogStatus(tracks: readonly TrackInfo[]): string {
+function catalogStatus(tracks: readonly TrackInfo[]): LocalizedText {
   const catalog = createOfficialTrackCatalog(tracks);
   return catalog.length === 0
-    ? '當前節目沒有可驗證的官方字幕'
-    : `可選：${catalog.map(({ label }) => label).join('、')}`;
+    ? uiMessage('status.noOfficialCaptions')
+    : (language) =>
+      translate(language, 'status.available', {
+        labels: catalog.map(({ label }) => label).join(
+          language === 'en' ? ', ' : '、',
+        ),
+      });
 }
 
-function pairLabel(preference: LanguagePairPreference): string {
-  return `官方${languageDisplayName(preference.top)} + 官方${
-    languageDisplayName(preference.bottom)
-  }`;
+function pairLabel(
+  uiLanguage: UiLanguage,
+  preference: LanguagePairPreference,
+): string {
+  return translate(uiLanguage, 'pair.label', {
+    top: languageDisplayName(uiLanguage, preference.top),
+    bottom: languageDisplayName(uiLanguage, preference.bottom),
+  });
 }
 
 function unavailablePairStatus(
   reason: OfficialPairUnavailableReason,
   preference: LanguagePairPreference,
-): string {
+): LocalizedText {
   switch (reason) {
     case 'same-language':
-      return '上下字幕不能選擇相同語言';
+      return uiMessage('status.sameLanguage');
     case 'top-missing':
-      return `當前節目沒有官方${languageDisplayName(preference.top)}字幕`;
+      return (language) =>
+        translate(language, 'status.topMissing', {
+          language: languageDisplayName(language, preference.top),
+        });
     case 'bottom-missing':
-      return `當前節目沒有官方${languageDisplayName(preference.bottom)}字幕`;
+      return (language) =>
+        translate(language, 'status.bottomMissing', {
+          language: languageDisplayName(language, preference.bottom),
+        });
     case 'both-missing':
-      return `當前節目沒有${pairLabel(preference)}`;
+      return (language) =>
+        translate(language, 'status.bothMissing', {
+          pair: pairLabel(language, preference),
+        });
     case 'ambiguous-language':
-      return '當前節目的官方字幕語言無法可靠判定';
+      return uiMessage('status.ambiguousLanguage');
   }
 }
 
-function languageDisplayName(language: string): string {
-  try {
-    return new Intl.DisplayNames(undefined, { type: 'language' }).of(language) ??
-      language;
-  } catch {
-    return language;
-  }
+function uiMessage(
+  key: UiMessageKey,
+  values: Readonly<Record<string, string | number>> = {},
+): LocalizedText {
+  return (language) => translate(language, key, values);
+}
+
+function pairMessage(
+  key: UiMessageKey,
+  preference: LanguagePairPreference,
+): LocalizedText {
+  return (language) =>
+    translate(language, key, {
+      pair: pairLabel(language, preference),
+    });
+}
+
+function browserLanguages(): readonly string[] {
+  return [...navigator.languages, navigator.language];
 }
 
 function siteLabel(siteId: SiteId): string {

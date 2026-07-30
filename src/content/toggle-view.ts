@@ -4,6 +4,7 @@ import {
   type LanguagePairPreference,
   type OfficialLanguageOption,
 } from '../core/official-pair-selection';
+import { translate, type UiLanguage } from '../i18n';
 
 export interface ToggleViewCallbacks {
   readonly onToggle: () => void;
@@ -19,6 +20,7 @@ export interface ToggleView {
   render(
     enabled: boolean,
     status: string,
+    language: UiLanguage,
     catalog: readonly OfficialLanguageOption[],
     preference: LanguagePairPreference,
   ): void;
@@ -50,7 +52,6 @@ export function createToggleView(
   button.className = 'toggle';
   button.type = 'button';
   button.title = 'DuetSub';
-  button.setAttribute('aria-label', '切換 DuetSub 雙字幕');
   button.setAttribute('aria-haspopup', 'menu');
   const icon = document.createElement('span');
   icon.className = 'icon';
@@ -69,13 +70,13 @@ export function createToggleView(
 
   const chooser = document.createElement('div');
   chooser.className = 'chooser';
-  const topSelect = languageSelect('上方字幕');
-  const bottomSelect = languageSelect('下方字幕');
+  const topSelect = languageSelect();
+  const bottomSelect = languageSelect();
   chooser.append(topSelect.label, bottomSelect.label);
 
-  const swap = menuButton('交換上下');
-  const retranslate = menuButton('重新翻譯（ticket 04）');
-  const settings = menuButton('打開設定');
+  const swap = menuButton();
+  const retranslate = menuButton();
+  const settings = menuButton();
   popover.append(status, chooser, swap, retranslate, settings);
   shadow.append(style, button, popover);
   anchor.insertBefore(host, before ?? null);
@@ -84,6 +85,7 @@ export function createToggleView(
   let suppressClick = false;
   let catalog: readonly OfficialLanguageOption[] = [];
   let chooserSignature = '';
+  let renderedLanguage: UiLanguage | undefined;
 
   const showPopover = () => {
     callbacks.onOpenLanguagePair();
@@ -156,16 +158,45 @@ export function createToggleView(
   document.addEventListener('pointerdown', onDocumentPointerDown);
 
   return {
-    render(enabled, statusText, nextCatalog, preference) {
+    render(enabled, statusText, language, nextCatalog, preference) {
+      if (language !== renderedLanguage) {
+        renderedLanguage = language;
+        button.setAttribute('aria-label', translate(language, 'toggle.aria'));
+        setLanguageSelectLabel(
+          topSelect,
+          translate(language, 'toggle.top'),
+        );
+        setLanguageSelectLabel(
+          bottomSelect,
+          translate(language, 'toggle.bottom'),
+        );
+        swap.textContent = translate(language, 'toggle.swap');
+        retranslate.textContent = translate(
+          language,
+          'toggle.retranslate',
+        );
+        settings.textContent = translate(language, 'toggle.openSettings');
+        chooserSignature = '';
+      }
       button.classList.toggle('enabled', enabled);
       button.setAttribute('aria-pressed', String(enabled));
       status.textContent = statusText;
       catalog = nextCatalog;
-      const signature = JSON.stringify([catalog, preference]);
+      const signature = JSON.stringify([language, catalog, preference]);
       if (signature !== chooserSignature) {
         chooserSignature = signature;
-        renderLanguageSelect(topSelect.select, catalog, preference.top);
-        renderLanguageSelect(bottomSelect.select, catalog, preference.bottom);
+        renderLanguageSelect(
+          topSelect.select,
+          language,
+          catalog,
+          preference.top,
+        );
+        renderLanguageSelect(
+          bottomSelect.select,
+          language,
+          catalog,
+          preference.bottom,
+        );
         synchronizeDisabledOptions(
           topSelect.select,
           bottomSelect.select,
@@ -222,31 +253,40 @@ function createBar(className: 'english' | 'chinese'): HTMLSpanElement {
   return bar;
 }
 
-function menuButton(label: string): HTMLButtonElement {
+function menuButton(): HTMLButtonElement {
   const button = document.createElement('button');
   button.className = 'menu-item';
   button.type = 'button';
   button.setAttribute('role', 'menuitem');
-  button.textContent = label;
   return button;
 }
 
-function languageSelect(labelText: string): {
+interface LanguageSelectElements {
   readonly label: HTMLLabelElement;
+  readonly text: HTMLSpanElement;
   readonly select: HTMLSelectElement;
-} {
+}
+
+function languageSelect(): LanguageSelectElements {
   const label = document.createElement('label');
   label.className = 'language-field';
   const text = document.createElement('span');
-  text.textContent = labelText;
   const select = document.createElement('select');
-  select.setAttribute('aria-label', labelText);
   label.append(text, select);
-  return { label, select };
+  return { label, text, select };
+}
+
+function setLanguageSelectLabel(
+  elements: LanguageSelectElements,
+  label: string,
+): void {
+  elements.text.textContent = label;
+  elements.select.setAttribute('aria-label', label);
 }
 
 function renderLanguageSelect(
   select: HTMLSelectElement,
+  language: UiLanguage,
   catalog: readonly OfficialLanguageOption[],
   selected: string,
 ): void {
@@ -255,8 +295,8 @@ function renderLanguageSelect(
   placeholder.value = '';
   placeholder.disabled = true;
   placeholder.textContent = catalog.length === 0
-    ? '尚未讀取官方字幕'
-    : '目前偏好在本節目不可用';
+    ? translate(language, 'toggle.noOfficialSubtitles')
+    : translate(language, 'toggle.preferenceUnavailable');
   select.append(placeholder);
   for (const option of catalog) {
     const element = document.createElement('option');
@@ -365,7 +405,7 @@ const TOGGLE_CSS = `
     position: absolute;
     right: 0;
     bottom: calc(100% + 8px);
-    width: max-content;
+    width: min(24rem, calc(100vw - 2rem));
     min-width: 13rem;
     overflow: hidden;
     border: 1px solid rgb(255 255 255 / 18%);
@@ -405,7 +445,8 @@ const TOGGLE_CSS = `
   }
 
   .language-field select {
-    min-width: 16rem;
+    width: 100%;
+    min-width: 0;
     padding: 0.38rem 0.46rem;
     border: 1px solid rgb(255 255 255 / 18%);
     border-radius: 4px;

@@ -14,8 +14,22 @@ import {
   resetLanguagePairPreference,
   type LoadedLanguagePairPreference,
 } from '../core/official-pair-preference';
+import {
+  isUiLanguage,
+  languageDisplayName,
+  loadUiLanguage,
+  resolveUiLanguage,
+  saveUiLanguage,
+  translate,
+  translateRuntimeMessage,
+  type UiLanguage,
+  type UiMessageKey,
+} from '../i18n';
 
 const form = document.querySelector<HTMLFormElement>('form')!;
+const uiLanguageSelect = document.querySelector<HTMLSelectElement>(
+  '#ui-language',
+)!;
 const provider = document.querySelector<HTMLSelectElement>('#provider')!;
 const baseUrl = document.querySelector<HTMLInputElement>('#base-url')!;
 const apiKey = document.querySelector<HTMLInputElement>('#api-key')!;
@@ -29,14 +43,31 @@ const resetLanguagePair = document.querySelector<HTMLButtonElement>(
   '#reset-official-language-pair',
 )!;
 
-void loadTranslationConfig(chrome.storage.local).then(renderConfig);
-void loadLanguagePairPreference(chrome.storage.local).then(renderLanguagePair);
-provider.addEventListener('change', () => applyProviderDefaults(provider.value as TranslationProvider));
+let uiLanguage = resolveUiLanguage(undefined, browserLanguages());
+let loadedLanguagePair: LoadedLanguagePairPreference | undefined;
+let renderStatusMessage = (language: UiLanguage) =>
+  translate(language, 'options.notTested');
+let statusState: boolean | undefined;
+
+void initialize();
+
+uiLanguageSelect.addEventListener('change', () => {
+  if (!isUiLanguage(uiLanguageSelect.value)) return;
+  uiLanguage = uiLanguageSelect.value;
+  applyUiLanguage();
+  void saveUiLanguage(chrome.storage.local, uiLanguage).then(() => {
+    showMessage(true, 'options.languageSaved');
+  });
+});
+provider.addEventListener('change', () =>
+  applyProviderDefaults(provider.value as TranslationProvider)
+);
 resetLanguagePair.addEventListener('click', () => {
   void (async () => {
     await resetLanguagePairPreference(chrome.storage.local);
-    renderLanguagePair(await loadLanguagePairPreference(chrome.storage.local));
-    show(true, '官方語言偏好已恢復預設值');
+    loadedLanguagePair = await loadLanguagePairPreference(chrome.storage.local);
+    renderLanguagePair();
+    showMessage(true, 'options.resetSuccess');
   })();
 });
 
@@ -49,30 +80,44 @@ testButton.addEventListener('click', () => {
   void (async () => {
     const config = readConfig();
     const validation = validateTranslationConfig(config);
-    if (!validation.ok) return show(false, validation.error);
+    if (!validation.ok) return showRuntimeMessage(false, validation.error);
     if (!(await requestEndpointPermission(chrome.permissions, validation.config))) {
-      return show(false, '未授權此翻譯端點');
+      return showMessage(false, 'options.permissionDenied');
     }
-    show(undefined, '測試中…');
-    const result = await chrome.runtime.sendMessage({
+    showMessage(undefined, 'options.testing');
+    const result = (await chrome.runtime.sendMessage({
       channel: 'duetsub-mt',
       version: 1,
       type: 'test-connection',
       config: validation.config,
-    }) as { ok: boolean; message: string };
-    show(result.ok, result.message);
+    })) as { ok: boolean; message: string };
+    showRuntimeMessage(result.ok, result.message);
   })();
 });
 
+async function initialize(): Promise<void> {
+  const [config, pair, language] = await Promise.all([
+    loadTranslationConfig(chrome.storage.local),
+    loadLanguagePairPreference(chrome.storage.local),
+    loadUiLanguage(chrome.storage.local, browserLanguages()),
+  ]);
+  uiLanguage = language;
+  loadedLanguagePair = pair;
+  uiLanguageSelect.value = language;
+  applyUiLanguage();
+  renderConfig(config);
+  renderLanguagePair();
+}
+
 async function saveCurrent(): Promise<void> {
   const validation = validateTranslationConfig(readConfig());
-  if (!validation.ok) return show(false, validation.error);
+  if (!validation.ok) return showRuntimeMessage(false, validation.error);
   if (!(await requestEndpointPermission(chrome.permissions, validation.config))) {
-    return show(false, '未授權此翻譯端點');
+    return showMessage(false, 'options.permissionDenied');
   }
   await saveTranslationConfig(chrome.storage.local, validation.config);
   renderConfig(validation.config);
-  show(true, '設定已儲存；API key 保持遮蔽');
+  showMessage(true, 'options.saved');
 }
 
 function readConfig(): TranslationConfig {
@@ -97,15 +142,18 @@ function renderConfig(config: TranslationConfig): void {
   baseUrl.closest<HTMLElement>('.field')!.hidden = config.provider === 'deepseek';
 }
 
-function renderLanguagePair(loaded: LoadedLanguagePairPreference): void {
-  const { preference } = loaded;
-  languagePair.value = `${
-    languageName(preference.top)
-  }（${preference.top}）在上，${
-    languageName(preference.bottom)
-  }（${preference.bottom}）在下${
-    loaded.stored ? '' : '（記憶體預設）'
-  }`;
+function renderLanguagePair(): void {
+  if (loadedLanguagePair === undefined) return;
+  const { preference } = loadedLanguagePair;
+  languagePair.value = translate(uiLanguage, 'options.pair', {
+    topName: languageDisplayName(uiLanguage, preference.top),
+    topCode: preference.top,
+    bottomName: languageDisplayName(uiLanguage, preference.bottom),
+    bottomCode: preference.bottom,
+    suffix: loadedLanguagePair.stored
+      ? ''
+      : translate(uiLanguage, 'options.memoryDefault'),
+  });
 }
 
 function applyProviderDefaults(value: TranslationProvider): void {
@@ -120,16 +168,50 @@ function applyProviderDefaults(value: TranslationProvider): void {
   }
 }
 
-function show(ok: boolean | undefined, message: string): void {
-  status.value = message;
-  status.dataset.state = ok === undefined ? 'pending' : ok ? 'success' : 'error';
+function applyUiLanguage(): void {
+  document.documentElement.lang = uiLanguage;
+  document.title = translate(uiLanguage, 'options.title');
+  for (
+    const element of document.querySelectorAll<HTMLElement>('[data-i18n]')
+  ) {
+    element.textContent = translate(
+      uiLanguage,
+      element.dataset.i18n as UiMessageKey,
+    );
+  }
+  renderLanguagePair();
+  renderStatus();
 }
 
-function languageName(language: string): string {
-  try {
-    return new Intl.DisplayNames(undefined, { type: 'language' }).of(language) ??
-      language;
-  } catch {
-    return language;
-  }
+function showMessage(
+  ok: boolean | undefined,
+  key: UiMessageKey,
+  values: Readonly<Record<string, string | number>> = {},
+): void {
+  statusState = ok;
+  renderStatusMessage = (language) => translate(language, key, values);
+  renderStatus();
+}
+
+function showRuntimeMessage(
+  ok: boolean | undefined,
+  message: string,
+): void {
+  statusState = ok;
+  renderStatusMessage = (language) =>
+    translateRuntimeMessage(language, message);
+  renderStatus();
+}
+
+function renderStatus(): void {
+  status.value = renderStatusMessage(uiLanguage);
+  status.dataset.state = statusState === undefined
+    ? 'pending'
+    : statusState
+    ? 'success'
+    : 'error';
+}
+
+function browserLanguages(): readonly string[] {
+  return [...navigator.languages, navigator.language];
 }
