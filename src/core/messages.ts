@@ -7,6 +7,8 @@ import {
 
 const CHANNEL = 'duetsub';
 const VERSION = 1;
+export const NETFLIX_TRACK_REQUEST_ATTRIBUTE =
+  'data-duetsub-netflix-track-request';
 
 interface MessageEnvelope {
   readonly channel: typeof CHANNEL;
@@ -97,13 +99,35 @@ export interface NetflixManifestMessage extends UncorrelatedMessageEnvelope {
   readonly manifest: unknown;
 }
 
+export interface NetflixTrackRequestMessage extends MessageEnvelope {
+  readonly direction: 'isolated-to-main';
+  readonly type: 'netflix-track-request';
+  readonly siteId: 'netflix';
+  readonly contentIdentity: string;
+  readonly generation: PlaybackGeneration;
+  readonly trackId: string;
+  readonly trackKind: TrackInfo['kind'];
+}
+
+export interface NetflixTrackRequestReadyMessage extends MessageEnvelope {
+  readonly direction: 'main-to-isolated';
+  readonly type: 'netflix-track-request-ready';
+  readonly siteId: 'netflix';
+  readonly contentIdentity: string;
+  readonly ok: boolean;
+}
+
 export interface NetflixTtmlResponseMessage
-  extends UncorrelatedMessageEnvelope {
+  extends MessageEnvelope {
   readonly direction: 'main-to-isolated';
   readonly type: 'netflix-ttml-response';
   readonly siteId: 'netflix';
   readonly responseId: string;
   readonly contentIdentity: string;
+  readonly url: string;
+  readonly generation: PlaybackGeneration;
+  readonly trackId: string;
+  readonly trackKind: TrackInfo['kind'];
   readonly raw: string;
 }
 
@@ -179,12 +203,14 @@ export type MainToIsolatedMessage =
   | PrimeTimelineOffsetMessage
   | MaxSubtitleResponseMessage
   | NetflixManifestMessage
+  | NetflixTrackRequestReadyMessage
   | NetflixTtmlResponseMessage
   | YoutubeCaptionsMessage
   | YoutubeTimedTextRequestMessage
   | YoutubePlayerCommandResultMessage;
 export type IsolatedToMainMessage =
   | RequestFakeDataMessage
+  | NetflixTrackRequestMessage
   | PrimeTimelineOffsetRequestMessage
   | YoutubePlayerCommandMessage;
 export type DuetSubMessage = MainToIsolatedMessage | IsolatedToMainMessage;
@@ -319,10 +345,51 @@ export function netflixManifestMessage(
   };
 }
 
+export function netflixTrackRequest(
+  requestId: string,
+  contentIdentity: string,
+  generation: PlaybackGeneration,
+  track: Pick<TrackInfo, 'id' | 'kind'>,
+): NetflixTrackRequestMessage {
+  return {
+    channel: CHANNEL,
+    version: VERSION,
+    direction: 'isolated-to-main',
+    type: 'netflix-track-request',
+    siteId: 'netflix',
+    requestId,
+    contentIdentity,
+    generation: {
+      contentGeneration: generation.contentGeneration,
+      clockGeneration: generation.clockGeneration,
+      selectionGeneration: generation.selectionGeneration ?? 0,
+    },
+    trackId: track.id,
+    trackKind: track.kind,
+  };
+}
+
+export function netflixTrackRequestReady(
+  request: NetflixTrackRequestMessage,
+  ok: boolean,
+): NetflixTrackRequestReadyMessage {
+  return {
+    channel: CHANNEL,
+    version: VERSION,
+    direction: 'main-to-isolated',
+    type: 'netflix-track-request-ready',
+    siteId: 'netflix',
+    requestId: request.requestId,
+    contentIdentity: request.contentIdentity,
+    ok,
+  };
+}
+
 export function netflixTtmlResponseMessage(
   responseId: string,
-  contentIdentity: string,
+  url: string,
   raw: string,
+  request: NetflixTrackRequestMessage,
 ): NetflixTtmlResponseMessage {
   return {
     channel: CHANNEL,
@@ -330,8 +397,13 @@ export function netflixTtmlResponseMessage(
     direction: 'main-to-isolated',
     type: 'netflix-ttml-response',
     siteId: 'netflix',
+    requestId: request.requestId,
     responseId,
-    contentIdentity,
+    contentIdentity: request.contentIdentity,
+    url,
+    generation: request.generation,
+    trackId: request.trackId,
+    trackKind: request.trackKind,
     raw,
   };
 }
@@ -461,11 +533,12 @@ export function isDuetSubMessage(value: unknown): value is DuetSubMessage {
     return (
       candidate.direction === 'main-to-isolated' &&
       candidate.siteId === 'netflix' &&
+      isRequestId(candidate.requestId) &&
+      isNetflixTrackRequestContext(candidate) &&
+      isSafeHttpsUrl(candidate.url) &&
       typeof candidate.responseId === 'string' &&
       candidate.responseId.length > 0 &&
       candidate.responseId.length <= 128 &&
-      typeof candidate.contentIdentity === 'string' &&
-      /^[A-Za-z0-9._-]{1,128}$/.test(candidate.contentIdentity) &&
       typeof candidate.raw === 'string' &&
       candidate.raw.length > 0 &&
       candidate.raw.length <= 2_000_000
@@ -496,6 +569,12 @@ export function isDuetSubMessage(value: unknown): value is DuetSubMessage {
     return false;
   }
   if (candidate.direction === 'isolated-to-main') {
+    if (candidate.type === 'netflix-track-request') {
+      return (
+        candidate.siteId === 'netflix' &&
+        isNetflixTrackRequestContext(candidate)
+      );
+    }
     if (candidate.type === 'request-prime-timeline-offset') {
       return candidate.siteId === 'primevideo';
     }
@@ -522,6 +601,13 @@ export function isDuetSubMessage(value: unknown): value is DuetSubMessage {
     return (
       candidate.siteId === 'primevideo' &&
       isTimelineOffsetMs(candidate.timelineOffsetMs)
+    );
+  }
+  if (candidate.type === 'netflix-track-request-ready') {
+    return (
+      candidate.siteId === 'netflix' &&
+      isNetflixContentIdentity(candidate.contentIdentity) &&
+      typeof candidate.ok === 'boolean'
     );
   }
   if (candidate.type === 'youtube-player-command-result') {
@@ -666,9 +752,28 @@ function isPrimeTtmlObservationOwnership(
   );
 }
 
+function isNetflixTrackRequestContext(
+  value: Record<string, unknown>,
+): boolean {
+  return (
+    isNetflixContentIdentity(value.contentIdentity) &&
+    isPlaybackGeneration(value.generation) &&
+    typeof value.trackId === 'string' &&
+    value.trackId.length > 0 &&
+    value.trackId.length <= 256 &&
+    (value.trackKind === 'subtitles' ||
+      value.trackKind === 'closed-captions')
+  );
+}
+
+function isNetflixContentIdentity(value: unknown): value is string {
+  return typeof value === 'string' &&
+    /^[A-Za-z0-9._-]{1,128}$/.test(value);
+}
+
 function isPlaybackGeneration(value: unknown): value is PlaybackGeneration {
   if (typeof value !== 'object' || value === null) return false;
-  const generation = value as Partial<PlaybackGeneration>;
+  const generation = value as Record<string, unknown>;
   return (
     isGenerationNumber(generation.contentGeneration) &&
     isGenerationNumber(generation.clockGeneration) &&
@@ -687,6 +792,26 @@ function isTrackId(value: unknown): value is string {
     value.length <= 512 &&
     !/[\u0000-\u001f\u007f]/u.test(value)
   );
+}
+
+function isRequestId(value: unknown): value is string {
+  return typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= 128;
+}
+
+function isSafeHttpsUrl(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length > 4_096) return false;
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === 'https:' &&
+      url.username === '' &&
+      url.password === ''
+    );
+  } catch {
+    return false;
+  }
 }
 
 function isMaxSubtitleResponseKind(

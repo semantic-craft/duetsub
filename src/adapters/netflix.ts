@@ -3,18 +3,20 @@ import {
   samePlaybackGeneration,
   type PlaybackGeneration,
 } from '../core/lifecycle';
-import { isDuetSubMessage } from '../core/messages';
+import {
+  isDuetSubMessage,
+  NETFLIX_TRACK_REQUEST_ATTRIBUTE,
+  netflixTrackRequest,
+  postDuetSubMessage,
+  type NetflixTtmlResponseMessage,
+} from '../core/messages';
 import { readNetflixWatchIdentity } from './netflix-location';
 import { parseNetflixManifest, type NetflixManifest } from './netflix-manifest';
 import {
-  claimNetflixTtmlResponseForSelectedTrack,
-  claimNetflixTtmlResponseForPending,
   consumeNetflixTtmlResponse,
   EMPTY_NETFLIX_TTML_INBOX,
   recordNetflixTtmlResponse,
-  recordNetflixTtmlResponseForUniqueTrack,
   resolveNetflixResponseOwner,
-  resolveNetflixUnownedResponseGeneration,
   retainNetflixTtmlResponsesForGeneration,
   type NetflixResponseOwner,
   type NetflixTtmlResponseInbox,
@@ -26,7 +28,6 @@ const SUBTITLE_MENU_SELECTOR = 'div[data-uia="selector-audio-subtitle"]';
 const SUBTITLE_OPTION_SELECTOR = 'li[data-uia*="subtitle"]';
 const DOM_TIMEOUT_MS = 8_000;
 const RESPONSE_TIMEOUT_MS = 15_000;
-const MAX_UNOWNED_RESPONSES = 8;
 
 interface TrackRequest {
   readonly track: TrackInfo;
@@ -36,21 +37,18 @@ interface TrackRequest {
 }
 
 interface PendingResponse extends NetflixResponseOwner {
+  readonly requestId: string;
+  readonly contentIdentity: string;
+  armed: boolean;
   readonly resolve: (cues: Cue[]) => void;
   readonly reject: (error: Error) => void;
+  readonly resolveArmed: () => void;
   readonly timeout: number;
 }
 
 interface GenerationBoundManifest {
   readonly generation: PlaybackGeneration;
   readonly manifest: NetflixManifest;
-}
-
-interface UnownedTtmlResponse {
-  readonly responseId: string;
-  readonly raw: string;
-  readonly contentIdentity: string;
-  readonly generation: PlaybackGeneration;
 }
 
 export interface NetflixMenuOptionMetadata {
@@ -90,10 +88,8 @@ class NetflixAdapter implements SiteAdapter {
   #manifest: GenerationBoundManifest | undefined;
   #tracks: readonly TrackInfo[] = [];
   #lastEmittedSignature: string | undefined;
-  #currentTrack: TrackInfo | undefined;
   #pending: PendingResponse | undefined;
   #responseInbox: NetflixTtmlResponseInbox = EMPTY_NETFLIX_TTML_INBOX;
-  #unownedResponses: readonly UnownedTtmlResponse[] = [];
   #generation: PlaybackGeneration = {
     contentGeneration: 0,
     clockGeneration: 0,
@@ -186,20 +182,9 @@ class NetflixAdapter implements SiteAdapter {
         : undefined;
     if (!sameContent) this.#tracks = [];
     this.#lastEmittedSignature = undefined;
-    this.#currentTrack = undefined;
     this.#responseInbox = retainNetflixTtmlResponsesForGeneration(
       this.#responseInbox,
       generation,
-    );
-    const currentIdentity = readNetflixWatchIdentity(window.location.href);
-    this.#unownedResponses = this.#unownedResponses.filter(
-      (response) =>
-        resolveNetflixUnownedResponseGeneration(
-          response.contentIdentity,
-          response.generation,
-          currentIdentity,
-          generation,
-        ) !== undefined,
     );
     this.#rejectPending(new Error('Netflix TTML response became stale'));
 
@@ -262,13 +247,6 @@ class NetflixAdapter implements SiteAdapter {
         throw new Error('Netflix original subtitle option is ambiguous');
       }
       originalKey = selected[0].key;
-      this.#currentTrack = uniqueTrackForOption(selected[0], this.#tracks);
-      if (this.#currentTrack !== undefined) {
-        this.#claimUnownedResponses(
-          { track: this.#currentTrack, generation },
-          true,
-        );
-      }
 
       const requestedTracks = uniqueRequestedTracks(requests);
       for (const track of requestedTracks) {
@@ -337,9 +315,6 @@ class NetflixAdapter implements SiteAdapter {
     generation: PlaybackGeneration,
     button: HTMLElement,
   ): Promise<Cue[]> {
-    const prefetched = this.#takePrefetchedResponse(track, generation);
-    if (prefetched !== undefined) return prefetched;
-
     let menu = await ensureSubtitleMenuOpen(button);
     let options = readSubtitleOptions(menu);
     let target = findOptionForTrack(track, options);
@@ -370,49 +345,69 @@ class NetflixAdapter implements SiteAdapter {
     if (!sameGeneration(this.#generation, generation)) {
       throw new Error('Netflix track request became stale');
     }
-    const response = this.#armPending(track, generation);
+    const request = this.#armPending(track, generation);
     try {
+      await request.armed;
+      if (this.#pending?.requestId !== request.requestId) {
+        return await request.response;
+      }
+      if (!sameGeneration(this.#generation, generation)) {
+        throw new Error('Netflix track request became stale');
+      }
+      activateNetflixTrackRequest(request.requestId);
       target.element.click();
-      return await response;
+      return await request.response;
     } catch (error) {
       this.#rejectPending(asError(error));
       throw error;
     }
   }
 
-  #takePrefetchedResponse(
-    track: TrackInfo,
-    generation: PlaybackGeneration,
-  ): Cue[] | undefined {
-    this.#claimUnownedResponses({ track, generation });
-    const consumed = consumeNetflixTtmlResponse(
-      this.#responseInbox,
-      track,
-      generation,
-    );
-    this.#responseInbox = consumed.inbox;
-    return consumed.cues === undefined ? undefined : [...consumed.cues];
-  }
-
   #armPending(
     track: TrackInfo,
     generation: PlaybackGeneration,
-  ): Promise<Cue[]> {
+  ): {
+    readonly requestId: string;
+    readonly armed: Promise<void>;
+    readonly response: Promise<Cue[]>;
+  } {
     if (this.#pending !== undefined) {
       throw new Error('Netflix response ownership is ambiguous');
     }
+    const contentIdentity = readNetflixWatchIdentity(window.location.href);
+    if (contentIdentity === undefined) {
+      throw new Error('Netflix content identity unavailable');
+    }
 
+    const requestId = crypto.randomUUID();
+    let resolveArmed: () => void = () => undefined;
+    const armed = new Promise<void>((resolve) => {
+      resolveArmed = resolve;
+    });
     const response = new Promise<Cue[]>((resolve, reject) => {
       const timeout = window.setTimeout(() => {
-        if (this.#pending?.track.id !== track.id) return;
+        if (this.#pending?.requestId !== requestId) return;
+        clearNetflixTrackRequest(requestId);
+        resolveArmed();
         this.#pending = undefined;
         reject(new Error(`Netflix TTML response timed out: ${track.id}`));
       }, RESPONSE_TIMEOUT_MS);
-      this.#pending = { track, generation, resolve, reject, timeout };
+      this.#pending = {
+        requestId,
+        contentIdentity,
+        armed: false,
+        track,
+        generation,
+        resolve,
+        reject,
+        resolveArmed,
+        timeout,
+      };
     });
-    this.#claimUnownedResponses();
-    this.#resolvePendingFromInbox();
-    return response;
+    postDuetSubMessage(
+      netflixTrackRequest(requestId, contentIdentity, generation, track),
+    );
+    return { requestId, armed, response };
   }
 
   #rejectPending(error: Error): void {
@@ -420,6 +415,8 @@ class NetflixAdapter implements SiteAdapter {
     if (pending === undefined) return;
     window.clearTimeout(pending.timeout);
     this.#pending = undefined;
+    clearNetflixTrackRequest(pending.requestId);
+    pending.resolveArmed();
     pending.reject(error);
   }
 
@@ -427,7 +424,6 @@ class NetflixAdapter implements SiteAdapter {
     option: SubtitleMenuOption,
     button: HTMLElement,
   ): Promise<void> {
-    this.#currentTrack = undefined;
     option.element.click();
     await delay(100);
     await ensureSubtitleMenuOpen(button);
@@ -443,14 +439,6 @@ class NetflixAdapter implements SiteAdapter {
       },
       DOM_TIMEOUT_MS,
     );
-    const current = currentSubtitleMenu();
-    const selected = (
-      current === undefined ? [] : readSubtitleOptions(current)
-    ).filter((candidate) => candidate.selected);
-    this.#currentTrack =
-      selected.length === 1
-        ? uniqueTrackForOption(selected[0], this.#tracks)
-        : undefined;
   }
 
   async #restoreOriginalState(
@@ -473,7 +461,6 @@ class NetflixAdapter implements SiteAdapter {
         if (original?.selected !== true) return false;
       }
 
-      this.#currentTrack = uniqueTrackForOption(original, this.#tracks);
       return await restoreMenuState(button, menuWasOpen);
     } catch {
       return false;
@@ -492,12 +479,23 @@ class NetflixAdapter implements SiteAdapter {
 
     if (message.type === 'netflix-manifest') {
       this.#observeManifest(message.manifest);
+    } else if (message.type === 'netflix-track-request-ready') {
+      const pending = this.#pending;
+      if (
+        pending === undefined ||
+        message.requestId !== pending.requestId ||
+        message.contentIdentity !== pending.contentIdentity
+      ) {
+        return;
+      }
+      if (!message.ok) {
+        this.#rejectPending(new Error('Netflix track request was not armed'));
+        return;
+      }
+      pending.armed = true;
+      pending.resolveArmed();
     } else if (message.type === 'netflix-ttml-response') {
-      this.#observeTtmlResponse(
-        message.responseId,
-        message.contentIdentity,
-        message.raw,
-      );
+      this.#observeTtmlResponse(message);
     }
   };
 
@@ -531,64 +529,34 @@ class NetflixAdapter implements SiteAdapter {
     if (this.#started) this.#emitTracks(manifest.tracks, this.#generation);
   }
 
-  #observeTtmlResponse(
-    responseId: string,
-    contentIdentity: string,
-    raw: string,
-  ): void {
+  #observeTtmlResponse(message: NetflixTtmlResponseMessage): void {
     if (
-      contentIdentity !== readNetflixWatchIdentity(window.location.href)
+      message.contentIdentity !== readNetflixWatchIdentity(window.location.href)
     ) {
       return;
     }
     const owner = resolveNetflixResponseOwner(
       this.#generation,
       this.#pending,
-      this.#currentTrack === undefined ? [] : [this.#currentTrack],
+      message,
     );
-    if (owner === undefined) {
-      this.#unownedResponses = [
-        ...this.#unownedResponses,
-        {
-          responseId,
-          raw,
-          contentIdentity,
-          generation: this.#generation,
-        },
-      ].slice(-MAX_UNOWNED_RESPONSES);
-      this.#claimUnownedResponses();
-      return;
-    }
+    if (owner === undefined) return;
 
     const before = this.#responseInbox;
     this.#responseInbox = recordNetflixTtmlResponse(before, {
-      responseId,
-      raw,
+      responseId: message.responseId,
+      raw: message.raw,
       owner,
     });
     const recorded = this.#responseInbox.find(
-      (response) => response.responseId === responseId,
+      (response) => response.responseId === message.responseId,
     );
     if (recorded === undefined) return;
     console.debug(
       `[DuetSub] Netflix ISOLATED validated TTML for ${owner.track.label}`,
     );
 
-    if (this.#pending !== undefined) {
-      this.#resolvePendingFromInbox();
-      return;
-    }
-
-    const delivered = consumeNetflixTtmlResponse(
-      this.#responseInbox,
-      owner.track,
-      owner.generation,
-    );
-    this.#responseInbox = delivered.inbox;
-    if (delivered.cues === undefined) return;
-    for (const callback of this.#cueCallbacks) {
-      callback(owner.track.id, [...delivered.cues]);
-    }
+    this.#resolvePendingFromInbox();
   }
 
   #resolvePendingFromInbox(): void {
@@ -610,7 +578,7 @@ class NetflixAdapter implements SiteAdapter {
 
     window.clearTimeout(pending.timeout);
     this.#pending = undefined;
-    this.#currentTrack = pending.track;
+    clearNetflixTrackRequest(pending.requestId);
     pending.resolve([...consumed.cues]);
   }
 
@@ -636,68 +604,7 @@ class NetflixAdapter implements SiteAdapter {
 
     this.#lastEmittedSignature = signature;
     this.#tracks = tracks;
-    this.#claimUnownedResponses();
     for (const callback of this.#trackCallbacks) callback([...tracks]);
-  }
-
-  #claimUnownedResponses(
-    requestedOwner: NetflixResponseOwner | undefined = this.#pending,
-    selectedTrackOwnsMissingLanguage = false,
-  ): void {
-    if (this.#tracks.length === 0 || this.#unownedResponses.length === 0) {
-      return;
-    }
-
-    const currentIdentity = readNetflixWatchIdentity(window.location.href);
-    const currentResponses = this.#unownedResponses.flatMap((response) => {
-      const generation = resolveNetflixUnownedResponseGeneration(
-        response.contentIdentity,
-        response.generation,
-        currentIdentity,
-        this.#generation,
-      );
-      return generation === undefined
-        ? []
-        : [{ ...response, generation }];
-    });
-
-    let claimedResponseId: string | undefined;
-    if (
-      requestedOwner !== undefined &&
-      sameGeneration(requestedOwner.generation, this.#generation)
-    ) {
-      const claimed = selectedTrackOwnsMissingLanguage
-        ? claimNetflixTtmlResponseForSelectedTrack(
-            this.#responseInbox,
-            currentResponses,
-            requestedOwner,
-          )
-        : claimNetflixTtmlResponseForPending(
-            this.#responseInbox,
-            currentResponses,
-            requestedOwner,
-          );
-      this.#responseInbox = claimed.inbox;
-      claimedResponseId = claimed.claimedResponseId;
-    }
-
-    const remaining: UnownedTtmlResponse[] = [];
-    for (const response of currentResponses) {
-      if (response.responseId === claimedResponseId) continue;
-      const nextInbox = recordNetflixTtmlResponseForUniqueTrack(
-        this.#responseInbox,
-        {
-          ...response,
-          candidates: this.#tracks,
-        },
-      );
-      const recorded = nextInbox.some(
-        ({ responseId }) => responseId === response.responseId,
-      );
-      this.#responseInbox = nextInbox;
-      if (!recorded) remaining.push(response);
-    }
-    this.#unownedResponses = remaining.slice(-MAX_UNOWNED_RESPONSES);
   }
 }
 
@@ -911,13 +818,33 @@ function canonicalLanguage(value: string | null | undefined): string | undefined
 }
 
 function sameLanguage(left: string, right: string): boolean {
-  const normalizedLeft = left.toLowerCase();
-  const normalizedRight = right.toLowerCase();
-  return (
-    normalizedLeft === normalizedRight ||
-    normalizedLeft.startsWith(`${normalizedRight}-`) ||
-    normalizedRight.startsWith(`${normalizedLeft}-`)
-  );
+  if (left.toLowerCase() === right.toLowerCase()) return true;
+  const leftLocale = new Intl.Locale(left);
+  const rightLocale = new Intl.Locale(right);
+  if (leftLocale.language !== rightLocale.language) return false;
+
+  const leftScript = scriptFamily(leftLocale);
+  const rightScript = scriptFamily(rightLocale);
+  if (leftScript !== undefined || rightScript !== undefined) {
+    return leftScript !== undefined && leftScript === rightScript;
+  }
+  return leftLocale.language !== 'zh';
+}
+
+function scriptFamily(locale: Intl.Locale): string | undefined {
+  if (locale.language !== 'zh') return locale.script || undefined;
+  if (locale.script === 'Hans' || locale.script === 'Hant') {
+    return locale.script;
+  }
+  if (locale.region === 'CN' || locale.region === 'SG') return 'Hans';
+  if (
+    locale.region === 'TW' ||
+    locale.region === 'HK' ||
+    locale.region === 'MO'
+  ) {
+    return 'Hant';
+  }
+  return undefined;
 }
 
 function hasClosedCaptionMarker(label: string, id: string): boolean {
@@ -1094,6 +1021,20 @@ function waitUntil(predicate: () => boolean, timeoutMs: number): Promise<void> {
 
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+function activateNetflixTrackRequest(requestId: string): void {
+  document.documentElement?.setAttribute(
+    NETFLIX_TRACK_REQUEST_ATTRIBUTE,
+    requestId,
+  );
+}
+
+function clearNetflixTrackRequest(requestId: string): void {
+  const root = document.documentElement;
+  if (root?.getAttribute(NETFLIX_TRACK_REQUEST_ATTRIBUTE) === requestId) {
+    root.removeAttribute(NETFLIX_TRACK_REQUEST_ATTRIBUTE);
+  }
 }
 
 function uniqueRequestedTracks(

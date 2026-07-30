@@ -4,6 +4,7 @@ import {
   isDuetSubMessage,
   maxSubtitleResponseMessage,
   netflixManifestMessage,
+  netflixTrackRequest,
   netflixTtmlResponseMessage,
   primeTimelineOffsetMessage,
   primeTtmlResponseMessage,
@@ -179,18 +180,52 @@ describe('Netflix MAIN to ISOLATED messages', () => {
       timedtexttracks: [],
     };
     const manifestMessage = netflixManifestMessage(manifest);
+    const request = netflixTrackRequest(
+      'request-1',
+      '81262752',
+      {
+        contentGeneration: 1,
+        clockGeneration: 1,
+        selectionGeneration: 2,
+      },
+      { id: 'japanese-cc', kind: 'closed-captions' },
+    );
     const ttmlMessage = netflixTtmlResponseMessage(
       'response-1',
-      '81262752',
+      'https://ipv4-c001-lax001-ix.1.oca.nflxvideo.net/japanese.ttml',
       '<?xml version="1.0"?><tt xmlns="http://www.w3.org/ns/ttml"/>',
+      request,
     );
 
     expect(manifestMessage.manifest).toBe(manifest);
     expect(isDuetSubMessage(manifestMessage)).toBe(true);
+    expect(isDuetSubMessage(request)).toBe(true);
     expect(isDuetSubMessage(ttmlMessage)).toBe(true);
+    expect(ttmlMessage).toMatchObject({
+      requestId: request.requestId,
+      generation: request.generation,
+      trackId: request.trackId,
+      trackKind: request.trackKind,
+    });
   });
 
   it('rejects malformed Netflix observation payloads', () => {
+    const request = netflixTrackRequest(
+      'request-1',
+      '81262752',
+      {
+        contentGeneration: 1,
+        clockGeneration: 1,
+        selectionGeneration: 0,
+      },
+      { id: 'japanese', kind: 'subtitles' },
+    );
+    const response = netflixTtmlResponseMessage(
+      'response-1',
+      'https://ipv4-c001-lax001-ix.1.oca.nflxvideo.net/japanese.ttml',
+      '<tt/>',
+      request,
+    );
     expect(
       isDuetSubMessage(
         netflixManifestMessage({ movieId: 81262752 }),
@@ -198,14 +233,20 @@ describe('Netflix MAIN to ISOLATED messages', () => {
     ).toBe(false);
     expect(
       isDuetSubMessage({
-        ...netflixTtmlResponseMessage('response-1', '81262752', '<tt/>'),
+        ...response,
         raw: '',
       }),
     ).toBe(false);
     expect(
       isDuetSubMessage({
-        ...netflixTtmlResponseMessage('response-1', '81262752', '<tt/>'),
+        ...response,
         contentIdentity: '../other-title',
+      }),
+    ).toBe(false);
+    expect(
+      isDuetSubMessage({
+        ...response,
+        generation: { ...request.generation, selectionGeneration: -1 },
       }),
     ).toBe(false);
   });

@@ -3,8 +3,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createNetflixAdapter } from '../src/adapters/netflix';
 import {
+  NETFLIX_TRACK_REQUEST_ATTRIBUTE,
   netflixManifestMessage,
+  netflixTrackRequestReady,
   netflixTtmlResponseMessage,
+  type NetflixTrackRequestMessage,
 } from '../src/core/messages';
 import netflixFixture from './fixtures/netflix-minimal.ttml?raw';
 
@@ -228,6 +231,7 @@ describe('Netflix adapter lifecycle', () => {
   it('acquires a non-default official pair and restores native state', async () => {
     vi.useFakeTimers();
     let onMessage: ((event: MessageEvent<unknown>) => void) | undefined;
+    let armedRequest: NetflixTrackRequestMessage | undefined;
     const fakeWindow = {
       addEventListener(
         type: string,
@@ -237,15 +241,26 @@ describe('Netflix adapter lifecycle', () => {
       },
       setTimeout,
       clearTimeout,
+      postMessage(message: NetflixTrackRequestMessage) {
+        if (message.type !== 'netflix-track-request') return;
+        armedRequest = message;
+        queueMicrotask(() => {
+          onMessage?.({
+            source: fakeWindow,
+            data: netflixTrackRequestReady(message, true),
+          } as unknown as MessageEvent<unknown>);
+        });
+      },
       location: {
         href: 'https://www.netflix.com/watch/81262757',
+        origin: 'https://www.netflix.com',
       },
     } as unknown as Window & typeof globalThis;
     let menuOpen = false;
     let selectedKey = 'simplified-chinese';
     let selectionClicks = 0;
-    let emitResponseAfterSelection = false;
     let controlsVisible = true;
+    const attributes = new Map<string, string>();
     const selectionHistory: string[] = [];
     const visible = {
       getClientRects: () => [{}],
@@ -279,17 +294,23 @@ describe('Netflix adapter lifecycle', () => {
         selectedKey = config.key;
         menuOpen = false;
         controlsVisible = false;
-        if (
-          emitResponseAfterSelection &&
-          config.key === 'japanese-cc'
-        ) {
+        if (armedRequest?.trackId === config.key) {
+          const request = armedRequest;
+          expect(
+            attributes.get(NETFLIX_TRACK_REQUEST_ATTRIBUTE),
+          ).toBe(request.requestId);
+          armedRequest = undefined;
           queueMicrotask(() => {
             onMessage?.({
               source: fakeWindow,
               data: netflixTtmlResponseMessage(
-                'japanese-after-selection',
-                '81262757',
-                netflixFixture.replace('xml:lang="en"', 'xml:lang="ja"'),
+                `${config.key}-response`,
+                `https://example.test/${config.key}.ttml`,
+                netflixFixture.replace(
+                  'xml:lang="en"',
+                  `xml:lang="${config.language}"`,
+                ),
+                request,
               ),
             } as unknown as MessageEvent<unknown>);
           });
@@ -353,6 +374,17 @@ describe('Netflix adapter lifecycle', () => {
     };
     vi.stubGlobal('window', fakeWindow);
     vi.stubGlobal('document', {
+      documentElement: {
+        setAttribute(name: string, value: string) {
+          attributes.set(name, value);
+        },
+        getAttribute(name: string) {
+          return attributes.get(name) ?? null;
+        },
+        removeAttribute(name: string) {
+          attributes.delete(name);
+        },
+      },
       querySelector(selector: string) {
         if (selector === '#appMountPoint video') return video;
         if (selector === '.watch-video--player-view') return player;
@@ -383,22 +415,6 @@ describe('Netflix adapter lifecycle', () => {
       clockGeneration: 2,
     });
 
-    onMessage?.({
-      source: fakeWindow,
-      data: netflixTtmlResponseMessage(
-        'early-japanese',
-        '81262757',
-        netflixFixture.replace('xml:lang="en"', 'xml:lang="ja"'),
-      ),
-    } as unknown as MessageEvent<unknown>);
-    onMessage?.({
-      source: fakeWindow,
-      data: netflixTtmlResponseMessage(
-        'early-simplified-chinese',
-        '81262757',
-        netflixFixture.replace('xml:lang="en"', 'xml:lang="zh-Hans"'),
-      ),
-    } as unknown as MessageEvent<unknown>);
     onMessage?.({
       source: fakeWindow,
       data: netflixManifestMessage({
@@ -463,11 +479,14 @@ describe('Netflix adapter lifecycle', () => {
       end: 24_708,
       language: 'zh-Hans',
     });
-    expect(selectionClicks).toBe(0);
+    expect(selectionClicks).toBe(2);
+    expect(selectionHistory).toEqual([
+      'japanese-cc',
+      'simplified-chinese',
+    ]);
     expect(selectedKey).toBe('simplified-chinese');
     expect(menuOpen).toBe(false);
 
-    emitResponseAfterSelection = true;
     const recapturedJapanese = adapter.fetchTrack(japaneseCc!);
     await vi.advanceTimersByTimeAsync(500);
 
@@ -475,6 +494,8 @@ describe('Netflix adapter lifecycle', () => {
       language: 'ja',
     });
     expect(selectionHistory).toEqual([
+      'japanese-cc',
+      'simplified-chinese',
       'japanese-cc',
       'simplified-chinese',
     ]);

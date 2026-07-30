@@ -125,4 +125,25 @@ describe('Netflix subtitle menu metadata', () => {
       ),
     ).toBeUndefined();
   });
+
+  it('never treats bare Chinese as a scripted Chinese menu handle', () => {
+    const bareChinese = parseNetflixMenuOptionMetadata({
+      dataUia: 'subtitle-item-zh',
+      label: '中文',
+      selected: false,
+    })!;
+
+    expect(
+      resolveNetflixMenuTrackKey(
+        track('manifest-simplified', 'zh-Hans', 'subtitles'),
+        [bareChinese],
+      ),
+    ).toBeUndefined();
+    expect(
+      resolveNetflixMenuTrackKey(
+        track('manifest-traditional', 'zh-Hant', 'subtitles'),
+        [bareChinese],
+      ),
+    ).toBeUndefined();
+  });
 });
