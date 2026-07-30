@@ -4,14 +4,73 @@
 
 **Blocked by:** 04 — Prime Video 任意官方语言对；05 — Netflix 任意官方语言对；06 — Max 任意官方语言对与受控对齐；07 — YouTube 创作者官方语言对。
 
-**Status:** claimed
+**Status:** resolved
 
-- [ ] 四站使用同一 Official Pair seam、动态选择器、selection generation 和 fail-closed 状态语义。
-- [ ] fresh install 默认保持 `en` 上、`zh-Hant` 下；用户保存的非默认 pair 在重启后恢复，但仅在当前节目可用时激活。
-- [ ] 全量自动测试、类型检查、生产构建、release archive 与最小权限检查通过。
-- [ ] 发布产物中没有静态全语言列表、调试标记、真实签名 URL、token、观看数据或 proprietary 字幕内容。
-- [ ] 隐私与产品文档明确两行均来自当前账号可用的官方字幕，手动官方路径不会调用任何翻译服务。
-- [ ] Prime、Netflix、Max、YouTube 各自的 logged-in human gate 证据可追溯到最终同一构建。
-- [ ] 最终报告明确分开 automated、logged-in human、environmental waived 与 not run；not run 不得写成 passed。
-- [ ] 逐站验证关闭 DuetSub 后 overlay 消失、原生字幕和菜单状态恢复。
-- [ ] 对既有 MT 实现、旧 tracker 票据和用户未跟踪逆向材料不做顺手清理或状态改写。
+- [x] 四站使用同一 Official Pair seam、动态选择器、selection generation 和 fail-closed 状态语义。
+- [x] fresh install 默认保持 `en` 上、`zh-Hant` 下；用户保存的非默认 pair 在重启后恢复，但仅在当前节目可用时激活。
+- [x] 全量自动测试、类型检查、生产构建、release archive 与最小权限检查通过。
+- [x] 发布产物中没有静态全语言列表、调试标记、真实签名 URL、token、观看数据或 proprietary 字幕内容。
+- [x] 隐私与产品文档明确两行均来自当前账号可用的官方字幕，手动官方路径不会调用任何翻译服务。
+- [x] Prime、Netflix、Max、YouTube 各自的 logged-in human gate 证据可追溯到最终同一构建。
+- [x] 最终报告明确分开 automated、logged-in human、environmental waived 与 not run；not run 不得写成 passed。
+- [x] 逐站验证关闭 DuetSub 后 overlay 消失、原生字幕和菜单状态恢复。
+- [x] 对既有 MT 实现、旧 tracker 票据和用户未跟踪逆向材料不做顺手清理或状态改写。
+
+## Answer
+
+Runtime candidate `fa0989e` is the final code-bearing commit. Its
+`.output/chrome-mv3` directory was synchronized to and then compared byte-for-byte
+with the unpacked directory loaded by Chrome. Prime Video, Netflix, Max and
+YouTube were all rechecked from that exact build after the final shared
+language-matching and resolved-language display fixes.
+
+### Automated
+
+- `npm test` — **PASS**, 47 test files / 220 tests.
+- `npm run check` — **PASS**.
+- `npm run release:build` — **PASS**; Chrome MV3 standalone archive, stable
+  extension ID and exact permission allowlists verified.
+- `npm run store:build` — **PASS**; store archive has no `manifest.key` and the
+  same least-privilege host boundary.
+- `npm audit --omit=dev` — **PASS**, 0 vulnerabilities.
+- `git diff --check` — **PASS**.
+- Artifact scan — **PASS**: no embedded user Workspace ID, API-key/Bearer/JWT
+  shape, materialized signed query credential, known viewing identifier,
+  logged-in subtitle sample, direct debug statement, source map, proprietary
+  research file or static all-language catalog.
+- Standalone archive SHA-256:
+  `1b4602f231b82a0d9961f47ef4e9b0e11a629ceb950a1b50b16c1b92aafc6ea6`.
+- Chrome Web Store archive SHA-256:
+  `3bd23edff5e17dc04c92debe35383e1bd09dde0f8782d79c3c5716abc6f64904`.
+
+### Logged-in human
+
+- Prime Video — **PASS**: final build recovered through
+  `重新載入官方字幕` to `en-US` top / `zh-Hant` bottom at 100%; real seek,
+  toggle-off native restoration and toggle-on recovery passed. The same branch
+  had already completed the non-default `ja-JP + zh-Hans` gate and
+  episode/video-replacement fail-closed check.
+- Netflix — **PASS**: episode 8 resolved to `en` top / `zh-Hant` bottom at 100%;
+  real seek, overlay removal, `.player-timedtext` restoration and re-enable
+  passed. The live route was the verified menu fallback; manifest fast path was
+  not claimed as observed.
+- Max — **PASS**: S1E1 resolved to `en-US` top / `zh-Hant-TW` bottom at 100%;
+  seek and toggle/native restoration passed while the video stayed
+  `readyState=4`, visible and error-free. Earlier same-branch evidence also
+  covered non-English/Chinese `id + th` original timing and episode replacement.
+- YouTube — **PASS**: two TED videos independently resolved to creator-official
+  `en` top / `zh-Hant` bottom at 100%; real seek, native caption-container
+  restoration, re-enable and cross-video stale ownership passed.
+
+### Gate classification
+
+- Automated: **PASS**.
+- Logged-in human: **PASS** for the four final-build site regressions above.
+- Environmental waived: **none**.
+- NOT RUN: advertisements on all four sites; Netflix live manifest fast path on
+  the final build; a naturally occurring YouTube one-time re-prime. None is
+  recorded as passed or waived.
+
+The manual Official Pair path never invokes MT, OpenCC, ASR or platform
+translation. Existing optional translation code, old tracker tickets and the
+user's untracked reverse-engineering material were not cleaned up or rewritten.

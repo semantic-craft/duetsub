@@ -4,7 +4,7 @@
 
 **Blocked by:** 03 — 交付动态官方语言选择器。
 
-**Status:** verified
+**Status:** resolved
 
 - [x] Netflix manifest 中所有可下载、非 forced-only 的官方文字轨按 canonical BCP-47 进入目录。
 - [x] menu fallback 优先解析通用机器语言码；对 Netflix 当前不再携带 `lang` 的菜单，只允许英语、简/繁中文、日语、韩语的明确中英文 label alias，未知本地化 label 继续 fail closed。
@@ -16,7 +16,13 @@
 - [x] 登录态真人 gate 使用英语在上、繁体中文在下验证双行、切换、seek、换集、关闭与原字幕恢复。
 - [x] 任一所选语言缺失时明确提示该语言不可用，并保持 Netflix 原生字幕可见。
 
-## Verification (verified)
+## Answer
+
+- Netflix manifest 与可验证菜单目录均接入共享 Official Pair seam；普通字幕/CC 变体、top/bottom ownership、selection/clock/content generation 和恢复失败均按结构化机器元数据处理。
+- 当前 production 播放路径使用可验证 menu fallback 与本页已观察的 TTML 根请求；未知本地化 label、forced/image-only/空轨和歧义轨道继续 fail closed，不进入官方目录。
+- 英语在上、繁体中文在下已覆盖真实双行、seek、同页换集/video replacement、关闭与原生字幕恢复；最终运行候选 `fa0989e` 又在最终集成构建上重复关键路径。
+
+## Verification
 
 Automated:
 
@@ -37,3 +43,6 @@ Logged-in human gate: **PASS**。
 - 第 8 集 seek 到约 393 秒后真实显示 `He was just an old man you met here.` / `他只是你在這裡 / 第一個認識的老人而已`；最终视觉复核又显示 `-Where the hell are you? / -Chief, can you hear me?` / `-組長，你聽得到我的聲音嗎？ / -你這混小子人在哪裡？`。
 - Netflix 专属语言菜单实测宽 `480px`，状态/字段标签 `18px`，选项与操作项 `20px`，下拉框高 `56px`；不再受 Netflix 根字号 `10px` 缩小。
 - 本轮未命中 manifest 快路径；真人证据明确来自可验证 menu fallback 与当前页缓存 TTML 回放，不把未观察路径记为通过。
+- Final same-build regression on 2026-07-31: the unpacked directory was byte-identical to runtime candidate `fa0989e`. Episode 8 resolved to `官方英语 + 官方繁体中文 · 100%`, with actual menu values `en` on top and `zh-Hant` below. A real seek changed the displayed official cues; disabling removed the overlay and restored visible `.player-timedtext`, and re-enabling restored the 100% pair and hid the native layer only after both tracks were ready.
+- Final automated release gate: **PASS**, 47 test files / 220 tests, TypeScript, standalone/store Chrome MV3 archives, least-privilege manifest verification, artifact privacy scan and `git diff --check`.
+- Live manifest fast-path observation and ads were **NOT RUN** on the final candidate; the current verified runtime route was menu fallback. **WAIVED: none.**

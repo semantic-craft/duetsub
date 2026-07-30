@@ -1,8 +1,9 @@
 # DuetSub 官方双语语言选择差量规范
 
-Status: design-ready, implementation not started
-Date: 2026-07-30
+Status: implemented and verified
+Date: 2026-07-31
 Baseline: `v0.1.6` / `1f77a34`
+Runtime candidate: `fa0989e`
 
 ## 1. 结论
 

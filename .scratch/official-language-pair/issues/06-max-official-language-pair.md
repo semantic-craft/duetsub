@@ -4,7 +4,7 @@
 
 **Blocked by:** 03 — 交付动态官方语言选择器。
 
-**Status:** verified
+**Status:** resolved
 
 - [x] Max 官方目录从当前播放器的可验证 DOM 轨生成，并与完整 playbackInfo/MPD 资源唯一映射。
 - [x] top/bottom 选择取代 English-primary/Chinese-secondary 默认选择，不从单条 VTT 或 label 猜测轨道归属。
@@ -17,6 +17,12 @@
 - [x] 登录态真人 gate 按用户指定的英上繁中下验证双行、seek、换集 /
       video replacement、关闭和菜单恢复；另以印尼语 + 泰语验证任意官方语言对。
 - [x] 真人 gate 同时确认 video 画面持续可见，不复发 overlay 合成导致的黑画面回归。
+
+## Answer
+
+- Max 的 DOM、playbackInfo、MPD 与 VTT 资源按结构化机器语言码唯一映射到共享 Official Pair seam；任意 pair 默认保留两条官方轨原始时序。
+- 只有精确 `en-US` closed captions + `zh-Hant-TW` subtitles 进入既有白名单对齐；覆盖率不足时保留原始双轨，不猜 offset、不改写文本、不丢弃整对。
+- 非英中 `id + th` 已通过真人原始时序 gate；用户指定的英上繁中下又在最终运行候选 `fa0989e` 上覆盖 seek、关闭/恢复和 video 可见性。
 
 ## Automated verification
 
@@ -55,4 +61,17 @@ He killed someone.` 与 `好‥`。新 video 为 `readyState=4`、
 
 此外，最终逻辑的前一构建已在同一《Pilot》中用 `id` 上方 + `th` 下方验证任意
 非英中官方语言对达到 100%，强制重载后同对恢复；本次 Max 选择与换集改动不触及该
-原始时序路径。Ticket 标记 `verified`。
+原始时序路径。
+
+最终同构建回归于 2026-07-31 使用与 unpacked 加载目录逐文件一致的 runtime candidate
+`fa0989e`。S1E1《Pilot》达到
+`官方美国英语 + 官方中文（繁体，台湾） · 100%`，实际选择为上方 `en-US`、
+下方 `zh-Hant-TW`；真实 seek 后两条官方行继续更新。关闭 DuetSub 后 overlay
+消失，原生 caption renderer 立即可见；重新开启后 100% 双轨恢复并再次隐藏原生层。
+全程 video 保持 `readyState=4`、`display:inline`、`visibility:visible`。
+
+Final automated release gate: **PASS**，47 个测试文件 / 220 个测试、TypeScript、
+standalone/store Chrome MV3 archives、least-privilege manifest verification、
+artifact privacy scan 与 `git diff --check` 全部通过。
+
+Ads：**NOT RUN** on the final candidate。**WAIVED：无。**
