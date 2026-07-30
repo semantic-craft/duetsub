@@ -8,7 +8,7 @@ export default defineConfig({
     name: '__MSG_extensionName__',
     description: '__MSG_extensionDescription__',
     default_locale: 'en',
-    version: '0.1.6',
+    version: '0.1.7',
     ...(mode === 'store' ? {} : { key: STABLE_EXTENSION_PUBLIC_SPKI }),
     permissions: ['storage', 'webRequest'],
     host_permissions: [

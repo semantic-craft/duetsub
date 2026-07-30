@@ -62,6 +62,32 @@ Netflix's live manifest fast path and a naturally occurring YouTube one-time
 re-prime were **NOT RUN** on the final candidate and are not reported as PASS or
 WAIVED. **Environmental WAIVED: none.**
 
+## `v0.1.7` release candidate
+
+- **PASS — real Qwen Workspace Responses API:** the opt-in live suite made
+  eight requests with `qwen3.7-flash`, covering the film/TV and YouTube prompt
+  profiles in both translation directions twice. All cases preserved cue IDs,
+  ordering, source timestamps, line constraints, and the frozen semantic
+  anchors. The API key was read only from the process environment; neither it
+  nor the Workspace ID is tracked.
+- **PASS — automated release archive:** `npm run release:build` passed 49 test
+  files / 233 tests with the live suite skipped by default, TypeScript checking,
+  Chrome MV3 packaging, stable-ID verification, archive-content checks, and the
+  least-privilege host boundary. SHA-256:
+  `7f5ec80a1663b6ff80df11aa5cd67c92411d79f0b3eb7dc1f02f91b11e029e05`.
+- **PASS — automated store archive:** `npm run store:build` passed the same
+  behavior and type gates. The 25-file store package omits `manifest.key` and
+  retains the least-privilege host boundary. SHA-256:
+  `9f766924df558ef45a27a714bd186d5007de7f796d04a9d318d425df36b5d393`.
+- **PASS — dependency and diff checks:** `npm audit --omit=dev` reported zero
+  vulnerabilities and `git diff --check` passed.
+- **NOT RUN — exact-candidate logged-in playback:** the earlier Official
+  Language Pair candidate evidence remains recorded above, but Netflix, Prime
+  Video, Max, and YouTube were not replayed from the packaged `0.1.7` build.
+- **NOT RUN — Chrome Web Store dashboard and GitHub Release:** both verified
+  archives were built locally; no dashboard upload, tag, or public release was
+  created in this run.
+
 ## `v0.1.6` release candidate
 
 - **PASS — automated release archive:** `npm run release:build` passed 37 test files / 135 tests, TypeScript checking, Chrome MV3 packaging, stable-ID verification, archive-content checks, and the least-privilege host boundary.
