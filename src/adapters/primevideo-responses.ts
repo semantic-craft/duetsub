@@ -92,6 +92,9 @@ function acceptedPrimeTtmlLanguages(language: string): readonly string[] {
   if (normalized === 'zh-hant') {
     return ['zh-Hant', 'cmn-Hant', 'zh-TW', 'cmn-TW'];
   }
+  if (normalized === 'zh-hans') {
+    return ['zh-Hans', 'cmn-Hans', 'zh-CN', 'cmn-CN'];
+  }
   if (normalized === 'ja' || normalized === 'ja-jp') {
     return [language, 'ja', 'jp'];
   }
