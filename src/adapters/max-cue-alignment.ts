@@ -1,25 +1,55 @@
 import type { Cue, TrackInfo } from '../core/contracts';
+import {
+  isMaxEnglishTraditionalChineseLanguagePair,
+} from '../core/official-pair-selection';
 
 const MIN_UNIQUE_ALIGNMENT_COVERAGE = 0.95;
 const MAX_CHINESE_LEAD_MS = 250;
 
-export function selectMaxEnglishPrimaryTrack(
-  tracks: readonly TrackInfo[],
-): TrackInfo | undefined {
-  const officialEnglish = tracks.filter(
-    (track) =>
-      track.source === 'official' &&
-      (track.language.toLowerCase() === 'en' ||
-        track.language.toLowerCase().startsWith('en-')),
+export type MaxOfficialPairCueResolution =
+  | {
+      readonly kind: 'ready';
+      readonly policy:
+        | 'original-timing'
+        | 'english-cc-traditional-chinese';
+      readonly topCues: readonly Cue[];
+      readonly bottomCues: readonly Cue[];
+    }
+  | {
+      readonly kind: 'unavailable';
+      readonly reason: 'alignment-coverage';
+    };
+
+export function resolveMaxOfficialPairCues(input: {
+  readonly top: TrackInfo;
+  readonly bottom: TrackInfo;
+  readonly topCues: readonly Cue[];
+  readonly bottomCues: readonly Cue[];
+}): MaxOfficialPairCueResolution {
+  if (!usesVerifiedCompatibilityPolicy(input.top, input.bottom)) {
+    return {
+      kind: 'ready',
+      policy: 'original-timing',
+      topCues: input.topCues,
+      bottomCues: input.bottomCues,
+    };
+  }
+
+  const bottomCues = alignMaxChineseCuesToEnglish(
+    input.topCues,
+    input.bottomCues,
   );
-  return officialEnglish.find((track) =>
-    track.kind === 'closed-captions'
-  ) ??
-    officialEnglish.find((track) => track.kind === 'subtitles') ??
-    officialEnglish[0];
+  return bottomCues.length === 0
+    ? { kind: 'unavailable', reason: 'alignment-coverage' }
+    : {
+        kind: 'ready',
+        policy: 'english-cc-traditional-chinese',
+        topCues: input.topCues,
+        bottomCues,
+      };
 }
 
-export function alignMaxChineseCuesToEnglish(
+function alignMaxChineseCuesToEnglish(
   englishCues: readonly Cue[],
   chineseCues: readonly Cue[],
 ): Cue[] {
@@ -189,4 +219,23 @@ function splitDialogueUnits(text: string): string[] {
 
 function nonEmptyLines(text: string): string[] {
   return text.split('\n').map((line) => line.trim()).filter(Boolean);
+}
+
+function usesVerifiedCompatibilityPolicy(
+  top: TrackInfo,
+  bottom: TrackInfo,
+): boolean {
+  if (
+    top.source !== 'official' ||
+    top.kind !== 'closed-captions' ||
+    bottom.source !== 'official' ||
+    bottom.kind !== 'subtitles'
+  ) {
+    return false;
+  }
+  return isMaxEnglishTraditionalChineseLanguagePair(
+    'max',
+    top.language,
+    bottom.language,
+  );
 }

@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  alignMaxChineseCuesToEnglish,
-  selectMaxEnglishPrimaryTrack,
+  resolveMaxOfficialPairCues,
 } from '../src/adapters/max-cue-alignment';
 import type { Cue, TrackInfo } from '../src/core/contracts';
 
@@ -12,6 +11,31 @@ const cue = (
   text: string,
   language: string,
 ): Cue => ({ start, end, text, language });
+
+function alignMaxChineseCuesToEnglish(
+  topCues: readonly Cue[],
+  bottomCues: readonly Cue[],
+): readonly Cue[] {
+  const result = resolveMaxOfficialPairCues({
+    top: {
+      id: 'en-US-closedcaptions',
+      language: 'en-US',
+      source: 'official',
+      label: 'English CC',
+      kind: 'closed-captions',
+    },
+    bottom: {
+      id: 'zh-Hant-TW-subtitles',
+      language: 'zh-Hant-TW',
+      source: 'official',
+      label: 'Traditional Chinese',
+      kind: 'subtitles',
+    },
+    topCues,
+    bottomCues,
+  });
+  return result.kind === 'ready' ? result.bottomCues : [];
+}
 
 describe('alignMaxChineseCuesToEnglish', () => {
   it('shows a delayed Chinese cue for the full English cue that contains its original start', () => {
@@ -121,25 +145,118 @@ describe('alignMaxChineseCuesToEnglish', () => {
   });
 });
 
-describe('selectMaxEnglishPrimaryTrack', () => {
-  it('prefers the official English closed-caption track over ordinary subtitles', () => {
-    const subtitles: TrackInfo = {
-      id: 'en-US-subtitles',
-      language: 'en-US',
-      source: 'official',
-      label: 'English',
-      kind: 'subtitles',
-    };
-    const closedCaptions: TrackInfo = {
-      id: 'en-US-closedcaptions',
-      language: 'en-US',
-      source: 'official',
-      label: 'English CC',
-      kind: 'closed-captions',
-    };
+describe('resolveMaxOfficialPairCues', () => {
+  const officialTrack = (
+    id: string,
+    language: string,
+    kind: TrackInfo['kind'] = 'subtitles',
+  ): TrackInfo => ({
+    id,
+    language,
+    source: 'official',
+    label: id,
+    kind,
+  });
+
+  it('preserves both original timelines for a non-whitelisted language pair', () => {
+    const topCues = [
+      cue(1_000, 2_000, '日本語', 'ja'),
+    ];
+    const bottomCues = [
+      cue(1_500, 2_500, '简体中文', 'zh-Hans-SG'),
+    ];
+
+    const result = resolveMaxOfficialPairCues({
+      top: officialTrack('ja-subtitles', 'ja'),
+      bottom: officialTrack('zh-Hans-SG-subtitles', 'zh-Hans-SG'),
+      topCues,
+      bottomCues,
+    });
+
+    expect(result).toEqual({
+      kind: 'ready',
+      policy: 'original-timing',
+      topCues,
+      bottomCues,
+    });
+    if (result.kind === 'ready') {
+      expect(result.topCues).toBe(topCues);
+      expect(result.bottomCues).toBe(bottomCues);
+    }
+  });
+
+  it('applies only the verified English CC and Traditional Chinese compatibility policy', () => {
+    const topCues = [
+      cue(9_100, 11_300, 'English question', 'en-US'),
+    ];
+    const bottomCues = [
+      cue(11_090, 12_100, '中文問題', 'zh-Hant-TW'),
+    ];
 
     expect(
-      selectMaxEnglishPrimaryTrack([subtitles, closedCaptions]),
-    ).toEqual(closedCaptions);
+      resolveMaxOfficialPairCues({
+        top: officialTrack(
+          'en-US-closedcaptions',
+          'en-US',
+          'closed-captions',
+        ),
+        bottom: officialTrack(
+          'zh-Hant-TW-subtitles',
+          'zh-Hant-TW',
+        ),
+        topCues,
+        bottomCues,
+      }),
+    ).toEqual({
+      kind: 'ready',
+      policy: 'english-cc-traditional-chinese',
+      topCues,
+      bottomCues: [
+        cue(9_100, 11_300, '中文問題', 'zh-Hant-TW'),
+      ],
+    });
+
+    expect(
+      resolveMaxOfficialPairCues({
+        top: officialTrack('en-US-subtitles', 'en-US'),
+        bottom: officialTrack(
+          'zh-Hant-TW-subtitles',
+          'zh-Hant-TW',
+        ),
+        topCues,
+        bottomCues,
+      }),
+    ).toMatchObject({
+      kind: 'ready',
+      policy: 'original-timing',
+      bottomCues,
+    });
+  });
+
+  it('fails the whole verified pair when unique alignment coverage is too low', () => {
+    expect(
+      resolveMaxOfficialPairCues({
+        top: officialTrack(
+          'en-US-closedcaptions',
+          'en-US',
+          'closed-captions',
+        ),
+        bottom: officialTrack(
+          'zh-Hant-TW-subtitles',
+          'zh-Hant-TW',
+        ),
+        topCues: [
+          cue(1_000, 2_000, 'First English cue', 'en-US'),
+          cue(4_000, 5_000, 'Second English cue', 'en-US'),
+        ],
+        bottomCues: [
+          cue(1_500, 2_500, '可驗證', 'zh-Hant-TW'),
+          cue(3_000, 3_500, '無候選', 'zh-Hant-TW'),
+        ],
+      }),
+    ).toEqual({
+      kind: 'unavailable',
+      reason: 'alignment-coverage',
+    });
   });
 });

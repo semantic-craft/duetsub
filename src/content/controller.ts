@@ -1,7 +1,6 @@
 import type { Cue, SiteAdapter, SiteId, TrackInfo } from '../core/contracts';
 import {
-  alignMaxChineseCuesToEnglish,
-  selectMaxEnglishPrimaryTrack,
+  resolveMaxOfficialPairCues,
 } from '../adapters/max-cue-alignment';
 import {
   acceptPlaybackGeneration,
@@ -486,7 +485,7 @@ class PlaybackController {
       this.#render();
       return;
     }
-    if (this.#hasSavedLanguagePairPreference) {
+    if (this.#hasSavedLanguagePairPreference || this.#siteId === 'max') {
       void this.#acquireSelectedOfficialTracks(
         bindPlaybackGeneration(this.#state, tracks),
         this.#interactionRevision,
@@ -557,9 +556,20 @@ class PlaybackController {
       if (cues.kind !== 'ready') {
         throw new Error(`Selected official pair unavailable: ${cues.reason}`);
       }
+      const maxCues = this.#siteId === 'max'
+        ? resolveMaxOfficialPairCues({
+            top: cues.top,
+            bottom: cues.bottom,
+            topCues: cues.topCues,
+            bottomCues: cues.bottomCues,
+          })
+        : undefined;
+      if (maxCues?.kind === 'unavailable') {
+        throw new Error('Max official pair alignment coverage unavailable');
+      }
 
-      this.#topCues = cues.topCues;
-      this.#bottomCues = cues.bottomCues;
+      this.#topCues = maxCues?.topCues ?? cues.topCues;
+      this.#bottomCues = maxCues?.bottomCues ?? cues.bottomCues;
       this.#topLanguage = cues.top.language;
       this.#bottomLanguage = cues.bottom.language;
       this.#topMachineTranslated = false;
@@ -568,7 +578,10 @@ class PlaybackController {
       this.#state = reducePlaybackLifecycle(this.#state, {
         type: 'tracks-ready',
       });
-      this.#readyStatus = `${pairLabel(this.#languagePairPreference)} · 100%`;
+      this.#readyStatus = maxCues?.policy ===
+          'english-cc-traditional-chinese'
+        ? `${pairLabel(this.#languagePairPreference)} 對齊 · 100%`
+        : `${pairLabel(this.#languagePairPreference)} · 100%`;
       this.#status = this.#readyStatus;
       this.#render();
     } catch (error) {
@@ -605,8 +618,6 @@ class PlaybackController {
 
     const decision = this.#siteId === 'youtube'
       ? decideYouTubeSources(tracks)
-      : this.#siteId === 'max'
-      ? decideMaxSources(tracks)
       : decideSubtitleSources(tracks);
     if (decision.english === undefined || decision.chinese === undefined) {
       this.#status = '開啟 · 沒有可用的英文或中文來源';
@@ -661,19 +672,8 @@ class PlaybackController {
       const chineseCues = accepted.chinese.kind === 'mt'
         ? []
         : accepted.chinese.cues;
-      const maxEnglishPrimaryAligned =
-        this.#siteId === 'max' &&
-        accepted.english.kind === 'official' &&
-        accepted.chinese.kind !== 'mt';
-      const displayedChineseCues = maxEnglishPrimaryAligned
-        ? alignMaxChineseCuesToEnglish(englishCues, chineseCues)
-        : chineseCues;
-      if (maxEnglishPrimaryAligned && displayedChineseCues.length === 0) {
-        throw new Error('Max English-primary cue alignment unavailable');
-      }
-
       this.#topCues = englishCues;
-      this.#bottomCues = displayedChineseCues;
+      this.#bottomCues = chineseCues;
       this.#topMachineTranslated = accepted.english.kind === 'mt' ||
         (accepted.english.kind === 'official' &&
           accepted.english.trackSource === 'platform-mt');
@@ -690,11 +690,7 @@ class PlaybackController {
         ? { side: 'bottom' as const, value: accepted.chinese }
         : undefined;
       if (mt === undefined) {
-        this.#readyStatus = maxEnglishPrimaryAligned
-          ? accepted.chinese.kind === 'opencc'
-            ? '官方英文主軌 + OpenCC 繁中對齊 · 100%'
-            : '官方英文主軌 + 官方繁中對齊 · 100%'
-          : accepted.chinese.kind === 'opencc'
+        this.#readyStatus = accepted.chinese.kind === 'opencc'
           ? '官方簡中 + OpenCC 繁中 · 100%'
           : accepted.english.kind === 'official' &&
               accepted.chinese.kind === 'official'
@@ -1193,21 +1189,6 @@ function decideYouTubeSources(
     };
   }
   return decideSubtitleSources(tracks);
-}
-
-function decideMaxSources(
-  tracks: readonly TrackInfo[],
-): SubtitleSourceDecision {
-  const decision = decideSubtitleSources(tracks);
-  const english = selectMaxEnglishPrimaryTrack(tracks);
-  if (english === undefined) return decision;
-
-  return {
-    english: { kind: 'official', track: english },
-    chinese: decision.chinese?.kind === 'mt'
-      ? { ...decision.chinese, source: english }
-      : decision.chinese,
-  };
 }
 
 function selectedTrackStatus(

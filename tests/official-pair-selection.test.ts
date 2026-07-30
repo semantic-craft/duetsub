@@ -101,7 +101,7 @@ describe('resolveOfficialPair', () => {
     ]);
   });
 
-  it('prefers ordinary subtitles over closed captions without parsing labels', () => {
+  it('keeps the verified Max English CC preference inside the default compatibility pair', () => {
     const closedCaptions = track('en-closed-captions', 'en', {
       kind: 'closed-captions',
       label: 'English accessibility track',
@@ -119,6 +119,25 @@ describe('resolveOfficialPair', () => {
           track('zh-Hant-subtitles', 'zh-Hant'),
         ],
         preference: DEFAULT_PAIR,
+      }),
+    ).toMatchObject({
+      kind: 'ready',
+      top: closedCaptions,
+    });
+
+    expect(
+      resolveOfficialPair({
+        siteId: 'max',
+        tracks: [
+          closedCaptions,
+          subtitles,
+          track('japanese', 'ja'),
+        ],
+        preference: {
+          version: 1,
+          top: 'en',
+          bottom: 'ja',
+        },
       }),
     ).toMatchObject({
       kind: 'ready',

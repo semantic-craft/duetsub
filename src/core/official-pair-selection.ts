@@ -133,12 +133,22 @@ export function resolveOfficialPair(input: {
   const topSelection = selectLanguageTrack(
     tracks,
     topLanguage,
-    input.siteId,
+    officialTrackKindPreference(
+      input.siteId,
+      topLanguage,
+      bottomLanguage,
+      'top',
+    ),
   );
   const bottomSelection = selectLanguageTrack(
     tracks,
     bottomLanguage,
-    input.siteId,
+    officialTrackKindPreference(
+      input.siteId,
+      topLanguage,
+      bottomLanguage,
+      'bottom',
+    ),
   );
   if (
     topSelection.kind === 'ambiguous' ||
@@ -165,6 +175,21 @@ export function resolveOfficialPair(input: {
         : 'top-missing'
       : 'bottom-missing',
   };
+}
+
+export function isMaxEnglishTraditionalChineseLanguagePair(
+  siteId: SiteId,
+  topLanguage: CanonicalLanguageTag,
+  bottomLanguage: CanonicalLanguageTag,
+): boolean {
+  const top = canonicalLanguage(topLanguage);
+  const bottom = canonicalLanguage(bottomLanguage);
+  return siteId === 'max' &&
+    top !== undefined &&
+    bottom !== undefined &&
+    languageParts(top).language === 'en' &&
+    languageParts(bottom).language === 'zh' &&
+    scriptFamily(languageParts(bottom)) === 'Hant';
 }
 
 export function createOfficialTrackCatalog(
@@ -208,11 +233,11 @@ export function resolveOfficialPairCues(input: {
 function selectLanguageTrack(
   tracks: readonly CatalogTrack[],
   preference: CanonicalLanguageTag | undefined,
-  siteId: SiteId,
+  preferredKinds: readonly TrackInfo['kind'][],
 ): LanguageTrackSelection {
   if (preference === undefined) return { kind: 'missing' };
   const exact = tracks.filter(({ language }) => language === preference);
-  if (exact.length > 0) return selectedVariant(exact, siteId);
+  if (exact.length > 0) return selectedVariant(exact, preferredKinds);
 
   const preferredLanguage = languageParts(preference);
   const preferredScript = scriptFamily(preferredLanguage);
@@ -229,7 +254,7 @@ function selectLanguageTrack(
       candidateScript === undefined;
   });
   if (scriptMatches.length > 0) {
-    return selectedVariant(scriptMatches, siteId);
+    return selectedVariant(scriptMatches, preferredKinds);
   }
 
   if (
@@ -249,7 +274,7 @@ function selectLanguageTrack(
   if (baseMatches.length === 0) return { kind: 'missing' };
   if (scriptFamilies.size > 1) return { kind: 'ambiguous' };
   if (preferredLanguage.language !== 'zh') {
-    return selectedVariant(baseMatches, siteId);
+    return selectedVariant(baseMatches, preferredKinds);
   }
   const [onlyFamily] = scriptFamilies;
   return onlyFamily === undefined
@@ -258,7 +283,7 @@ function selectLanguageTrack(
         baseMatches.filter(({ language }) =>
           scriptFamily(languageParts(language)) === onlyFamily
         ),
-        siteId,
+        preferredKinds,
       );
 }
 
@@ -274,9 +299,9 @@ function officialCatalogTracks(
 
 function selectedVariant(
   candidates: readonly CatalogTrack[],
-  siteId: SiteId,
+  preferredKinds: readonly TrackInfo['kind'][],
 ): LanguageTrackSelection {
-  const track = selectVariant(candidates, siteId);
+  const track = selectVariant(candidates, preferredKinds);
   return track === undefined
     ? { kind: 'missing' }
     : { kind: 'selected', track };
@@ -284,9 +309,8 @@ function selectedVariant(
 
 function selectVariant(
   candidates: readonly CatalogTrack[],
-  siteId: SiteId,
+  preferredKinds: readonly TrackInfo['kind'][],
 ): TrackInfo | undefined {
-  const preferredKinds = officialTrackKindPreference(siteId);
   return candidates.toSorted(
     (left, right) =>
       preferredKinds.indexOf(left.track.kind) -
@@ -296,8 +320,22 @@ function selectVariant(
 
 function officialTrackKindPreference(
   siteId: SiteId,
+  topLanguage: CanonicalLanguageTag | undefined,
+  bottomLanguage: CanonicalLanguageTag | undefined,
+  side: 'top' | 'bottom',
 ): readonly TrackInfo['kind'][] {
-  void siteId;
+  if (
+    side === 'top' &&
+    topLanguage !== undefined &&
+    bottomLanguage !== undefined &&
+    isMaxEnglishTraditionalChineseLanguagePair(
+      siteId,
+      topLanguage,
+      bottomLanguage,
+    )
+  ) {
+    return ['closed-captions', 'subtitles'];
+  }
   return ['subtitles', 'closed-captions'];
 }
 

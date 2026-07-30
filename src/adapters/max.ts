@@ -61,6 +61,7 @@ class MaxAdapter implements SiteAdapter {
   #generation: PlaybackGeneration = {
     contentGeneration: 0,
     clockGeneration: 0,
+    selectionGeneration: 0,
   };
   #inbox: MaxResponseInbox = EMPTY_MAX_RESPONSE_INBOX;
   #tracks: readonly TrackInfo[] = [];
