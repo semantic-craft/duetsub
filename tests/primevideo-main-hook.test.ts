@@ -189,8 +189,34 @@ describe('Prime MAIN-world response observation', () => {
     expect(postMessage.mock.calls[2]?.[0]).not.toHaveProperty('observation');
     expect(originalFetch).toHaveBeenCalledTimes(3);
 
+    messageListener?.({
+      source: window,
+      data: {
+        channel: 'duetsub',
+        version: 1,
+        direction: 'isolated-to-main',
+        type: 'request-prime-cached-ttml',
+        siteId: 'primevideo',
+        requestId: 'cached-english-request',
+        trackId: 'en-us_Caption_Dialog',
+        generation: observationGeneration,
+      },
+    } as unknown as MessageEvent<unknown>);
+    await vi.waitFor(() => {
+      expect(postMessage).toHaveBeenCalledTimes(4);
+    });
+    expect(postMessage.mock.calls[3]?.[0]).toMatchObject({
+      type: 'prime-ttml-response',
+      raw: completeTrack,
+      observation: {
+        requestId: 'cached-english-request',
+        trackId: 'en-us_Caption_Dialog',
+        generation: observationGeneration,
+      },
+    });
+
     const previewMediaSource = new MediaSource();
-    URL.createObjectURL(previewMediaSource);
+    const previewSource = URL.createObjectURL(previewMediaSource);
     const previewAudio = previewMediaSource.addSourceBuffer('audio/mp4');
     const previewVideo = previewMediaSource.addSourceBuffer('video/mp4');
     previewAudio.timestampOffset = 0;
@@ -208,12 +234,28 @@ describe('Prime MAIN-world response observation', () => {
       },
     } as unknown as MessageEvent<unknown>);
     await vi.waitFor(() => {
-      expect(postMessage).toHaveBeenCalledTimes(4);
+      expect(postMessage).toHaveBeenCalledTimes(5);
     });
     expect(postMessage.mock.calls.at(-1)?.[0]).toMatchObject({
       type: 'prime-timeline-offset',
       requestId: 'clock-request',
       timelineOffsetMs: 6_000,
     });
+
+    activeVideoSource = previewSource;
+    messageListener?.({
+      source: window,
+      data: {
+        channel: 'duetsub',
+        version: 1,
+        direction: 'isolated-to-main',
+        type: 'request-prime-cached-ttml',
+        siteId: 'primevideo',
+        requestId: 'preview-cache-request',
+        trackId: 'en-us_Caption_Dialog',
+        generation: observationGeneration,
+      },
+    } as unknown as MessageEvent<unknown>);
+    expect(postMessage).toHaveBeenCalledTimes(5);
   });
 });

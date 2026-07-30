@@ -9,7 +9,13 @@ import {
 
 const xhrUrls = new WeakMap<XMLHttpRequest, string>();
 const completeFragmentedTextPayloads = new Map<string, Promise<string>>();
+const cachedPayloadsByMediaSource = new Map<
+  string,
+  Array<{ readonly url: string; readonly raw: string }>
+>();
 const PRIME_ZERO_OFFSET_STABILITY_MS = 2_000;
+const MAX_CACHED_MEDIA_SOURCES = 4;
+const MAX_CACHED_PAYLOADS_PER_SOURCE = 8;
 const PRIME_SUBTITLE_RADIO_SELECTOR =
   'input[type="radio"][name="subtitle"]';
 const OBSERVATION_REQUEST_ATTRIBUTE = 'data-duetsub-observation-request';
@@ -20,16 +26,29 @@ let activePrimeTtmlObservation: PrimeTtmlObservationOwnership | undefined;
 
 export function startPrimeVideoMainHook(): void {
   activePrimeTtmlObservation = undefined;
+  completeFragmentedTextPayloads.clear();
+  cachedPayloadsByMediaSource.clear();
   readPrimeTimelineOffsetMs = observePrimePlaybackTimeline();
-  window.addEventListener('message', respondWithPrimeTimelineOffset);
+  window.addEventListener('message', respondToPrimeRequest);
   document.addEventListener('click', observePrimeSubtitleClick, true);
   const originalFetch = patchFetch();
   patchXmlHttpRequest(originalFetch);
 }
 
-function respondWithPrimeTimelineOffset(event: MessageEvent<unknown>): void {
+function respondToPrimeRequest(event: MessageEvent<unknown>): void {
   if (event.source !== window || !isDuetSubMessage(event.data)) return;
   const message = event.data;
+  if (
+    message.direction === 'isolated-to-main' &&
+    message.type === 'request-prime-cached-ttml'
+  ) {
+    replayCachedPrimeTtml({
+      requestId: message.requestId,
+      trackId: message.trackId,
+      generation: message.generation,
+    });
+    return;
+  }
   if (
     message.direction !== 'isolated-to-main' ||
     message.type !== 'request-prime-timeline-offset'
@@ -359,6 +378,49 @@ function forwardRawResponse(
   postDuetSubMessage(
     primeTtmlResponseMessage(crypto.randomUUID(), url, raw, observation),
   );
+  cachePrimeTtmlPayload(url, raw);
+}
+
+function cachePrimeTtmlPayload(url: string, raw: string): void {
+  const mediaSource = activePrimeMediaSource();
+  if (mediaSource === undefined) return;
+  const cached = cachedPayloadsByMediaSource.get(mediaSource) ?? [];
+  cachedPayloadsByMediaSource.delete(mediaSource);
+  cachedPayloadsByMediaSource.set(
+    mediaSource,
+    [
+      ...cached.filter((candidate) => candidate.url !== url),
+      { url, raw },
+    ].slice(-MAX_CACHED_PAYLOADS_PER_SOURCE),
+  );
+  while (cachedPayloadsByMediaSource.size > MAX_CACHED_MEDIA_SOURCES) {
+    const oldest = cachedPayloadsByMediaSource.keys().next().value;
+    if (oldest === undefined) break;
+    cachedPayloadsByMediaSource.delete(oldest);
+  }
+}
+
+function replayCachedPrimeTtml(
+  observation: PrimeTtmlObservationOwnership,
+): void {
+  const mediaSource = activePrimeMediaSource();
+  if (mediaSource === undefined) return;
+  const cached = cachedPayloadsByMediaSource.get(mediaSource) ?? [];
+  for (const { url, raw } of cached.toReversed()) {
+    postDuetSubMessage(
+      primeTtmlResponseMessage(crypto.randomUUID(), url, raw, observation),
+    );
+  }
+}
+
+function activePrimeMediaSource(): string | undefined {
+  const video = document.querySelector<HTMLVideoElement>(
+    '#dv-web-player video',
+  );
+  const mediaSource = video?.currentSrc || video?.src;
+  return mediaSource === undefined || mediaSource === ''
+    ? undefined
+    : mediaSource;
 }
 
 function takePrimeTtmlObservation(): PrimeTtmlObservationOwnership | undefined {

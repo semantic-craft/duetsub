@@ -68,6 +68,14 @@ export interface PrimeTimelineOffsetRequestMessage extends MessageEnvelope {
   readonly siteId: 'primevideo';
 }
 
+export interface PrimeCachedTtmlRequestMessage extends MessageEnvelope {
+  readonly direction: 'isolated-to-main';
+  readonly type: 'request-prime-cached-ttml';
+  readonly siteId: 'primevideo';
+  readonly trackId: string;
+  readonly generation: PlaybackGeneration;
+}
+
 export interface PrimeTimelineOffsetMessage extends MessageEnvelope {
   readonly direction: 'main-to-isolated';
   readonly type: 'prime-timeline-offset';
@@ -214,6 +222,7 @@ export type MainToIsolatedMessage =
 export type IsolatedToMainMessage =
   | RequestFakeDataMessage
   | NetflixTrackRequestMessage
+  | PrimeCachedTtmlRequestMessage
   | PrimeTimelineOffsetRequestMessage
   | YoutubePlayerCommandMessage;
 export type DuetSubMessage = MainToIsolatedMessage | IsolatedToMainMessage;
@@ -296,6 +305,23 @@ export function requestPrimeTimelineOffset(
     type: 'request-prime-timeline-offset',
     siteId: 'primevideo',
     requestId,
+  };
+}
+
+export function requestPrimeCachedTtml(
+  requestId: string,
+  trackId: string,
+  generation: PlaybackGeneration,
+): PrimeCachedTtmlRequestMessage {
+  return {
+    channel: CHANNEL,
+    version: VERSION,
+    direction: 'isolated-to-main',
+    type: 'request-prime-cached-ttml',
+    siteId: 'primevideo',
+    requestId,
+    trackId,
+    generation,
   };
 }
 
@@ -587,6 +613,13 @@ export function isDuetSubMessage(value: unknown): value is DuetSubMessage {
     }
     if (candidate.type === 'request-prime-timeline-offset') {
       return candidate.siteId === 'primevideo';
+    }
+    if (candidate.type === 'request-prime-cached-ttml') {
+      return (
+        candidate.siteId === 'primevideo' &&
+        isTrackId(candidate.trackId) &&
+        isPlaybackGeneration(candidate.generation)
+      );
     }
     if (candidate.type === 'youtube-player-command') {
       return (

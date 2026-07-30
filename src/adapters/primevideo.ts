@@ -6,6 +6,7 @@ import {
 import {
   isDuetSubMessage,
   postDuetSubMessage,
+  requestPrimeCachedTtml,
   requestPrimeTimelineOffset,
   type PrimeTtmlResponseMessage,
 } from '../core/messages';
@@ -354,6 +355,13 @@ class PrimeVideoAdapter implements SiteAdapter {
       };
     });
     this.#requestTimelineOffset(generation);
+    postDuetSubMessage(
+      requestPrimeCachedTtml(
+        observationRequestId,
+        track.id,
+        generation,
+      ),
+    );
     this.#resolvePendingFromInbox();
     return response;
   }

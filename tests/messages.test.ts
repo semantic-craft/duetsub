@@ -9,6 +9,7 @@ import {
   primeTimelineOffsetMessage,
   primeTtmlResponseMessage,
   requestFakeData,
+  requestPrimeCachedTtml,
   requestPrimeTimelineOffset,
   youtubeCaptionsMessage,
   youtubePlayerCommand,
@@ -86,6 +87,30 @@ describe('Prime MAIN to ISOLATED messages', () => {
       isDuetSubMessage({
         ...response,
         timelineOffsetMs: Number.POSITIVE_INFINITY,
+      }),
+    ).toBe(false);
+  });
+
+  it('validates cached Prime TTML replay ownership', () => {
+    const generation = {
+      contentGeneration: 4,
+      clockGeneration: 7,
+      selectionGeneration: 2,
+    };
+    const request = requestPrimeCachedTtml(
+      'cached-track-request',
+      'zh-hans_Subtitle_Dialog',
+      generation,
+    );
+
+    expect(isDuetSubMessage(request)).toBe(true);
+    expect(
+      isDuetSubMessage({ ...request, trackId: '' }),
+    ).toBe(false);
+    expect(
+      isDuetSubMessage({
+        ...request,
+        generation: { ...generation, contentGeneration: -1 },
       }),
     ).toBe(false);
   });

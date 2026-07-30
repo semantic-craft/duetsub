@@ -180,11 +180,15 @@ export function createToggleView(
     event.preventDefault();
     showPopover();
   });
-  languageButton.addEventListener('pointerdown', (event) => {
+  const stopNativeControlEvent = (event: Event) => {
     event.stopPropagation();
-  });
+  };
+  languageButton.addEventListener('pointerdown', stopNativeControlEvent);
+  languageButton.addEventListener('pointerup', stopNativeControlEvent);
+  languageButton.addEventListener('mousedown', stopNativeControlEvent);
+  languageButton.addEventListener('mouseup', stopNativeControlEvent);
   languageButton.addEventListener('click', (event) => {
-    event.stopPropagation();
+    stopNativeControlEvent(event);
     if (popover.hidden) {
       showPopover();
     } else {
