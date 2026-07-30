@@ -1,5 +1,6 @@
 import {
   DEFAULT_TRANSLATION_CONFIG,
+  isTranslationProvider,
   TRANSLATION_CONFIG_STORAGE_KEY,
   type TranslationConfig,
 } from '../mt/config';
@@ -46,9 +47,7 @@ function isTranslationConfig(value: unknown): value is TranslationConfig {
   if (typeof value !== 'object' || value === null) return false;
   const config = value as Partial<TranslationConfig>;
   return (
-    (config.provider === 'deepseek' ||
-      config.provider === 'openai-compatible' ||
-      config.provider === 'local') &&
+    isTranslationProvider(config.provider) &&
     typeof config.baseUrl === 'string' &&
     typeof config.apiKey === 'string' &&
     typeof config.model === 'string'

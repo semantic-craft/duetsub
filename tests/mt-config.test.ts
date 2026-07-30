@@ -4,6 +4,11 @@ import {
   chatCompletionsUrl,
   configPermissionOrigin,
   DEFAULT_TRANSLATION_CONFIG,
+  DOUBAO_TRANSLATION_CONFIG,
+  QWEN_CN_TRANSLATION_CONFIG,
+  QWEN_SG_TRANSLATION_CONFIG,
+  translationProviderDefault,
+  translationRequestUrl,
   validateTranslationConfig,
 } from '../src/mt/config';
 
@@ -20,6 +25,47 @@ describe('translation config', () => {
     );
   });
 
+  it('provides current Qwen and Doubao presets', () => {
+    expect(QWEN_CN_TRANSLATION_CONFIG).toEqual({
+      provider: 'qwen-cn',
+      baseUrl:
+        'https://YOUR_WORKSPACE_ID.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
+      apiKey: '',
+      model: 'qwen3.6-flash',
+    });
+    expect(translationRequestUrl(QWEN_CN_TRANSLATION_CONFIG)).toBe(
+      'https://YOUR_WORKSPACE_ID.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/responses',
+    );
+    expect(QWEN_SG_TRANSLATION_CONFIG).toEqual({
+      provider: 'qwen-sg',
+      baseUrl:
+        'https://YOUR_WORKSPACE_ID.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1',
+      apiKey: '',
+      model: 'qwen3.6-flash',
+    });
+    expect(translationRequestUrl(QWEN_SG_TRANSLATION_CONFIG)).toBe(
+      'https://YOUR_WORKSPACE_ID.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/responses',
+    );
+    expect(DOUBAO_TRANSLATION_CONFIG).toEqual({
+      provider: 'doubao',
+      baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+      apiKey: '',
+      model: 'doubao-seed-2-1-pro-260628',
+    });
+    expect(translationRequestUrl(DOUBAO_TRANSLATION_CONFIG)).toBe(
+      'https://ark.cn-beijing.volces.com/api/v3/responses',
+    );
+    expect(translationProviderDefault('qwen-cn')).toBe(
+      QWEN_CN_TRANSLATION_CONFIG,
+    );
+    expect(translationProviderDefault('qwen-sg')).toBe(
+      QWEN_SG_TRANSLATION_CONFIG,
+    );
+    expect(translationProviderDefault('doubao')).toBe(
+      DOUBAO_TRANSLATION_CONFIG,
+    );
+  });
+
   it('accepts cloud HTTPS and explicit loopback HTTP endpoints', () => {
     expect(
       validateTranslationConfig({
@@ -31,12 +77,31 @@ describe('translation config', () => {
     ).toBe(true);
     expect(
       validateTranslationConfig({
+        provider: 'qwen-cn',
+        baseUrl:
+          'https://ws-test.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
+        apiKey: 'secret',
+        model: 'qwen3.6-flash',
+      }).ok,
+    ).toBe(true);
+    expect(
+      validateTranslationConfig({
         provider: 'local',
         baseUrl: 'http://127.0.0.1:11434/v1',
         apiKey: '',
         model: 'qwen',
       }).ok,
     ).toBe(true);
+  });
+
+  it('requires replacing the Qwen workspace placeholder before use', () => {
+    expect(validateTranslationConfig({
+      ...QWEN_CN_TRANSLATION_CONFIG,
+      apiKey: 'secret',
+    })).toEqual({
+      ok: false,
+      error: '請將 Base URL 中的 YOUR_WORKSPACE_ID 替換為百煉業務空間 ID',
+    });
   });
 
   it('rejects insecure non-loopback, credentials in URLs, and missing cloud keys', () => {

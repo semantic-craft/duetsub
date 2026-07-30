@@ -45,4 +45,34 @@ describe('options storage seam', () => {
       model: 'deepseek-v4-flash',
     });
   });
+
+  it.each([
+    {
+      provider: 'qwen-cn' as const,
+      baseUrl:
+        'https://ws-cn-test.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
+      apiKey: 'qwen-cn-test-token',
+      model: 'qwen3.6-flash',
+    },
+    {
+      provider: 'qwen-sg' as const,
+      baseUrl:
+        'https://ws-sg-test.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1',
+      apiKey: 'qwen-sg-test-token',
+      model: 'qwen3.7-plus',
+    },
+    {
+      provider: 'doubao' as const,
+      baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+      apiKey: 'doubao-test-token',
+      model: 'doubao-seed-2-1-pro-260628',
+    },
+  ])('loads a saved $provider config', async (config) => {
+    const storage = {
+      get: vi.fn(async (key: string) => ({ [key]: config })),
+      set: vi.fn(async () => undefined),
+    };
+
+    expect(await loadTranslationConfig(storage)).toEqual(config);
+  });
 });

@@ -4,7 +4,8 @@ import {
   type IndexedDbTranslationCache,
 } from './cache';
 import {
-  chatCompletionsUrl,
+  translationRequestUrl,
+  usesResponsesApi,
   validateTranslationConfig,
   type TranslationConfig,
 } from './config';
@@ -115,42 +116,23 @@ async function requestTranslations(
   for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt += 1) {
     if (dependencies.signal?.aborted) return 'aborted';
     try {
-      const deepSeekOptions = config.provider === 'deepseek'
-        ? {
-            thinking: { type: 'disabled' },
-            response_format: { type: 'json_object' },
-            max_tokens: 4_096,
-          }
-        : {};
-      const response = await fetcher(chatCompletionsUrl(config), {
+      const response = await fetcher(translationRequestUrl(config), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
         },
-        body: JSON.stringify({
-          model: config.model,
-          temperature: 0,
-          ...deepSeekOptions,
-          messages: [
-            {
-              role: 'system',
-              content: translationSystemPrompt(targetLanguage),
-            },
-            {
-              role: 'user',
-              content: JSON.stringify({ texts }),
-            },
-          ],
-        }),
+        body: JSON.stringify(
+          translationRequestBody(texts, targetLanguage, config),
+        ),
         signal: dependencies.signal,
       });
       if (response.ok) {
-        const payload = await response.json() as {
-          choices?: Array<{ message?: { content?: unknown } }>;
-        };
-        const content = payload.choices?.[0]?.message?.content;
-        if (typeof content !== 'string') return undefined;
+        const payload = await response.json() as unknown;
+        const content = usesResponsesApi(config.provider)
+          ? readResponsesText(payload)
+          : readChatCompletionsText(payload);
+        if (content === undefined) return undefined;
         const parsed = JSON.parse(content) as unknown;
         const translations = readTranslations(parsed);
         return translations?.length === texts.length ? translations : undefined;
@@ -168,6 +150,93 @@ async function requestTranslations(
     }
   }
   return undefined;
+}
+
+function translationRequestBody(
+  texts: readonly string[],
+  targetLanguage: 'en' | 'zh-Hant',
+  config: TranslationConfig,
+): Record<string, unknown> {
+  const messages = [
+    {
+      role: 'system',
+      content: translationSystemPrompt(targetLanguage),
+    },
+    {
+      role: 'user',
+      content: JSON.stringify({ texts }),
+    },
+  ];
+  return {
+    model: config.model,
+    temperature: 0,
+    ...translationProviderOptions(config),
+    ...(usesResponsesApi(config.provider)
+      ? { input: messages }
+      : { messages }),
+  };
+}
+
+function translationProviderOptions(
+  config: TranslationConfig,
+): Record<string, unknown> {
+  switch (config.provider) {
+    case 'deepseek':
+      return {
+        thinking: { type: 'disabled' },
+        response_format: { type: 'json_object' },
+        max_tokens: 4_096,
+      };
+    case 'qwen-cn':
+    case 'qwen-sg':
+      return {
+        reasoning: { effort: 'none' },
+        store: false,
+      };
+    case 'doubao':
+      return {
+        thinking: { type: 'disabled' },
+        text: { format: { type: 'json_object' } },
+        max_output_tokens: 4_096,
+        store: false,
+      };
+    default:
+      return {};
+  }
+}
+
+function readChatCompletionsText(value: unknown): string | undefined {
+  if (!isRecord(value) || !Array.isArray(value.choices)) return undefined;
+  const choice = value.choices[0];
+  if (!isRecord(choice) || !isRecord(choice.message)) return undefined;
+  return typeof choice.message.content === 'string'
+    ? choice.message.content
+    : undefined;
+}
+
+function readResponsesText(value: unknown): string | undefined {
+  if (!isRecord(value) || !Array.isArray(value.output)) return undefined;
+  const parts = value.output.flatMap((item) => {
+    if (
+      !isRecord(item) ||
+      item.type !== 'message' ||
+      !Array.isArray(item.content)
+    ) {
+      return [];
+    }
+    return item.content.flatMap((content) =>
+      isRecord(content) &&
+        content.type === 'output_text' &&
+        typeof content.text === 'string'
+        ? [content.text]
+        : []
+    );
+  });
+  return parts.length > 0 ? parts.join('') : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }
 
 function translationSystemPrompt(

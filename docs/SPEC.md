@@ -17,7 +17,7 @@ Authoritative over: `README.md`（三站、Netflix-first 的旧表述已过时�
 
 DuetSub 是一个可独立侧载并公开发布源码与构建产物的 Chrome MV3 扩展。在四个目标站的播放器控制栏注入一个 **toggle button**；用户点一下即在视频上叠加一层扩展自有的 **overlay**，英文在上、繁体中文在下，由真实 `<video>` 时钟驱动，与播放严格同步。
 
-字幕来源优先用**登录用户当前已能取用的官方轨**：中英官方轨都在时直接并排，绝不机翻。只有某一侧没有官方轨时，才用用户自备 key 的 **DeepSeek** 机翻补齐缺失的那一侧（**MT fallback**）；只有简体官方轨时用 **OpenCC** 转繁显示。DeepSeek 的 key 在扩展 **options page** 本地配置、存 `chrome.storage.local`，只经 service worker 走 HTTPS 发往 DeepSeek，绝不写日志、绝不外发观看数据。
+字幕来源优先用**登录用户当前已能取用的官方轨**：中英官方轨都在时直接并排，绝不机翻。只有某一侧没有官方轨时，才用用户自备 key 的 **DeepSeek / 千问 / 豆包或其他 OpenAI 兼容模型**补齐缺失的那一侧（**MT fallback**）；只有简体官方轨时用 **OpenCC** 转繁显示。供应商、模型与 key 在扩展 **options page** 本地配置、存 `chrome.storage.local`，只经 service worker 走 HTTPS 发往用户选定并授权的端点，绝不写日志、绝不外发观看数据。
 
 产品红线（README）不变：只用平台已给当前观众的字幕轨，不下载视频、不绕过 DRM、不解锁地区限制轨、不上传观看数据。
 
@@ -36,19 +36,19 @@ DuetSub 是一个可独立侧载并公开发布源码与构建产物的 Chrome M
 
 ### 机翻兜底与中文轨处理
 
-9. As a 观众, I want 只有英文官方轨时自动用 DeepSeek 机翻出繁体中文那一行, so that 没有官方中文轨也能看双语。
+9. As a 观众, I want 只有英文官方轨时自动用我配置的模型机翻出繁体中文那一行, so that 没有官方中文轨也能看双语。
 10. As a 观众, I want 只有中文官方轨时自动机翻出英文那一行, so that 中文内容也能配上英文对照。
 11. As a 观众, I want 只有简体官方轨时用 OpenCC 转成繁体显示, so that 与我的繁体阅读偏好一致。
 12. As a 观众, I want 机翻生成的那一行行首有一个小小的内联 `MT` 标记、官方轨不标, so that 我一眼分清哪行是机器翻译、哪行是官方字幕。
 13. As a 观众, I want 机翻行与对应官方行同色同字重同正体（不靠淡色或斜体作唯一线索）, so that 不与旁白/画外音等字幕语义混淆。
 14. As a 观众, I want 机翻按整轨预热 + 沿播放位置滚动补翻, so that 当前与即将播放的字幕最先就绪、观看不卡顿。
-15. As a 观众, I want 重看或往回拖时命中已翻译缓存, so that 不重复消耗我的 DeepSeek 额度、字幕秒出。
+15. As a 观众, I want 重看或往回拖时命中已翻译缓存, so that 不重复消耗我的模型额度、字幕秒出。
 16. As a 观众, I want 中英官方轨都在时永不触发机翻, so that 不产生无谓的 API 费用。
 
 ### 本地配置（options page，仅云端自备 key）
 
-17. As a 首次用户, I want 在扩展 options page 选择翻译供应商（DeepSeek 云端 / OpenAI 兼容 / 本机 Ollama·LM Studio）并填入对应 Base URL·key·模型, so that 我能用云端额度或完全本地的模型做机翻兜底。
-18. As a 用户, I want key 以掩码形式输入并存在本地 `chrome.storage.local`, so that key 不明文暴露、不进日志、不离开我的机器（除发往 DeepSeek API）。
+17. As a 首次用户, I want 在扩展 options page 选择翻译供应商（DeepSeek / 千问 / 豆包 / OpenAI 兼容 / 本机 Ollama·LM Studio）并选择或手动填写模型, so that 我能用云端额度或完全本地的模型做机翻兜底。
+18. As a 用户, I want key 以掩码形式输入并存在本地 `chrome.storage.local`, so that key 不明文暴露、不进日志、不离开我的机器（除发往我选定的翻译端点）。
 19. As a 用户, I want 未配置 key 时官方轨照常显示、只在需要机翻的那一侧给一次性提示引导我去配置, so that 缺 key 不会让整个字幕消失。
 20. As a 用户, I want 目标语言与选轨链由扩展固定（繁中 / §C）、而模型来源可配, so that 常规配置简单、又能改用本地或其他模型。
 
@@ -80,7 +80,7 @@ DuetSub 是一个可独立侧载并公开发布源码与构建产物的 Chrome M
 
 36. As a 实现/测试者, I want 每种字幕格式解析器都是可用真机 fixture 单测的纯函数, so that 时轴与文本抽取的正确性有回归保障。
 37. As a 实现/测试者, I want 选轨与双轨调度是不碰 DOM/网络的纯逻辑, so that 核心行为可脱离浏览器快速验证。
-38. As a 实现/测试者, I want 机翻批处理与缓存逻辑在 mock 掉 DeepSeek HTTP 边界后可测, so that 兜底与容错路径有测试覆盖。
+38. As a 实现/测试者, I want 机翻批处理与缓存逻辑在 mock 掉供应商 HTTP 边界后可测, so that 兜底与容错路径有测试覆盖。
 39. As a 实现/测试者, I want 每站 adapter 的 DOM/拦截行为有明确的真机验收 gate 与 stop rule, so that 「看见响应」不被误当成「适配完成」。
 40. As a 实现/测试者, I want 双轨 `0ms` 严格调度只用完整轨/真实回放验证, so that 不用零碎样本冒充统计校准。
 
@@ -98,10 +98,10 @@ DuetSub 是一个可独立侧载并公开发布源码与构建产物的 Chrome M
 - **五层 seam + 薄 MAIN world**，映射到 MV3 三执行环境：
   - **MAIN world**：只 patch fetch/XHR/JSON.parse、读播放器全局，抓到原始数据即 postMessage 给 ISOLATED；不解析、不选轨、不构造 URL、不存字幕/用户状态。主动字幕 fetch 优先由 ISOLATED 做，CORS/签名不允许时改由播放器自动切轨被动截获，不在 MAIN 加 fetch 业务层。
   - **ISOLATED content script**：承载 site adapter（解析清单/响应、轨道枚举、`fetchTrack`、站点私有 `trackId→handle` 映射）、cue 归一化、synchronizer（video 时钟调度）、overlay 渲染、选轨策略。
-  - **Service worker**：只做 DeepSeek 调用（避开页面 CSP）与翻译缓存持久化；**不参与字幕实时路径**。
+  - **Service worker**：只做翻译模型调用（避开页面 CSP）与翻译缓存持久化；**不参与字幕实时路径**。
 - **注入方式**：`content_scripts` 静态声明 `world: "MAIN"` + `run_at: "document_start"`，按四站 match pattern。这是保证「先于播放器任何脚本」的唯一方式；不用动态 `chrome.scripting`。
 - **技术栈**：TypeScript(strict) + WXT（管 manifest/构建/HMR）+ vanilla DOM overlay（两行 `textContent` 直写，约 4Hz 更新，不引 React/Vue/Solid）。
-- **代码组织**：单扩展；每站一对 entrypoint（ISOLATED adapter + MAIN hook，形态本不同，各写各的，不做「通用拦截器+配置」抽象）；共享 core 层放 cue 模型 / TrackInfo / 选轨 / synchronizer / overlay / MAIN↔ISOLATED 消息协议；mt 层放经 background 的 DeepSeek client。
+- **代码组织**：单扩展；每站一对 entrypoint（ISOLATED adapter + MAIN hook，形态本不同，各写各的，不做「通用拦截器+配置」抽象）；共享 core 层放 cue 模型 / TrackInfo / 选轨 / synchronizer / overlay / MAIN↔ISOLATED 消息协议；mt 层放经 background 的 OpenAI-compatible 翻译 client。
 
 ### B. 核心数据契约（ticket 04，type shape 来自 grilling，直接采用）
 
@@ -150,10 +150,10 @@ interface SiteAdapter {
 
 ### D. 机翻兜底细则（ticket 06 就地拍板）
 
-- **引擎/模型/key**（2026-07-24 更新为当前 DeepSeek V4 参数）：默认 DeepSeek `deepseek-v4-flash`，可选 `deepseek-v4-pro`（用户自备 key，OpenAI 兼容 base URL 为 `https://api.deepseek.com`）；同时支持任意 OpenAI 兼容端点，含**本机模型**（Ollama / LM Studio 等）。供应商 / Base URL / key / 模型在 options page 配置、存 `chrome.storage.local`（详见 §I）；SW 统一按 OpenAI 兼容 chat/completions 协议调用，屏蔽云端/本地差异。
-- **繁体产出**：prompt 指定输出繁体中文；对 DeepSeek 输出再过一遍 OpenCC(s2t) 作保险，避免偶发简体混入。
-- **DeepSeek 请求约束**：字幕翻译使用明确的 system prompt，锁定目标语言、逐项保序、不增删拆并、保留语气/专名/标点/换行，并给出 `{"translations":[...]}` JSON 输出样例。按 DeepSeek 官方 JSON Output 约定发送 `response_format: {"type":"json_object"}` 与足够的 `max_tokens`；V4 默认思考模式对该确定性任务显式关闭。
-- **批处理**：整轨 **warmup 预热 + 沿播放位置滚动补翻**（承 ticket 02 的 Read Frog 模板）。按播放头优先级分批（当前 cue 最高、其后若干条次高），每次 DeepSeek 请求限定 N 条 cue（避免单请求过长超时；一集 ~35k 字符分多批完成，成本量级 ~$0.015/集）。快进/跳转用 AbortController 取消在途请求。
+- **引擎/模型/key**（2026-07-30）：默认仍为 DeepSeek；新增千问（阿里云百炼·中国区）、千问（阿里云百炼·新加坡区）与豆包（火山方舟·中国区）预设，并继续支持任意 OpenAI 兼容端点及**本机模型**（Ollama / LM Studio 等）。模型栏提供当前候选但始终可编辑，用户可自行选择或手动填写其他模型 ID；豆包候选含 `doubao-seed-2-1-pro-260628`。供应商 / Base URL / key / 模型在 options page 配置、存 `chrome.storage.local`（详见 §I）；千问与豆包走各自 OpenAI 兼容 Responses API，DeepSeek、自定义与本机端点保持 Chat Completions。
+- **繁体产出**：prompt 指定输出繁体中文；所有供应商的 zh-Hant 输出再过一遍 OpenCC(s2t) 作保险，避免偶发简体混入。
+- **请求约束**：字幕翻译使用明确的 system prompt，锁定目标语言、逐项保序、不增删拆并、保留语气/专名/标点/换行，并给出 `{"translations":[...]}` JSON 输出样例。千问 Responses 使用 `reasoning.effort: none` 且不存储响应；豆包 Responses 使用 `thinking.type: disabled`、`text.format: json_object` 且不存储响应；DeepSeek 保持现有 JSON Output Chat Completions；自定义端点只发送通用 OpenAI-compatible 字段。
+- **批处理**：整轨 **warmup 预热 + 沿播放位置滚动补翻**（承 ticket 02 的 Read Frog 模板）。按播放头优先级分批（当前 cue 最高、其后若干条次高），每次模型请求限定 N 条 cue（避免单请求过长超时；一集 ~35k 字符分多批完成）。快进/跳转用 AbortController 取消在途请求。
 - **翻译保时轴**：机翻**逐 cue 翻译、沿用官方源轨的 `start/end`**，不重新拆句、不做时间轴再对齐。译文写回对应 cue 的 `text`，时轴不变。
 - **缓存**：service worker 侧 IndexedDB 持久化；key = `hash(contentId + trackId + 归一化源文本 + 目标语言 + 模型)`，内容寻址，重看/回拖命中。失效按内容 identity + 模型（换 key/模型自然 miss）；容量上限 + LRU 淘汰。
 - **失败降级（fail-soft，永不阻塞官方轨）**：
@@ -184,7 +184,7 @@ zhActive = Chinese cues where start <= t < end
 - **背景**：Variant B——双语两行共用一块随内容宽度收缩的紧凑背景板；约 70% 黑、轻阴影、`2px` backdrop blur、`1px` 低对比边框、圆角 `0.28em`、内边距约 `0.34em 0.68em 0.42em`；文字白色正体不描边。
 - **位置/避让**：常态整组底部居中、背景板底边距播放器底 `8.5%`；平台控件出现时整组上抬到 `18%`（不拆行、不隐藏 DuetSub）。窗口与全屏共用该百分比、字体随容器缩放。
 - **`position:'top'`**：当前配对任一 cue 为 top，整组背景板移到播放器顶部 `8%` 安全区；组内仍英上繁下；下一组均为 bottom/缺省则回底部。
-- **`MT` 标识**：仅 DeepSeek 生成的行首显示小型内联 `MT`；官方轨（含 OpenCC 转繁）不标。
+- **`MT` 标识**：任一翻译模型生成的行首显示小型内联 `MT`；官方轨（含 OpenCC 转繁）不标。
 
 ### G. 四站 adapter 方案（ticket 07，已逐站冻结——实现直接引用该 ticket）
 
@@ -207,14 +207,14 @@ zhActive = Chinese cues where start <= t < end
 ### I. options page + manifest 权限（新增；2026-07-22 改为统一 OpenAI 兼容端点）
 
 - 标准 MV3 options page（经扩展 action / chrome://extensions 打开）。**翻译服务**区块：
-  - **供应商**下拉：`DeepSeek`（默认，云端）/ `OpenAI 兼容`（自定义云端）/ `本地`（Ollama、LM Studio 等本机 OpenAI 兼容端点）。
-  - **Base URL**：DeepSeek 预设并隐藏；自定义/本地时显示（本地默认形如 `http://localhost:11434/v1`）。
+  - **供应商**下拉：`DeepSeek`（默认）/ `千问（阿里云百炼·中国区）` / `千问（阿里云百炼·新加坡区）` / `豆包（火山方舟·中国区）` / `OpenAI 兼容`（自定义云端）/ `本地`（Ollama、LM Studio 等本机 OpenAI 兼容端点）。
+  - **Base URL**：DeepSeek、豆包预设并隐藏；两套千问默认使用阿里云推荐的中国区/新加坡区业务空间专属域名模板，用户须把 `YOUR_WORKSPACE_ID` 替换为控制台中的业务空间 ID；自定义/本地时显示（本地默认形如 `http://localhost:11434/v1`）。
   - **API Key**（掩码）：云端必填；本地无鉴权时可留空。
-  - **模型**：DeepSeek 默认 `deepseek-v4-flash`，可选 `deepseek-v4-pro`；自定义/本地可填或从端点发现列表中选。
+  - **模型**：DeepSeek、千问、豆包均给出当前候选；候选不构成锁定，用户可自行选择或手动填写其他模型 ID；自定义/本地同样可填。
   - **测试连接**按钮 + 状态徽标（未配置 / 已配置 / 测试通过）。
   - 目标语言 `zh-Hant`、选轨链 §C、机翻方向自动——只读展示、不可改。
 - 持久化 `chrome.storage.local`；SW 读取供翻译调用。key 不写日志、除发往用户所配端点外不外发。
-- **manifest 权限**：`storage`；安装时 `host_permissions` 只含四站域名。DeepSeek 与自定义云端共用 `optional_host_permissions: ["https://*/*"]`，本机端点只声明 `http://localhost/*`、`http://127.0.0.1/*`、`http://[::1]/*` 三条 optional host pattern。options page 仅在用户点击储存或测试时，按当前配置的精确 origin 调用 `chrome.permissions.request`；拒绝或旧配置尚未授权时，SW 不发请求、官方字幕照常显示，并提示回设置页授权。这里的 HTTPS wildcard 只是可申请范围，不是安装即授予的 `<all_urls>`。`world:"MAIN"` 声明式 content script 由 WXT 生成，无需额外 `web_accessible_resources`。
+- **manifest 权限**：`storage`；安装时 `host_permissions` 只含四站域名。DeepSeek、千问、豆包与自定义云端共用 `optional_host_permissions: ["https://*/*"]`，本机端点只声明 `http://localhost/*`、`http://127.0.0.1/*`、`http://[::1]/*` 三条 optional host pattern。options page 仅在用户点击储存或测试时，按当前配置的精确 origin 调用 `chrome.permissions.request`；拒绝或旧配置尚未授权时，SW 不发请求、官方字幕照常显示，并提示回设置页授权。这里的 HTTPS wildcard 只是可申请范围，不是安装即授予的 `<all_urls>`。`world:"MAIN"` 声明式 content script 由 WXT 生成，无需额外 `web_accessible_resources`。
 
 ### J. 实现顺序（ticket 07，已锁）
 
@@ -258,8 +258,8 @@ zhActive = Chinese cues where start <= t < end
 ### 词汇表（ubiquitous language）
 
 - **DuetSub**：本扩展。**overlay**：扩展自有的双语字幕层。**toggle button**：播放器控制栏内的开关按钮。
-- **MAIN world / ISOLATED world**：MV3 页面主世界（拦截转发）/ 隔离内容脚本世界（核心逻辑）。**service worker**：跑 DeepSeek 调用与缓存。
-- **Cue / TrackInfo / SiteAdapter**：B 节契约。**official / asr / platform-mt**：轨道来源。**MT fallback**：DeepSeek 机翻兜底。**OpenCC**：简→繁脚本转换。
+- **MAIN world / ISOLATED world**：MV3 页面主世界（拦截转发）/ 隔离内容脚本世界（核心逻辑）。**service worker**：跑翻译模型调用与缓存。
+- **Cue / TrackInfo / SiteAdapter**：B 节契约。**official / asr / platform-mt**：轨道来源。**MT fallback**：配置模型的机翻兜底。**OpenCC**：简→繁脚本转换。
 - **contentGeneration / clockGeneration**：内容与时钟阶段的递增编号。**acquisition batch**：一次记录原选项→串行切轨抓取→恢复原选项的过程。**seek-flush / ad-suspended / fail closed**：拖动清屏 / 广告挂起 / 证据不足即停用。**POT**：YouTube timedtext 的鉴权 token。
 
 ### 与规划树的关系
