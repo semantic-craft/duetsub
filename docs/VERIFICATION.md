@@ -1,6 +1,6 @@
 # Verification ledger
 
-Last updated: July 29, 2026
+Last updated: July 30, 2026
 
 Gate labels are strict:
 
@@ -21,6 +21,14 @@ Run `npm run release:build`. It must pass:
 - archive checks excluding source maps, environment files, and private keys.
 
 The command output for the release commit is the authoritative count; this document does not freeze a stale test total.
+
+## `v0.1.6` release candidate
+
+- **PASS — automated release archive:** `npm run release:build` passed 37 test files / 135 tests, TypeScript checking, Chrome MV3 packaging, stable-ID verification, archive-content checks, and the least-privilege host boundary.
+- **PASS — automated store archive:** `npm run store:build` passed the same behavior and type gates; the store package omits `manifest.key` and retains the least-privilege host boundary.
+- **PASS — local typography preview:** the runtime-equivalent 1280×720 preview showed English at `100%` above Traditional Chinese at `90%`, with neither line crossing the overlay boundary.
+- **NOT RUN — exact-candidate logged-in playback:** the logged-in Netflix tab still exposed the previously loaded `82%` English / `100%` Chinese runtime after the candidate was built. The protected extension-reload surface was not bypassed, and the old runtime was not counted as evidence for `0.1.6`.
+- **PENDING — Chrome Web Store dashboard:** upload and submission use the exact verified `0.1.6` store archive.
 
 ## `v0.1.5` release candidate
 

@@ -69,6 +69,7 @@ function renderLine(
   model: OverlayModel['lines'][number],
 ): void {
   elements.element.hidden = model.text.length === 0;
+  elements.element.style.fontSize = `${model.sizePercent}%`;
   elements.marker.hidden = !model.machineTranslated;
   elements.text.textContent = model.text;
 }
@@ -110,12 +111,10 @@ const OVERLAY_CSS = `
 
   .english {
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    font-size: 82%;
   }
 
   .chinese {
     font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
-    font-size: 100%;
   }
 
   .english:not([hidden]) + .chinese:not([hidden]) {

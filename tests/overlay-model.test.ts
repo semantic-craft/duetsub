@@ -42,14 +42,14 @@ describe('overlay render model', () => {
         id: 'english',
         lang: 'en',
         text: 'First line\nSecond line',
-        sizePercent: 82,
+        sizePercent: 100,
         machineTranslated: false,
       },
       {
         id: 'chinese',
         lang: 'zh-Hant',
         text: '第一行',
-        sizePercent: 100,
+        sizePercent: 90,
         machineTranslated: false,
       },
     ]);

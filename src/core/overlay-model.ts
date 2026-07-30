@@ -4,7 +4,7 @@ export interface OverlayLineModel {
   readonly id: 'english' | 'chinese';
   readonly lang: 'en' | 'zh-Hant';
   readonly text: string;
-  readonly sizePercent: 82 | 100;
+  readonly sizePercent: 90 | 100;
   readonly machineTranslated: boolean;
 }
 
@@ -40,7 +40,7 @@ export function createOverlayModel(input: OverlayModelInput): OverlayModel {
         id: 'english',
         lang: 'en',
         text: englishText,
-        sizePercent: 82,
+        sizePercent: 100,
         machineTranslated:
           input.englishMachineTranslated && englishText.length > 0,
       },
@@ -48,7 +48,7 @@ export function createOverlayModel(input: OverlayModelInput): OverlayModel {
         id: 'chinese',
         lang: 'zh-Hant',
         text: chineseText,
-        sizePercent: 100,
+        sizePercent: 90,
         machineTranslated:
           input.chineseMachineTranslated && chineseText.length > 0,
       },
