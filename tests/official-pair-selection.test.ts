@@ -285,6 +285,28 @@ describe('resolveOfficialPair', () => {
     });
   });
 
+  it('matches a regional preference to the same bare language across sites', () => {
+    const bareEnglish = track('english', 'en');
+
+    expect(
+      resolveOfficialPair({
+        siteId: 'netflix',
+        tracks: [
+          bareEnglish,
+          track('traditional', 'zh-Hant'),
+        ],
+        preference: {
+          version: 1,
+          top: 'en-US',
+          bottom: 'zh-Hant',
+        },
+      }),
+    ).toMatchObject({
+      kind: 'ready',
+      top: bareEnglish,
+    });
+  });
+
   it('does not match different explicit scripts of the same language', () => {
     expect(
       resolveOfficialPair({

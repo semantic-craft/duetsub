@@ -237,7 +237,6 @@ function selectLanguageTrack(
     }
     return preferredLanguage.language !== 'zh' &&
       preferredLanguage.region !== undefined &&
-      candidate.region !== undefined &&
       candidateScript === undefined;
   });
   if (scriptMatches.length > 0) {
