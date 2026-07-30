@@ -461,7 +461,7 @@ const TOGGLE_CSS = `
   .popover {
     position: absolute;
     right: 0;
-    width: min(24rem, calc(100vw - 16px));
+    width: min(384px, calc(100vw - 16px));
     max-height: calc(100vh - 16px);
     overflow-x: hidden;
     overflow-y: auto;
@@ -486,7 +486,7 @@ const TOGGLE_CSS = `
   .menu-item {
     box-sizing: border-box;
     width: 100%;
-    padding: 0.76rem 0.9rem;
+    padding: 12px 14px;
     color: inherit;
     text-align: left;
   }
@@ -494,34 +494,34 @@ const TOGGLE_CSS = `
   .status {
     border-bottom: 1px solid rgb(255 255 255 / 12%);
     color: rgb(255 255 255 / 76%);
-    font-size: 0.95rem;
+    font-size: 15px;
     line-height: 1.4;
   }
 
   .chooser {
     display: grid;
-    gap: 0.78rem;
-    padding: 0.82rem 0.9rem;
+    gap: 12px;
+    padding: 13px 14px;
     border-bottom: 1px solid rgb(255 255 255 / 12%);
   }
 
   .language-field {
     display: grid;
-    gap: 0.38rem;
+    gap: 6px;
     color: rgb(255 255 255 / 76%);
-    font-size: 0.9rem;
+    font-size: 14px;
   }
 
   .language-field select {
     width: 100%;
     min-width: 0;
-    min-height: 2.8rem;
-    padding: 0.56rem 0.62rem;
+    min-height: 44px;
+    padding: 9px 10px;
     border: 1px solid rgb(255 255 255 / 18%);
     border-radius: 4px;
     background: rgb(15 18 24 / 100%);
     color: #fff;
-    font: 1rem/1.3 system-ui, -apple-system, "Segoe UI", sans-serif;
+    font: 16px/1.3 system-ui, -apple-system, "Segoe UI", sans-serif;
   }
 
   .menu-item:disabled {
@@ -534,7 +534,7 @@ const TOGGLE_CSS = `
     border: 0;
     background: transparent;
     cursor: pointer;
-    font-size: 1rem;
+    font-size: 16px;
     line-height: 1.4;
   }
 
