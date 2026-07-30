@@ -482,6 +482,10 @@ const TOGGLE_CSS = `
     bottom: auto;
   }
 
+  :host([data-site="netflix"]) .popover {
+    width: min(480px, calc(100vw - 16px));
+  }
+
   .status,
   .menu-item {
     box-sizing: border-box;
@@ -541,6 +545,35 @@ const TOGGLE_CSS = `
   .menu-item:hover,
   .menu-item:focus-visible {
     background: rgb(255 255 255 / 10%);
+  }
+
+  :host([data-site="netflix"]) .status,
+  :host([data-site="netflix"]) .menu-item {
+    padding: 16px 18px;
+  }
+
+  :host([data-site="netflix"]) .status,
+  :host([data-site="netflix"]) .language-field {
+    font-size: 18px;
+  }
+
+  :host([data-site="netflix"]) .chooser {
+    gap: 16px;
+    padding: 18px;
+  }
+
+  :host([data-site="netflix"]) .language-field {
+    gap: 8px;
+  }
+
+  :host([data-site="netflix"]) .language-field select {
+    min-height: 56px;
+    padding: 12px 14px;
+    font-size: 20px;
+  }
+
+  :host([data-site="netflix"]) .menu-item {
+    font-size: 20px;
   }
 
   [hidden] {
