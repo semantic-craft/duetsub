@@ -10,6 +10,7 @@ import {
   createPrimeVideoAdapter,
   ensurePrimeSubtitleMenuOpen,
   parsePrimeVideoSubtitleTrack,
+  restorePrimeSubtitleState,
 } from '../src/adapters/primevideo';
 import { primeTtmlResponseMessage } from '../src/core/messages';
 
@@ -51,6 +52,56 @@ describe('Prime official subtitle metadata', () => {
       ensurePrimeSubtitleMenuOpen(button as unknown as HTMLButtonElement),
     ).resolves.toBe(group);
     expect(button.click).toHaveBeenCalledOnce();
+  });
+
+  it('verifies restoration against the replacement radio rendered by Prime', async () => {
+    vi.useFakeTimers();
+    let open = true;
+    let currentRadio = {
+      checked: false,
+      id: 'zh-hant_Subtitle_Dialog',
+      click: () => {
+        currentRadio = {
+          checked: true,
+          id: 'zh-hant_Subtitle_Dialog',
+          click: currentRadio.click,
+        };
+        open = false;
+      },
+    };
+    const group = {
+      getClientRects: () => (open ? [{}] : []),
+      querySelectorAll: () => [currentRadio],
+    };
+    const button = {
+      click: vi.fn(() => {
+        open = !open;
+      }),
+    };
+
+    vi.stubGlobal('window', {
+      setTimeout,
+    });
+    vi.stubGlobal('getComputedStyle', () => ({
+      display: open ? 'block' : 'none',
+      visibility: 'visible',
+    }));
+    vi.stubGlobal('document', {
+      querySelector: (selector: string) =>
+        selector ===
+        'div[id^="dv-web-player"].dv-player-fullscreen .atvwebplayersdk-subtitle-radio-group'
+          ? group
+          : null,
+    });
+
+    const restored = restorePrimeSubtitleState(
+      button as unknown as HTMLButtonElement,
+      currentRadio.id,
+      false,
+    );
+    await vi.advanceTimersByTimeAsync(8_100);
+
+    await expect(restored).resolves.toBe(true);
   });
 
   it('enumerates the visible fullscreen player when Prime keeps a stale hidden player', async () => {

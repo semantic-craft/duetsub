@@ -264,7 +264,7 @@ class PrimeVideoAdapter implements SiteAdapter {
         restore: async () =>
           generation.contentGeneration !==
               this.#generation.contentGeneration ||
-          restoreOriginalState(button, originalId, menuWasOpen),
+          restorePrimeSubtitleState(button, originalId, menuWasOpen),
       });
       captured = applyPrimeVideoPairAlignmentPolicy(
         requestedTracks,
@@ -303,7 +303,10 @@ class PrimeVideoAdapter implements SiteAdapter {
         throw new Error('Prime cannot re-request the currently selected track');
       }
       clickRadio(off);
-      await waitUntil(() => off.checked, DOM_TIMEOUT_MS);
+      await waitUntil(
+        () => isPrimeSubtitleTrackChecked(off.id),
+        DOM_TIMEOUT_MS,
+      );
       group = await ensurePrimeSubtitleMenuOpen(button);
       radio = findRadio(group, track.id);
       if (radio === undefined) throw new Error(`Prime track disappeared: ${track.id}`);
@@ -322,7 +325,10 @@ class PrimeVideoAdapter implements SiteAdapter {
         observationRequestId,
         generation,
       );
-      await waitUntil(() => radio.checked, DOM_TIMEOUT_MS);
+      await waitUntil(
+        () => isPrimeSubtitleTrackChecked(radio.id),
+        DOM_TIMEOUT_MS,
+      );
       return await response;
     } catch (error) {
       this.#rejectPending(asError(error));
@@ -647,7 +653,7 @@ function isTraditionalChineseTrack(track: TrackInfo): boolean {
   return language === 'zh-hant' || language.startsWith('zh-hant-');
 }
 
-async function restoreOriginalState(
+export async function restorePrimeSubtitleState(
   button: HTMLButtonElement,
   originalId: string,
   menuWasOpen: boolean,
@@ -658,7 +664,10 @@ async function restoreOriginalState(
     if (original === undefined) return false;
     if (!original.checked) {
       clickRadio(original);
-      await waitUntil(() => original.checked, DOM_TIMEOUT_MS);
+      await waitUntil(
+        () => isPrimeSubtitleTrackChecked(originalId),
+        DOM_TIMEOUT_MS,
+      );
     }
     return await restoreMenuState(button, menuWasOpen);
   } catch {
@@ -776,6 +785,13 @@ function findRadio(
   id: string,
 ): HTMLInputElement | undefined {
   return readSubtitleRadios(group).find((radio) => radio.id === id);
+}
+
+function isPrimeSubtitleTrackChecked(id: string): boolean {
+  const group = document.querySelector<HTMLElement>(
+    PRIME_SUBTITLE_GROUP_SELECTOR,
+  );
+  return group !== null && findRadio(group, id)?.checked === true;
 }
 
 function clickRadio(radio: HTMLInputElement): void {
