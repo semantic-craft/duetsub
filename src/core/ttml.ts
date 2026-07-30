@@ -20,8 +20,8 @@ interface XmlNode {
 }
 
 interface XmlElement extends XmlNode {
-  getAttribute(name: string): string;
-  getAttributeNS(namespace: string, localName: string): string;
+  getAttribute(name: string): string | null;
+  getAttributeNS(namespace: string, localName: string): string | null;
 }
 
 interface XmlDocument {
@@ -99,7 +99,7 @@ export function parseTtml(
     }
 
     const cue: Cue = { start, end, text, language: options.language };
-    const region = paragraph.getAttribute('region');
+    const region = paragraph.getAttribute('region') ?? '';
     cues.push(topRegions.has(region) ? { ...cue, position: 'top' } : cue);
   }
 
@@ -125,14 +125,19 @@ function sourceLanguageAccepted(
 function readTickRate(root: XmlElement): number | undefined {
   const raw =
     root.getAttributeNS(TTML_PARAMETER_NAMESPACE, 'tickRate') ||
-    root.getAttribute('ttp:tickRate');
+    root.getAttribute('ttp:tickRate') ||
+    '';
   if (raw === '') return undefined;
 
   const tickRate = Number(raw);
   return Number.isFinite(tickRate) && tickRate > 0 ? tickRate : undefined;
 }
 
-function parseTime(value: string, tickRate: number | undefined): number | undefined {
+function parseTime(
+  value: string | null,
+  tickRate: number | undefined,
+): number | undefined {
+  if (value === null) return undefined;
   const clockTime = parseClockTime(value);
   if (clockTime !== undefined) return clockTime;
 
@@ -157,10 +162,12 @@ function collectTopRegions(document: XmlDocument): ReadonlySet<string> {
 
     const id =
       region.getAttributeNS(XML_NAMESPACE, 'id') ||
-      region.getAttribute('xml:id');
+      region.getAttribute('xml:id') ||
+      '';
     const origin =
       region.getAttributeNS(TTML_STYLING_NAMESPACE, 'origin') ||
-      region.getAttribute('tts:origin');
+      region.getAttribute('tts:origin') ||
+      '';
     const verticalPercent = origin.match(
       /^\s*-?(?:\d+(?:\.\d+)?|\.\d+)%\s+(-?(?:\d+(?:\.\d+)?|\.\d+))%\s*$/,
     )?.[1];
