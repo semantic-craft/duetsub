@@ -21,11 +21,11 @@
 ### Automated
 
 - Baseline `a7a366f`: `npm test` PASS（40 files / 159 tests），`npm run check` PASS，`npm run build` PASS。
-- TDD red：定向运行出现 6 个预期失败，覆盖 creator-official 过滤、裸 `zh`、generation 消息、共享一次 re-prime 与同视频精确恢复。
+- TDD red：首轮定向运行出现 6 个预期失败；审计后再以 3 个红测复现无 generation POT 被接纳、导航后仍转发未绑定 POT，以及 URL `kind=asr` 漏网。
 - Final: `npm test` PASS（41 files / 164 tests），`npm run check` PASS，`npm run build` PASS，`git diff --check` PASS。
-- 运行目录只交付 creator official handles；ASR / `tlang` 仍可被旧解析 seam 识别，但不会进入本票 catalog 或 acquisition。
+- 运行目录只交付 creator official handles；对象字段或 URL 标记的 ASR，以及 `tlang` platform MT，都不会进入本票 catalog 或 acquisition。
 - 两条 creator official 请求复用同一代 POT snapshot；content / clock / selection 任一 generation 不同即判 stale。并发空体只共享一次 re-prime，旧 snapshot 改走新 snapshot，不发起第二次 re-prime。
-- MAIN 的 `set-caption-track` generation 随其触发的 timedtext observation 原样返回；`yt-navigate-start` 清除该关联。旧 json3 在读取响应体后再次校验 generation。
+- MAIN 的 `set-caption-track` generation 随其触发的 timedtext observation 原样返回；无 generation observation fail closed，`yt-navigate-start` 清除关联后不再转发未绑定 POT。旧 json3 在读取响应体后再次校验 generation。
 - priming 串行化；同一 video 上旧 generation 先恢复原 track/off，再允许新 generation priming。videoId 已变化时禁止旧恢复。
 
 ### Existing blocker

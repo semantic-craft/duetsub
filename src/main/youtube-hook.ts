@@ -156,6 +156,7 @@ function forwardTimedTextRequest(
   const generation = captionMutationContext?.videoId === videoId
     ? captionMutationContext.generation
     : undefined;
+  if (generation === undefined) return;
   postDuetSubMessage(
     youtubeTimedTextRequestMessage(videoId, request, generation),
   );

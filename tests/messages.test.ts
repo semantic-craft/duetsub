@@ -295,6 +295,12 @@ describe('YouTube MAIN to ISOLATED messages', () => {
         generation: { ...generation, selectionGeneration: -1 },
       }),
     ).toBe(false);
+    expect(
+      isDuetSubMessage({
+        ...request,
+        generation: undefined,
+      }),
+    ).toBe(false);
   });
 
   it('accepts only explicit JSON-safe player getter and primitive commands', () => {

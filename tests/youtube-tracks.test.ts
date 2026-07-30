@@ -198,6 +198,13 @@ describe('parseYoutubeCaptionTracks', () => {
               isTranslatable: true,
             },
             {
+              baseUrl: `${baseUrl('fr')}&kind=asr`,
+              vssId: '.fr',
+              languageCode: 'fr',
+              trackName: '',
+              name: { simpleText: 'Français (auto-generated)' },
+            },
+            {
               baseUrl: `${baseUrl('de')}&tlang=de`,
               vssId: '.de',
               languageCode: 'de',

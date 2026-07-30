@@ -113,11 +113,14 @@ export function parseYoutubeCreatorOfficialCaptionTracks(
   videoId: string,
 ): YoutubeTrackCandidate[] {
   return parseYoutubeCaptionTracks(captions, videoId).filter(
-    ({ track, handle }) =>
-      track.source === 'official' &&
-      handle.kind === undefined &&
-      handle.tlang === undefined &&
-      !new URL(handle.baseUrl).searchParams.has('tlang'),
+    ({ track, handle }) => {
+      const searchParams = new URL(handle.baseUrl).searchParams;
+      return track.source === 'official' &&
+        handle.kind === undefined &&
+        handle.tlang === undefined &&
+        searchParams.get('kind') !== 'asr' &&
+        !searchParams.has('tlang');
+    },
   );
 }
 

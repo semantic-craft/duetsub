@@ -115,15 +115,11 @@ describe('YouTube MAIN-world POT observation', () => {
     });
 
     documentListeners.get('yt-navigate-start')?.();
+    const messageCount = postMessage.mock.calls.length;
     await window.fetch(
       `https://www.youtube.com/api/timedtext?v=${videoId}` +
         '&lang=ja&pot=NEXT_POT&fmt=json3',
     );
-    const afterNavigation = postMessage.mock.calls.at(-1)?.[0];
-    expect(afterNavigation).toMatchObject({
-      type: 'youtube-timedtext-request',
-      videoId,
-    });
-    expect(afterNavigation.generation).toBeUndefined();
+    expect(postMessage).toHaveBeenCalledTimes(messageCount);
   });
 });

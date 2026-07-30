@@ -474,12 +474,10 @@ class YoutubeAdapter implements SiteAdapter {
     }
 
     if (message.type === 'youtube-timedtext-request') {
-      const requestContext = message.generation === undefined
-        ? context
-        : {
-            videoId: message.videoId,
-            generation: message.generation,
-          };
+      const requestContext = {
+        videoId: message.videoId,
+        generation: message.generation,
+      };
       if (!sameYoutubeRequestContext(requestContext, context)) return;
       this.#capturedRequest = {
         context: requestContext,

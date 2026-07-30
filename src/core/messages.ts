@@ -159,7 +159,7 @@ export interface YoutubeTimedTextRequestMessage
   readonly type: 'youtube-timedtext-request';
   readonly siteId: 'youtube';
   readonly videoId: string;
-  readonly generation?: PlaybackGeneration;
+  readonly generation: PlaybackGeneration;
   readonly request: YoutubeTimedTextRequestData;
 }
 
@@ -429,7 +429,7 @@ export function youtubeCaptionsMessage(
 export function youtubeTimedTextRequestMessage(
   videoId: string,
   request: YoutubeTimedTextRequestData,
-  generation?: PlaybackGeneration,
+  generation: PlaybackGeneration,
 ): YoutubeTimedTextRequestMessage {
   return {
     channel: CHANNEL,
@@ -438,7 +438,7 @@ export function youtubeTimedTextRequestMessage(
     type: 'youtube-timedtext-request',
     siteId: 'youtube',
     videoId,
-    ...(generation === undefined ? {} : { generation }),
+    generation,
     request,
   };
 }
@@ -567,8 +567,7 @@ export function isDuetSubMessage(value: unknown): value is DuetSubMessage {
       candidate.direction === 'main-to-isolated' &&
       candidate.siteId === 'youtube' &&
       isYoutubeVideoId(candidate.videoId) &&
-      (candidate.generation === undefined ||
-        isPlaybackGeneration(candidate.generation)) &&
+      isPlaybackGeneration(candidate.generation) &&
       isYoutubeTimedTextRequestData(candidate.request, candidate.videoId)
     );
   }
