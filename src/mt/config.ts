@@ -19,9 +19,10 @@ export const DEEPSEEK_MODELS = [
   'deepseek-v4-pro',
 ] as const;
 export const QWEN_MODELS = [
-  'qwen3.6-flash',
+  'qwen3.7-flash',
   'qwen3.7-plus',
   'qwen3.7-max',
+  'qwen3.6-flash',
 ] as const;
 export const DOUBAO_MODELS = [
   'doubao-seed-2-1-pro-260628',

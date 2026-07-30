@@ -1,6 +1,7 @@
 import type { Cue } from '../core/contracts';
 import type { PlaybackGeneration } from '../core/lifecycle';
 import type { TranslationConfig } from './config';
+import type { SubtitlePromptProfile } from './prompt';
 
 export interface TranslateRequest {
   readonly channel: 'duetsub-mt';
@@ -10,6 +11,7 @@ export interface TranslateRequest {
   readonly generation: PlaybackGeneration;
   readonly contentId: string;
   readonly trackId: string;
+  readonly promptProfile: SubtitlePromptProfile;
   readonly targetLanguage: 'en' | 'zh-Hant';
   readonly cues: readonly Cue[];
   readonly skipCache?: boolean;

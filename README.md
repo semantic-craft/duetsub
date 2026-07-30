@@ -9,7 +9,7 @@ DuetSub is an open-source Chrome extension for people who learn, listen, and wat
 - Max (`play.hbomax.com`)
 - YouTube
 
-It prefers two official subtitle tracks. If only one suitable official track exists, the user can optionally translate the missing line with DeepSeek, Qwen through Alibaba Cloud Model Studio in China or Singapore, Doubao through Volcengine Ark in China, another OpenAI-compatible HTTPS endpoint, or a loopback service such as Ollama or LM Studio.
+It prefers two official subtitle tracks. If only one suitable official track exists, the user can optionally translate the missing line with DeepSeek, Qwen through Alibaba Cloud Model Studio in China or Singapore, Doubao through Volcengine Ark in China, another OpenAI-compatible HTTPS endpoint, or a loopback service such as Ollama or LM Studio. New Qwen configurations default to the live-tested `qwen3.7-flash`; existing saved model choices are preserved.
 
 ## What it does
 

@@ -150,12 +150,12 @@ interface SiteAdapter {
 
 ### D. 机翻兜底细则（ticket 06 就地拍板）
 
-- **引擎/模型/key**（2026-07-30）：默认仍为 DeepSeek；新增千问（阿里云百炼·中国区）、千问（阿里云百炼·新加坡区）与豆包（火山方舟·中国区）预设，并继续支持任意 OpenAI 兼容端点及**本机模型**（Ollama / LM Studio 等）。模型栏提供当前候选但始终可编辑，用户可自行选择或手动填写其他模型 ID；豆包候选含 `doubao-seed-2-1-pro-260628`。供应商 / Base URL / key / 模型在 options page 配置、存 `chrome.storage.local`（详见 §I）；千问与豆包走各自 OpenAI 兼容 Responses API，DeepSeek、自定义与本机端点保持 Chat Completions。
+- **引擎/模型/key**（2026-07-31）：全局默认供应商仍为 DeepSeek；千问（阿里云百炼·中国区/新加坡区）的供应商默认模型改为已实测的 `qwen3.7-flash`，`qwen3.6-flash` 仅保留为可手选候选，不覆盖用户已经保存的显式模型。豆包（火山方舟·中国区）与任意 OpenAI 兼容端点、**本机模型**（Ollama / LM Studio 等）继续支持。模型栏始终可编辑；豆包候选含 `doubao-seed-2-1-pro-260628`。供应商 / Base URL / key / 模型在 options page 配置、存 `chrome.storage.local`（详见 §I）；千问与豆包走各自 OpenAI 兼容 Responses API，DeepSeek、自定义与本机端点保持 Chat Completions。
 - **繁体产出**：prompt 指定输出繁体中文；所有供应商的 zh-Hant 输出再过一遍 OpenCC(s2t) 作保险，避免偶发简体混入。
-- **请求约束**：字幕翻译使用明确的 system prompt，锁定目标语言、逐项保序、不增删拆并、保留语气/专名/标点/换行，并给出 `{"translations":[...]}` JSON 输出样例。千问 Responses 使用 `reasoning.effort: none` 且不存储响应；豆包 Responses 使用 `thinking.type: disabled`、`text.format: json_object` 且不存储响应；DeepSeek 保持现有 JSON Output Chat Completions；自定义端点只发送通用 OpenAI-compatible 字段。
-- **批处理**：整轨 **warmup 预热 + 沿播放位置滚动补翻**（承 ticket 02 的 Read Frog 模板）。按播放头优先级分批（当前 cue 最高、其后若干条次高），每次模型请求限定 N 条 cue（避免单请求过长超时；一集 ~35k 字符分多批完成）。快进/跳转用 AbortController 取消在途请求。
-- **翻译保时轴**：机翻**逐 cue 翻译、沿用官方源轨的 `start/end`**，不重新拆句、不做时间轴再对齐。译文写回对应 cue 的 `text`，时轴不变。
-- **缓存**：service worker 侧 IndexedDB 持久化；key = `hash(contentId + trackId + 归一化源文本 + 目标语言 + 模型)`，内容寻址，重看/回拖命中。失效按内容 identity + 模型（换 key/模型自然 miss）；容量上限 + LRU 淘汰。
+- **请求约束**：字幕翻译按站点选择两套 system prompt：Netflix / Prime Video / Max 使用 `film-tv`，YouTube 使用 `youtube`。请求按时间升序发送 `id/start_ms/end_ms/duration_ms/max_reading_units/text`，响应必须是同 ID、同顺序的 `{"translations":[{"id":0,"text":"…"}]}`；不得增删拆并或跨 cue 搬运信息。千问 Responses 使用 `reasoning.effort: none` 且不存储响应；豆包 Responses 使用 `thinking.type: disabled`、`text.format: json_object` 且不存储响应；DeepSeek 保持现有 JSON Output Chat Completions；自定义端点只发送通用 OpenAI-compatible 字段。
+- **批处理**：整轨 **warmup 预热 + 沿播放位置滚动补翻**（承 ticket 02 的 Read Frog 模板）。先按源时间轴组成最多 8 条的连续小批，再按批次与播放头的距离调度；这样既优先当前位置，也让模型始终看到按时间升序的相邻上下文。快进/跳转用 AbortController 取消在途请求。
+- **翻译保时轴与排版**：机翻**逐 cue 翻译、沿用官方源轨的 `start/end`**，不重新拆句、不做时间轴再对齐。译文写回对应 cue 的 `text`，时轴不变；返回后以目标语言感知的确定性排版器限制为最多两行，优先在句末/分句边界换行，并保护内联代码、产品名、房号、数字与单位不被拆开。
+- **缓存**：service worker 侧 IndexedDB 持久化；key 包含 `contentId + trackId + 源文本 + 源 start/end + 目标语言 + prompt profile/version + provider endpoint/model`，因此时间预算、prompt 或模型变化都会自然 miss；容量上限 + LRU 淘汰。
 - **失败降级（fail-soft，永不阻塞官方轨）**：
   - 未配置 key：官方轨照显；需机翻的那侧显示一次性内联提示（点击去 options page），不整屏空白。
   - API 报错/超额：官方侧照显；受影响的机翻 cue 显示不显眼的「翻译失败」占位并静默退避重试；绝不清空整个 overlay。

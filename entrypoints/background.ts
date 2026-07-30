@@ -91,6 +91,7 @@ export default defineBackground(() => {
         {
           contentId: request.contentId,
           trackId: request.trackId,
+          promptProfile: request.promptProfile,
           targetLanguage: request.targetLanguage,
           cues: request.cues,
           config,
