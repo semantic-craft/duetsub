@@ -44,14 +44,16 @@ export function resolveNetflixResponseOwner(
 
 export function resolveNetflixUnownedResponseGeneration(
   observedContentIdentity: string | undefined,
-  _observedGeneration: PlaybackGeneration,
+  observedGeneration: PlaybackGeneration,
   currentContentIdentity: string | undefined,
   currentGeneration: PlaybackGeneration,
 ): PlaybackGeneration | undefined {
   if (
     observedContentIdentity === undefined ||
     currentContentIdentity === undefined ||
-    observedContentIdentity !== currentContentIdentity
+    observedContentIdentity !== currentContentIdentity ||
+    (!samePlaybackGeneration(observedGeneration, currentGeneration) &&
+      !isInitialBootstrapGeneration(observedGeneration, currentGeneration))
   ) {
     return undefined;
   }
@@ -60,6 +62,18 @@ export function resolveNetflixUnownedResponseGeneration(
     clockGeneration: currentGeneration.clockGeneration,
     selectionGeneration: currentGeneration.selectionGeneration ?? 0,
   };
+}
+
+function isInitialBootstrapGeneration(
+  observed: PlaybackGeneration,
+  current: PlaybackGeneration,
+): boolean {
+  return observed.contentGeneration === 0 &&
+    observed.clockGeneration === 0 &&
+    (observed.selectionGeneration ?? 0) === 0 &&
+    current.contentGeneration === 1 &&
+    current.clockGeneration === 1 &&
+    (current.selectionGeneration ?? 0) === 0;
 }
 
 export function recordNetflixTtmlResponse(

@@ -198,7 +198,7 @@ describe('Netflix TTML response ownership', () => {
     ).toEqual(EPISODE_ONE);
   });
 
-  it('promotes a request-bound response when the same title advances generation', () => {
+  it('rejects a request-bound response after seek or video replacement', () => {
     expect(
       resolveNetflixUnownedResponseGeneration(
         'netflix:81262753',
@@ -206,11 +206,18 @@ describe('Netflix TTML response ownership', () => {
         'netflix:81262753',
         { contentGeneration: 2, clockGeneration: 2, selectionGeneration: 0 },
       ),
-    ).toEqual({
-      contentGeneration: 2,
-      clockGeneration: 2,
-      selectionGeneration: 0,
-    });
+    ).toBeUndefined();
+  });
+
+  it('rejects an unowned response after the language selection changes', () => {
+    expect(
+      resolveNetflixUnownedResponseGeneration(
+        'netflix:81262753',
+        EPISODE_ONE,
+        'netflix:81262753',
+        { ...EPISODE_ONE, selectionGeneration: 1 },
+      ),
+    ).toBeUndefined();
   });
 
   it('rejects an early response from another title', () => {

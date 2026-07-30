@@ -10,6 +10,7 @@ import netflixFixture from './fixtures/netflix-minimal.ttml?raw';
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -102,7 +103,7 @@ describe('Netflix adapter lifecycle', () => {
       textContent: '中文（繁體）',
       getAttribute(name: string) {
         if (name === 'data-uia') {
-          return 'subtitle-item-selected-中文（繁體）';
+          return 'subtitle-item-selected-zh-Hant';
         }
         if (name === 'aria-selected') return 'true';
         return null;
@@ -155,9 +156,76 @@ describe('Netflix adapter lifecycle', () => {
       ['menu:zh-Hant:plain:中文[繁體]'],
     ]);
     expect(menuOpenCount).toBe(1);
+    expect(menuOpen).toBe(false);
   });
 
-  it('reuses first-load responses, then restores native state after fallback switching', async () => {
+  it('fails closed when catalog enumeration cannot restore the menu', async () => {
+    vi.useFakeTimers();
+    const fakeWindow = {
+      addEventListener() {},
+      setTimeout,
+      clearTimeout,
+      location: {
+        href: 'https://www.netflix.com/watch/81262757',
+      },
+    } as unknown as Window & typeof globalThis;
+    let menuOpen = false;
+    const visible = {
+      getClientRects: () => [{}],
+    };
+    const video = {
+      ...visible,
+      readyState: 4,
+    };
+    const button = {
+      click() {
+        menuOpen = true;
+      },
+    };
+    const option = {
+      textContent: '日本語',
+      getAttribute(name: string) {
+        if (name === 'data-uia') return 'subtitle-item-selected-ja';
+        if (name === 'aria-selected') return 'true';
+        return null;
+      },
+    };
+    const menu = {
+      ...visible,
+      querySelectorAll: () => [option],
+      dispatchEvent() {
+        return true;
+      },
+    };
+    vi.stubGlobal('window', fakeWindow);
+    vi.stubGlobal('document', {
+      querySelector(selector: string) {
+        if (selector === '#appMountPoint video') return video;
+        if (selector.includes('control-audio-subtitle')) return button;
+        if (selector === 'div[data-uia="selector-audio-subtitle"]') {
+          return menuOpen ? menu : null;
+        }
+        return null;
+      },
+    });
+    vi.stubGlobal('getComputedStyle', () => ({
+      display: 'block',
+      visibility: 'visible',
+    }));
+    vi.stubGlobal('KeyboardEvent', class {});
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const adapter = createNetflixAdapter();
+    const emissions: string[][] = [];
+    adapter.onTracks((tracks) => emissions.push(tracks.map(({ id }) => id)));
+
+    adapter.start();
+    await vi.advanceTimersByTimeAsync(8_100);
+
+    expect(emissions).toEqual([[]]);
+    expect(menuOpen).toBe(true);
+  });
+
+  it('acquires a non-default official pair and restores native state', async () => {
     vi.useFakeTimers();
     let onMessage: ((event: MessageEvent<unknown>) => void) | undefined;
     const fakeWindow = {
@@ -174,7 +242,7 @@ describe('Netflix adapter lifecycle', () => {
       },
     } as unknown as Window & typeof globalThis;
     let menuOpen = false;
-    let selectedKey = 'traditional-chinese';
+    let selectedKey = 'simplified-chinese';
     let selectionClicks = 0;
     let emitResponseAfterSelection = false;
     let controlsVisible = true;
@@ -213,15 +281,15 @@ describe('Netflix adapter lifecycle', () => {
         controlsVisible = false;
         if (
           emitResponseAfterSelection &&
-          config.key === 'english-cc'
+          config.key === 'japanese-cc'
         ) {
           queueMicrotask(() => {
             onMessage?.({
               source: fakeWindow,
               data: netflixTtmlResponseMessage(
-                'english-after-selection',
+                'japanese-after-selection',
                 '81262757',
-                netflixFixture,
+                netflixFixture.replace('xml:lang="en"', 'xml:lang="ja"'),
               ),
             } as unknown as MessageEvent<unknown>);
           });
@@ -259,20 +327,20 @@ describe('Netflix adapter lifecycle', () => {
         },
       },
       option({
-        key: 'english-cc',
-        label: 'English (CC)',
-        language: 'en',
+        key: 'japanese-cc',
+        label: '日本語 (CC)',
+        language: 'ja',
         closedCaptions: true,
       }),
       option({
-        key: 'english-plain',
-        label: 'English',
-        language: 'en',
+        key: 'japanese-plain',
+        label: '日本語',
+        language: 'ja',
       }),
       option({
-        key: 'traditional-chinese',
-        label: '中文（繁體）',
-        language: 'zh-Hant',
+        key: 'simplified-chinese',
+        label: '中文（简体）',
+        language: 'zh-Hans',
       }),
     ];
     const menu = {
@@ -311,62 +379,58 @@ describe('Netflix adapter lifecycle', () => {
       emittedTracks = tracks;
     });
     adapter.bindGeneration?.({
-      contentGeneration: 1,
-      clockGeneration: 1,
+      contentGeneration: 2,
+      clockGeneration: 2,
     });
 
     onMessage?.({
       source: fakeWindow,
       data: netflixTtmlResponseMessage(
-        'early-english',
+        'early-japanese',
         '81262757',
-        netflixFixture,
+        netflixFixture.replace('xml:lang="en"', 'xml:lang="ja"'),
       ),
     } as unknown as MessageEvent<unknown>);
     onMessage?.({
       source: fakeWindow,
       data: netflixTtmlResponseMessage(
-        'early-traditional-chinese',
+        'early-simplified-chinese',
         '81262757',
-        netflixFixture.replace('xml:lang="en"', 'xml:lang="zh"'),
+        netflixFixture.replace('xml:lang="en"', 'xml:lang="zh-Hans"'),
       ),
     } as unknown as MessageEvent<unknown>);
-    adapter.bindGeneration?.({
-      contentGeneration: 2,
-      clockGeneration: 2,
-    });
     onMessage?.({
       source: fakeWindow,
       data: netflixManifestMessage({
         movieId: 81262757,
         timedtexttracks: [
           {
-            id: 'english-cc',
-            language: 'en',
-            languageDescription: 'English',
+            id: 'japanese-cc',
+            language: 'ja',
+            languageDescription: '日本語',
             rawTrackType: 'closedcaptions',
             hydrated: true,
             ttDownloadables: {
               text: {
-                downloadUrls: { primary: 'https://example.test/en-cc' },
+                downloadUrls: { primary: 'https://example.test/ja-cc' },
               },
             },
           },
           {
-            id: 'english-plain',
-            language: 'en',
-            languageDescription: 'English',
+            id: 'japanese-plain',
+            language: 'ja',
+            languageDescription: '日本語',
             hydrated: true,
             ttDownloadables: {
               text: {
-                downloadUrls: { primary: 'https://example.test/en' },
+                downloadUrls: { primary: 'https://example.test/ja' },
               },
             },
           },
           {
-            id: 'traditional-chinese',
-            language: 'zh-Hant',
-            languageDescription: '中文（繁體）',
+            id: 'simplified-chinese',
+            language: 'zh-Hans',
+            languageDescription: '中文（简体）',
             hydrated: true,
             ttDownloadables: {
               text: {
@@ -379,42 +443,42 @@ describe('Netflix adapter lifecycle', () => {
     } as unknown as MessageEvent<unknown>);
     adapter.start();
 
-    const englishCc = emittedTracks?.find(({ id }) => id === 'english-cc');
-    const traditionalChinese = emittedTracks?.find(
-      ({ id }) => id === 'traditional-chinese',
+    const japaneseCc = emittedTracks?.find(({ id }) => id === 'japanese-cc');
+    const simplifiedChinese = emittedTracks?.find(
+      ({ id }) => id === 'simplified-chinese',
     );
-    expect(englishCc).toBeDefined();
-    expect(traditionalChinese).toBeDefined();
-    const englishCuesPromise = adapter.fetchTrack(englishCc!);
-    const chineseCuesPromise = adapter.fetchTrack(traditionalChinese!);
+    expect(japaneseCc).toBeDefined();
+    expect(simplifiedChinese).toBeDefined();
+    const japaneseCuesPromise = adapter.fetchTrack(japaneseCc!);
+    const chineseCuesPromise = adapter.fetchTrack(simplifiedChinese!);
     await vi.advanceTimersByTimeAsync(500);
 
-    expect((await englishCuesPromise)[0]).toMatchObject({
+    expect((await japaneseCuesPromise)[0]).toMatchObject({
       start: 22_708,
       end: 24_708,
-      language: 'en',
+      language: 'ja',
     });
     expect((await chineseCuesPromise)[0]).toMatchObject({
       start: 22_708,
       end: 24_708,
-      language: 'zh-Hant',
+      language: 'zh-Hans',
     });
     expect(selectionClicks).toBe(0);
-    expect(selectedKey).toBe('traditional-chinese');
+    expect(selectedKey).toBe('simplified-chinese');
     expect(menuOpen).toBe(false);
 
     emitResponseAfterSelection = true;
-    const recapturedEnglish = adapter.fetchTrack(englishCc!);
+    const recapturedJapanese = adapter.fetchTrack(japaneseCc!);
     await vi.advanceTimersByTimeAsync(500);
 
-    expect((await recapturedEnglish)[0]).toMatchObject({
-      language: 'en',
+    expect((await recapturedJapanese)[0]).toMatchObject({
+      language: 'ja',
     });
     expect(selectionHistory).toEqual([
-      'english-cc',
-      'traditional-chinese',
+      'japanese-cc',
+      'simplified-chinese',
     ]);
-    expect(selectedKey).toBe('traditional-chinese');
+    expect(selectedKey).toBe('simplified-chinese');
     expect(menuOpen).toBe(false);
   });
 
@@ -449,7 +513,7 @@ describe('Netflix adapter lifecycle', () => {
       textContent: '中文（繁體）',
       getAttribute(name: string) {
         if (name === 'data-uia') {
-          return 'subtitle-item-selected-中文（繁體）';
+          return 'subtitle-item-selected-zh-Hant';
         }
         if (name === 'aria-selected') return 'true';
         return null;

@@ -117,6 +117,53 @@ describe('parseNetflixManifest', () => {
     });
   });
 
+  it('catalogs arbitrary canonical languages and rejects forced variants', () => {
+    expect(
+      parseNetflixManifest({
+        movieId: 'non-default-pair',
+        timedtexttracks: [
+          {
+            id: 'japanese',
+            language: 'JA-jp',
+            languageDescription: '日本語',
+            hydrated: true,
+            rawTrackType: 'subtitles',
+            ttDownloadables: TEXT_DOWNLOADABLE,
+          },
+          {
+            id: 'german-cc',
+            language: 'de-de',
+            languageDescription: 'Deutsch',
+            hydrated: true,
+            rawTrackType: 'closedcaptions',
+            ttDownloadables: TEXT_DOWNLOADABLE,
+          },
+          {
+            id: 'forced-french',
+            language: 'fr',
+            languageDescription: 'Français',
+            hydrated: true,
+            rawTrackType: 'forcednarrative',
+            ttDownloadables: TEXT_DOWNLOADABLE,
+          },
+        ],
+      }),
+    ).toMatchObject({
+      tracks: [
+        {
+          id: 'japanese',
+          language: 'ja-JP',
+          kind: 'subtitles',
+        },
+        {
+          id: 'german-cc',
+          language: 'de-DE',
+          kind: 'closed-captions',
+        },
+      ],
+    });
+  });
+
   it('rejects candidates without both identity and timed text tracks', () => {
     expect(parseNetflixManifest({ movieId: 1 })).toBeUndefined();
     expect(parseNetflixManifest({ timedtexttracks: [] })).toBeUndefined();

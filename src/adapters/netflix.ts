@@ -53,15 +53,18 @@ interface UnownedTtmlResponse {
   readonly generation: PlaybackGeneration;
 }
 
-interface SubtitleMenuOption {
-  readonly element: HTMLElement;
+export interface NetflixMenuOptionMetadata {
   readonly key: string;
   readonly label: string;
   readonly language?: string;
   readonly selected: boolean;
   readonly off: boolean;
   readonly forcedOnly: boolean;
-  readonly closedCaptions: boolean;
+  readonly kind: TrackInfo['kind'];
+}
+
+interface SubtitleMenuOption extends NetflixMenuOptionMetadata {
+  readonly element: HTMLElement;
 }
 
 export function createNetflixAdapter(): SiteAdapter {
@@ -624,7 +627,10 @@ class NetflixAdapter implements SiteAdapter {
   ): void {
     if (!sameGeneration(this.#generation, generation)) return;
     const signature = tracks
-      .map(({ id, language, label }) => `${id}\u0000${language}\u0000${label}`)
+      .map(({ id, language, label, kind, forcedOnly }) =>
+        [id, language, label, kind, forcedOnly === true ? 'forced' : 'full']
+          .join('\u0000')
+      )
       .join('\u0001');
     if (signature === this.#lastEmittedSignature) return;
 
@@ -739,41 +745,60 @@ function readSubtitleOptions(menu: HTMLElement): SubtitleMenuOption[] {
       element.getAttribute('aria-label')?.trim() ??
       element.textContent?.trim() ??
       '';
-    const token = dataUia.toLowerCase();
-    const language = languageFromMenuOption(element, dataUia, label);
-    const off = /(?:^|[-_:])(off|none)(?:[-_:]|$)/i.test(dataUia);
-    const forcedOnly = token.includes('forced');
-    const closedCaptions = hasClosedCaptionMarker(label, dataUia);
-    const selected =
-      element.getAttribute('aria-selected') === 'true' ||
-      token.includes('selected');
-    const key = [
-      off ? 'off' : language ?? 'unknown',
-      closedCaptions ? 'cc' : 'plain',
-      normalizeLabel(label),
-    ].join(':');
+    const metadata = parseNetflixMenuOptionMetadata({
+      dataUia,
+      label,
+      languageCode:
+        element.getAttribute('lang') ??
+        element.getAttribute('data-language-code') ??
+        element.getAttribute('data-language') ??
+        element.getAttribute('data-lang'),
+      selected: element.getAttribute('aria-selected') === 'true',
+    });
 
-    if (
-      label !== '' &&
-      !result.some((option) => option.key === key)
-    ) {
-      result.push({
-        element,
-        key,
-        label,
-        language,
-        selected,
-        off,
-        forcedOnly,
-        closedCaptions,
-      });
-    }
+    if (metadata !== undefined) result.push({ element, ...metadata });
   }
   return result;
 }
 
+export function parseNetflixMenuOptionMetadata(input: {
+  readonly dataUia: string;
+  readonly label: string;
+  readonly languageCode?: string | null;
+  readonly selected: boolean;
+}): NetflixMenuOptionMetadata | undefined {
+  const dataUia = input.dataUia.trim();
+  const label = input.label.trim();
+  if (label === '') return undefined;
+
+  const off = /(?:^|[-_:])(off|none)(?:[-_:]|$)/i.test(dataUia);
+  const forcedOnly =
+    /(?:^|[-_:])(?:forced|forcednarrative)(?:[-_:]|$)/i.test(dataUia);
+  const closedCaptions = hasClosedCaptionMarker(label, dataUia);
+  const language = off
+    ? undefined
+    : canonicalLanguage(input.languageCode) ??
+      languageFromMenuDataUia(dataUia);
+
+  return {
+    key: [
+      off ? 'off' : language ?? 'unknown',
+      closedCaptions ? 'cc' : 'plain',
+      normalizeLabel(label),
+    ].join(':'),
+    label,
+    language,
+    selected:
+      input.selected ||
+      /(?:^|[-_:])selected(?:[-_:]|$)/i.test(dataUia),
+    off,
+    forcedOnly,
+    kind: closedCaptions ? 'closed-captions' : 'subtitles',
+  };
+}
+
 function trackFromMenuOption(
-  option: SubtitleMenuOption,
+  option: NetflixMenuOptionMetadata,
 ): TrackInfo | undefined {
   if (
     option.off ||
@@ -787,7 +812,7 @@ function trackFromMenuOption(
     language: option.language,
     source: 'official',
     label: option.label,
-    kind: option.closedCaptions ? 'closed-captions' : 'subtitles',
+    kind: option.kind,
   };
 }
 
@@ -795,30 +820,30 @@ function findOptionForTrack(
   track: TrackInfo,
   options: readonly SubtitleMenuOption[],
 ): SubtitleMenuOption | undefined {
+  const key = resolveNetflixMenuTrackKey(track, options);
+  return key === undefined
+    ? undefined
+    : options.find((option) => option.key === key);
+}
+
+export function resolveNetflixMenuTrackKey(
+  track: TrackInfo,
+  options: readonly NetflixMenuOptionMetadata[],
+): string | undefined {
   const direct = options.filter(
     (option) => trackFromMenuOption(option)?.id === track.id,
   );
-  if (direct.length === 1) return direct[0];
+  if (direct.length === 1) return direct[0].key;
 
-  let candidates = options.filter(
+  const candidates = options.filter(
     (option) =>
       !option.off &&
       !option.forcedOnly &&
       option.language !== undefined &&
-      sameLanguage(option.language, track.language),
+      sameLanguage(option.language, track.language) &&
+      option.kind === track.kind,
   );
-  const sameCaptionKind = candidates.filter(
-    ({ closedCaptions }) =>
-      closedCaptions === (track.kind === 'closed-captions'),
-  );
-  if (sameCaptionKind.length > 0) candidates = sameCaptionKind;
-  if (candidates.length === 1) return candidates[0];
-
-  const normalizedLabel = normalizeLabel(track.label);
-  const exactLabel = candidates.filter(
-    ({ label }) => normalizeLabel(label) === normalizedLabel,
-  );
-  return exactLabel.length === 1 ? exactLabel[0] : undefined;
+  return candidates.length === 1 ? candidates[0].key : undefined;
 }
 
 function uniqueTrackForOption(
@@ -831,22 +856,46 @@ function uniqueTrackForOption(
   return candidates.length === 1 ? candidates[0] : undefined;
 }
 
-function languageFromMenuOption(
-  element: HTMLElement,
-  dataUia: string,
-  label: string,
-): string | undefined {
-  const explicit =
-    element.getAttribute('lang') ??
-    dataUia.match(
-      /(?:^|[-_:])(zh-(?:hant|hans)|en(?:-[a-z0-9]{2,8})*)(?:[-_:]|$)/i,
-    )?.[1];
-  const canonical = canonicalLanguage(explicit);
-  if (canonical !== undefined) return canonical;
+const NETFLIX_MENU_METADATA_TOKENS = new Set([
+  'audio',
+  'captions',
+  'cc',
+  'closed',
+  'closedcaptions',
+  'data',
+  'forced',
+  'forcednarrative',
+  'item',
+  'menu',
+  'none',
+  'off',
+  'option',
+  'plain',
+  'sdh',
+  'selected',
+  'subtitle',
+  'subtitles',
+  'track',
+  'uia',
+]);
 
-  if (/中文[（(](?:繁體|繁体)[）)]/.test(label)) return 'zh-Hant';
-  if (/中文[（(](?:簡體|简体)[）)]/.test(label)) return 'zh-Hans';
-  if (/(?:English|英語|英语)(?:\s|[[(（]|$)/i.test(label)) return 'en';
+function languageFromMenuDataUia(dataUia: string): string | undefined {
+  const segments = dataUia.split(/[-_:]/).filter((segment) => segment !== '');
+
+  for (let start = 0; start < segments.length; start += 1) {
+    if (NETFLIX_MENU_METADATA_TOKENS.has(segments[start].toLowerCase())) {
+      continue;
+    }
+
+    let matched: string | undefined;
+    for (let end = start + 1; end <= segments.length; end += 1) {
+      const next = segments[end - 1].toLowerCase();
+      if (NETFLIX_MENU_METADATA_TOKENS.has(next)) break;
+      const canonical = canonicalLanguage(segments.slice(start, end).join('-'));
+      if (canonical !== undefined) matched = canonical;
+    }
+    if (matched !== undefined) return matched;
+  }
   return undefined;
 }
 
@@ -872,7 +921,8 @@ function sameLanguage(left: string, right: string): boolean {
 }
 
 function hasClosedCaptionMarker(label: string, id: string): boolean {
-  return /(?:[\[(（]\s*CC\s*[\])）]|closedcaptions)/i.test(`${label} ${id}`);
+  return /(?:[\[(（]\s*(?:CC|SDH)\s*[\])）]|closedcaptions|(?:^|[-_:])(?:cc|sdh)(?:[-_:]|$))/i
+    .test(`${label} ${id}`);
 }
 
 function normalizeLabel(value: string): string {
