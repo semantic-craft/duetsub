@@ -147,7 +147,7 @@ function resolveOfficialPair(input: {
 
 ## 8. 播放器内交互
 
-主入口复用 `src/content/toggle-view.ts` 已有的长按/右键 popover：
+主入口是 `src/content/toggle-view.ts` 中 DuetSub 开关旁始终可见的“语言”按钮；长按/右键开关仍可打开同一个 popover：
 
 - 显示“上方字幕”和“下方字幕”两个选择器；
 - 选项只来自当前 Official Track Catalog；
@@ -160,10 +160,10 @@ function resolveOfficialPair(input: {
 
 Options page 的角色：
 
-- 显示当前保存的全局上/下偏好；
+- 显示并允许编辑当前保存的全局上/下偏好；建议列表之外也可手动输入有效 BCP-47 语言代码；
 - 提供恢复默认值；
-- 说明实际可用语言要在播放当前节目时选择；
-- 不维护静态全语言 picker，也不承诺某语言在任一节目可用。
+- 说明保存的是全局期望，实际可用性仍由当前节目的 Official Track Catalog 决定；
+- 不承诺某语言在任一节目可用。
 
 ## 9. 生命周期与并发
 

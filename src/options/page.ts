@@ -15,10 +15,14 @@ import {
 import {
   loadLanguagePairPreference,
   resetLanguagePairPreference,
+  saveLanguagePairPreference,
   type LoadedLanguagePairPreference,
 } from '../core/official-pair-preference';
 
-const form = document.querySelector<HTMLFormElement>('form')!;
+const form = document.querySelector<HTMLFormElement>('#translation-form')!;
+const languagePairForm = document.querySelector<HTMLFormElement>(
+  '#official-language-pair-form',
+)!;
 const provider = document.querySelector<HTMLSelectElement>('#provider')!;
 const baseUrl = document.querySelector<HTMLInputElement>('#base-url')!;
 const baseUrlField = baseUrl.closest<HTMLElement>('.field')!;
@@ -37,6 +41,12 @@ const testButton = document.querySelector<HTMLButtonElement>('#test')!;
 const languagePair = document.querySelector<HTMLOutputElement>(
   '#official-language-pair',
 )!;
+const topLanguage = document.querySelector<HTMLInputElement>(
+  '#official-language-top',
+)!;
+const bottomLanguage = document.querySelector<HTMLInputElement>(
+  '#official-language-bottom',
+)!;
 const resetLanguagePair = document.querySelector<HTMLButtonElement>(
   '#reset-official-language-pair',
 )!;
@@ -45,6 +55,10 @@ void loadTranslationConfig(chrome.storage.local).then(renderConfig);
 void loadLanguagePairPreference(chrome.storage.local).then(renderLanguagePair);
 provider.addEventListener('change', () => {
   applyProviderDefaults(provider.value as TranslationProvider);
+});
+languagePairForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  void saveCurrentLanguagePair();
 });
 resetLanguagePair.addEventListener('click', () => {
   void (async () => {
@@ -87,6 +101,21 @@ async function saveCurrent(): Promise<void> {
   await saveTranslationConfig(chrome.storage.local, validation.config);
   renderConfig(validation.config);
   show(true, '設定已儲存；API key 保持遮蔽');
+}
+
+async function saveCurrentLanguagePair(): Promise<void> {
+  const saved = await saveLanguagePairPreference(chrome.storage.local, {
+    version: 1,
+    top: topLanguage.value.trim(),
+    bottom: bottomLanguage.value.trim(),
+  });
+  if (!saved) {
+    languagePair.dataset.state = 'error';
+    languagePair.value = '請選擇兩種不同且有效的字幕語言';
+    return;
+  }
+  renderLanguagePair(await loadLanguagePairPreference(chrome.storage.local));
+  languagePair.dataset.state = 'success';
 }
 
 function readConfig(): TranslationConfig {
@@ -132,6 +161,8 @@ function renderConfig(config: TranslationConfig): void {
 
 function renderLanguagePair(loaded: LoadedLanguagePairPreference): void {
   const { preference } = loaded;
+  topLanguage.value = preference.top;
+  bottomLanguage.value = preference.bottom;
   languagePair.value = `${
     languageName(preference.top)
   }（${preference.top}）在上，${
@@ -139,6 +170,7 @@ function renderLanguagePair(loaded: LoadedLanguagePairPreference): void {
   }（${preference.bottom}）在下${
     loaded.stored ? '' : '（記憶體預設）'
   }`;
+  delete languagePair.dataset.state;
 }
 
 function applyProviderDefaults(value: TranslationProvider): void {

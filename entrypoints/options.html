@@ -30,10 +30,56 @@
       <section aria-labelledby="official-language-pair-heading">
         <h2 id="official-language-pair-heading">官方字幕語言</h2>
         <output id="official-language-pair">正在讀取本機偏好…</output>
-        <p class="fixed">實際可用語言只由播放中的當前節目決定，請在播放器內長按或右鍵 DuetSub 按鈕選擇。</p>
-        <button id="reset-official-language-pair" type="button">恢復英文在上、繁體中文在下</button>
+        <form id="official-language-pair-form">
+          <label class="field">上方字幕
+            <input id="official-language-top" required autocomplete="off" spellcheck="false" list="official-language-options">
+          </label>
+          <label class="field">下方字幕
+            <input id="official-language-bottom" required autocomplete="off" spellcheck="false" list="official-language-options">
+          </label>
+          <datalist id="official-language-options">
+            <option value="en" label="英語"></option>
+            <option value="zh-Hant" label="繁體中文"></option>
+            <option value="zh-Hans" label="簡體中文"></option>
+            <option value="ja" label="日語"></option>
+            <option value="ko" label="韓語"></option>
+            <option value="es-ES" label="西班牙語（西班牙）"></option>
+            <option value="es-419" label="西班牙語（拉丁美洲）"></option>
+            <option value="fr" label="法語"></option>
+            <option value="de" label="德語"></option>
+            <option value="it" label="義大利語"></option>
+            <option value="pt-BR" label="葡萄牙語（巴西）"></option>
+            <option value="pt-PT" label="葡萄牙語（葡萄牙）"></option>
+            <option value="ar" label="阿拉伯語"></option>
+            <option value="hi" label="印地語"></option>
+            <option value="id" label="印尼語"></option>
+            <option value="ms" label="馬來語"></option>
+            <option value="th" label="泰語"></option>
+            <option value="vi" label="越南語"></option>
+            <option value="tr" label="土耳其語"></option>
+            <option value="pl" label="波蘭語"></option>
+            <option value="nl" label="荷蘭語"></option>
+            <option value="sv" label="瑞典語"></option>
+            <option value="da" label="丹麥語"></option>
+            <option value="nb" label="挪威語"></option>
+            <option value="fi" label="芬蘭語"></option>
+            <option value="cs" label="捷克語"></option>
+            <option value="el" label="希臘語"></option>
+            <option value="he" label="希伯來語"></option>
+            <option value="hu" label="匈牙利語"></option>
+            <option value="ro" label="羅馬尼亞語"></option>
+            <option value="ca" label="加泰隆尼亞語"></option>
+            <option value="ta" label="坦米爾語"></option>
+            <option value="te" label="泰盧固語"></option>
+          </datalist>
+          <div class="actions">
+            <button type="submit">儲存字幕語言</button>
+            <button id="reset-official-language-pair" type="button">恢復英文在上、繁體中文在下</button>
+          </div>
+        </form>
+        <p class="fixed">可從建議清單選擇，也可手動輸入 BCP-47 語言代碼。這是全局偏好；實際可用性仍由播放中的當前節目決定。儲存後請刷新播放頁，也可在播放器內用「語言」按鈕選擇當前節目提供的語言。</p>
       </section>
-      <form>
+      <form id="translation-form">
         <label class="field">供應商
           <select id="provider">
             <option value="deepseek">DeepSeek</option>

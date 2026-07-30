@@ -59,9 +59,20 @@ export function createToggleView(
   button.append(icon);
 
   const popover = document.createElement('div');
+  popover.id = 'language-menu';
   popover.className = 'popover';
   popover.hidden = true;
   popover.setAttribute('role', 'menu');
+
+  const languageButton = document.createElement('button');
+  languageButton.className = 'language-menu-trigger';
+  languageButton.type = 'button';
+  languageButton.title = '選擇字幕語言';
+  languageButton.textContent = '語言';
+  languageButton.setAttribute('aria-label', '選擇 DuetSub 字幕語言');
+  languageButton.setAttribute('aria-haspopup', 'menu');
+  languageButton.setAttribute('aria-controls', popover.id);
+  languageButton.setAttribute('aria-expanded', 'false');
 
   const status = document.createElement('div');
   status.className = 'status';
@@ -77,7 +88,7 @@ export function createToggleView(
   const retranslate = menuButton('重新翻譯（ticket 04）');
   const settings = menuButton('打開設定');
   popover.append(status, chooser, swap, retranslate, settings);
-  shadow.append(style, button, popover);
+  shadow.append(style, button, languageButton, popover);
   anchor.insertBefore(host, before ?? null);
 
   let longPressTimer: number | undefined;
@@ -88,9 +99,11 @@ export function createToggleView(
   const showPopover = () => {
     callbacks.onOpenLanguagePair();
     popover.hidden = false;
+    languageButton.setAttribute('aria-expanded', 'true');
   };
   const hidePopover = () => {
     popover.hidden = true;
+    languageButton.setAttribute('aria-expanded', 'false');
   };
   const cancelLongPress = () => {
     if (longPressTimer !== undefined) window.clearTimeout(longPressTimer);
@@ -134,6 +147,17 @@ export function createToggleView(
   button.addEventListener('contextmenu', (event) => {
     event.preventDefault();
     showPopover();
+  });
+  languageButton.addEventListener('pointerdown', (event) => {
+    event.stopPropagation();
+  });
+  languageButton.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (popover.hidden) {
+      showPopover();
+    } else {
+      hidePopover();
+    }
   });
   topSelect.select.addEventListener('change', selectPair);
   bottomSelect.select.addEventListener('change', selectPair);
@@ -324,6 +348,29 @@ const TOGGLE_CSS = `
     border-radius: 0;
     background: transparent;
     cursor: pointer;
+  }
+
+  .language-menu-trigger {
+    align-self: center;
+    min-width: 42px;
+    height: 32px;
+    padding: 0 8px;
+    border: 1px solid rgb(255 255 255 / 34%);
+    border-radius: 6px;
+    background: rgb(10 12 16 / 58%);
+    color: #f6f8fb;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 650;
+    line-height: 30px;
+  }
+
+  .language-menu-trigger:hover,
+  .language-menu-trigger:focus-visible,
+  .language-menu-trigger[aria-expanded="true"] {
+    border-color: rgb(255 194 75 / 78%);
+    background: rgb(24 28 36 / 92%);
+    color: #ffc24b;
   }
 
   .icon {
