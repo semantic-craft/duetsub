@@ -552,9 +552,6 @@ class NetflixAdapter implements SiteAdapter {
       (response) => response.responseId === message.responseId,
     );
     if (recorded === undefined) return;
-    console.debug(
-      `[DuetSub] Netflix ISOLATED validated TTML for ${owner.track.label}`,
-    );
 
     this.#resolvePendingFromInbox();
   }

@@ -37,7 +37,6 @@ function patchJsonParse(): void {
       const candidate = manifestCandidate(parsed);
       if (candidate !== undefined) {
         postDuetSubMessage(netflixManifestMessage(candidate));
-        console.debug('[DuetSub] Netflix MAIN observed timed-text manifest');
       }
     } catch {
       // Observation must not change JSON.parse behavior.
@@ -203,7 +202,6 @@ function forwardXmlCandidate(
   if (activeTrackRequest?.requestId === observation.request.requestId) {
     activeTrackRequest = undefined;
   }
-  console.debug('[DuetSub] Netflix MAIN observed XML timed-text candidate');
 }
 
 function isXmlMimeType(value: string | null): boolean {
