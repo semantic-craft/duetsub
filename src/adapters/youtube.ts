@@ -12,8 +12,9 @@ import {
 } from '../core/messages';
 import { parseYoutubeJson3 } from '../core/youtube-json3';
 import {
+  canRestoreYoutubeCaptionState,
+  decideYoutubeEmptyBodyRecovery,
   isYoutubeCaptionStateRestored,
-  nextYoutubeEmptyBodyAction,
   readRestorableYoutubeCaptionState,
   type RestorableYoutubeCaptionState,
 } from './youtube-priming';
@@ -25,7 +26,7 @@ import {
   type YoutubeTimedTextRequestSnapshot,
 } from './youtube-request';
 import {
-  parseYoutubeCaptionTracks,
+  parseYoutubeCreatorOfficialCaptionTracks,
   type YoutubeTrackHandle,
 } from './youtube-tracks';
 import { youtubeVideoIdFromUrl } from './youtube-url';
@@ -38,6 +39,7 @@ export const YOUTUBE_MANUAL_CAPTION_MESSAGE =
 interface PendingCommand {
   readonly context: YoutubeRequestContext;
   readonly operation: YoutubePlayerOperation;
+  readonly allowStaleGeneration: boolean;
   readonly resolve: (value: MessageJsonValue | undefined) => void;
   readonly reject: (error: Error) => void;
   readonly timeout: number;
@@ -68,6 +70,7 @@ class YoutubeAdapter implements SiteAdapter {
   #generation: PlaybackGeneration = {
     contentGeneration: 0,
     clockGeneration: 0,
+    selectionGeneration: 0,
   };
   #videoId: string | undefined;
   #tracks: TrackInfo[] = [];
@@ -77,6 +80,7 @@ class YoutubeAdapter implements SiteAdapter {
   #navigationStarted = false;
   #rePrimeUsed = false;
   #commandSequence = 0;
+  #captionMutationTail: Promise<void> = Promise.resolve();
   #priming: {
     readonly context: YoutubeRequestContext;
     readonly promise: Promise<void>;
@@ -151,6 +155,9 @@ class YoutubeAdapter implements SiteAdapter {
         throw new Error(`YouTube timedtext failed with HTTP ${response.status}`);
       }
       const raw = await response.text();
+      if (!this.#isCurrent(context)) {
+        throw new Error('YouTube timedtext response became stale');
+      }
       if (raw.length > 0) {
         const cues = parseYoutubeJson3(raw, track.language);
         if (cues.length === 0) {
@@ -160,12 +167,27 @@ class YoutubeAdapter implements SiteAdapter {
         return cues;
       }
 
-      const rePrimeAttempts = this.#rePrimeUsed ? 1 : 0;
-      if (nextYoutubeEmptyBodyAction(rePrimeAttempts) === 'fail-closed') {
+      const priming = this.#priming !== undefined &&
+          sameYoutubeRequestContext(this.#priming.context, context)
+        ? this.#priming
+        : undefined;
+      const recovery = decideYoutubeEmptyBodyRecovery({
+        rePrimeUsed: this.#rePrimeUsed,
+        requestIsCurrent: this.#capturedRequest === snapshot,
+        rePrimeInFlight: priming !== undefined,
+      });
+      if (recovery === 'retry-current') continue;
+      if (recovery === 'await-reprime') {
+        await priming?.promise;
+        continue;
+      }
+      if (recovery === 'fail-closed') {
         throw new Error('YouTube POT remained invalid after one re-prime');
       }
       this.#rePrimeUsed = true;
-      this.#capturedRequest = undefined;
+      if (this.#capturedRequest === snapshot) {
+        this.#capturedRequest = undefined;
+      }
       await this.#primeForPot(context, boundHandle.handle);
     }
   }
@@ -175,7 +197,7 @@ class YoutubeAdapter implements SiteAdapter {
     this.#generation = generation;
     this.#tracks = [];
     this.#handles.clear();
-    this.#invalidateGeneration();
+    this.#invalidateGeneration(false);
   }
 
   onReset(
@@ -214,7 +236,16 @@ class YoutubeAdapter implements SiteAdapter {
     ) {
       return this.#priming.promise;
     }
-    const promise = this.#runPriming(context, handle).finally(() => {
+    const operation = this.#captionMutationTail
+      .catch(() => undefined)
+      .then(() => {
+        if (!this.#isCurrent(context)) {
+          throw new Error('YouTube POT priming became stale');
+        }
+        return this.#runPriming(context, handle);
+      });
+    this.#captionMutationTail = operation.catch(() => undefined);
+    const promise = operation.finally(() => {
       if (this.#priming?.promise === promise) this.#priming = undefined;
     });
     this.#priming = { context, promise };
@@ -253,7 +284,13 @@ class YoutubeAdapter implements SiteAdapter {
     }
 
     let restored = !mutationAttempted;
-    if (mutationAttempted && this.#isCurrent(context)) {
+    if (
+      mutationAttempted &&
+      canRestoreYoutubeCaptionState(
+        context.videoId,
+        currentWatchVideoId(),
+      )
+    ) {
       restored = await this.#restoreCaptionState(context, original);
     }
     if (!restored) {
@@ -275,10 +312,13 @@ class YoutubeAdapter implements SiteAdapter {
         context,
         'set-caption-track',
         original.track as MessageJsonValue,
+        true,
       );
       const observed = await this.#sendCommand(
         context,
         'read-caption-state',
+        undefined,
+        true,
       );
       return isYoutubeCaptionStateRestored(original, observed);
     } catch {
@@ -329,8 +369,13 @@ class YoutubeAdapter implements SiteAdapter {
     context: YoutubeRequestContext,
     operation: YoutubePlayerOperation,
     value?: MessageJsonValue,
+    allowStaleGeneration = false,
   ): Promise<MessageJsonValue | undefined> {
-    if (!this.#isCurrent(context)) {
+    if (
+      allowStaleGeneration
+        ? currentWatchVideoId() !== context.videoId
+        : !this.#isCurrent(context)
+    ) {
       return Promise.reject(new Error('YouTube player command became stale'));
     }
     const requestId = `youtube-${Date.now()}-${++this.#commandSequence}`;
@@ -342,6 +387,7 @@ class YoutubeAdapter implements SiteAdapter {
       this.#commands.set(requestId, {
         context,
         operation,
+        allowStaleGeneration,
         resolve,
         reject,
         timeout,
@@ -350,6 +396,7 @@ class YoutubeAdapter implements SiteAdapter {
         youtubePlayerCommand(
           requestId,
           context.videoId,
+          context.generation,
           operation,
           value,
         ),
@@ -372,13 +419,20 @@ class YoutubeAdapter implements SiteAdapter {
       if (
         pending === undefined ||
         pending.operation !== message.operation ||
-        message.videoId !== pending.context.videoId
+        message.videoId !== pending.context.videoId ||
+        !samePlaybackGeneration(
+          message.generation,
+          pending.context.generation,
+        )
       ) {
         return;
       }
       window.clearTimeout(pending.timeout);
       this.#commands.delete(message.requestId);
-      if (!this.#isCurrent(pending.context) || !message.ok) {
+      const contextAccepted = pending.allowStaleGeneration
+        ? currentWatchVideoId() === pending.context.videoId
+        : this.#isCurrent(pending.context);
+      if (!contextAccepted || !message.ok) {
         pending.reject(
           new Error(message.error ?? 'YouTube player command failed'),
         );
@@ -404,7 +458,7 @@ class YoutubeAdapter implements SiteAdapter {
     }
 
     if (message.type === 'youtube-captions') {
-      const candidates = parseYoutubeCaptionTracks(
+      const candidates = parseYoutubeCreatorOfficialCaptionTracks(
         message.captions,
         message.videoId,
       );
@@ -420,8 +474,15 @@ class YoutubeAdapter implements SiteAdapter {
     }
 
     if (message.type === 'youtube-timedtext-request') {
+      const requestContext = message.generation === undefined
+        ? context
+        : {
+            videoId: message.videoId,
+            generation: message.generation,
+          };
+      if (!sameYoutubeRequestContext(requestContext, context)) return;
       this.#capturedRequest = {
-        context,
+        context: requestContext,
         ...message.request,
       };
       for (const pending of Array.from(this.#pendingPot)) {
@@ -449,20 +510,23 @@ class YoutubeAdapter implements SiteAdapter {
   };
 
   #resetPrivateState(videoId: string | undefined): void {
+    const videoChanged = this.#videoId !== videoId;
     this.#videoId = videoId;
     this.#tracks = [];
     this.#handles.clear();
-    this.#invalidateGeneration();
+    this.#invalidateGeneration(videoChanged);
   }
 
-  #invalidateGeneration(): void {
+  #invalidateGeneration(videoChanged: boolean): void {
     this.#capturedRequest = undefined;
     this.#priming = undefined;
     this.#rePrimeUsed = false;
-    for (const [requestId, pending] of this.#commands) {
-      window.clearTimeout(pending.timeout);
-      pending.reject(new Error('YouTube player command became stale'));
-      this.#commands.delete(requestId);
+    if (videoChanged) {
+      for (const [requestId, pending] of this.#commands) {
+        window.clearTimeout(pending.timeout);
+        pending.reject(new Error('YouTube player command became stale'));
+        this.#commands.delete(requestId);
+      }
     }
     for (const pending of Array.from(this.#pendingPot)) {
       pending.reject(new Error('YouTube POT request became stale'));

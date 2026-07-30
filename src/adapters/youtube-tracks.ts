@@ -108,6 +108,19 @@ export function parseYoutubeCaptionTracks(
   return candidates;
 }
 
+export function parseYoutubeCreatorOfficialCaptionTracks(
+  captions: unknown,
+  videoId: string,
+): YoutubeTrackCandidate[] {
+  return parseYoutubeCaptionTracks(captions, videoId).filter(
+    ({ track, handle }) =>
+      track.source === 'official' &&
+      handle.kind === undefined &&
+      handle.tlang === undefined &&
+      !new URL(handle.baseUrl).searchParams.has('tlang'),
+  );
+}
+
 export function normalizeYoutubeLanguage(value: string): string | undefined {
   const parts = value.split('-');
   if (parts[0]?.toLowerCase() === 'zh') {
@@ -119,7 +132,6 @@ export function normalizeYoutubeLanguage(value: string): string | undefined {
       return 'zh-Hant';
     }
     if (
-      qualifiers.length === 0 ||
       qualifiers.includes('hans') ||
       qualifiers.some((part) => ['cn', 'sg'].includes(part))
     ) {

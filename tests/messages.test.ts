@@ -254,6 +254,11 @@ describe('Netflix MAIN to ISOLATED messages', () => {
 
 describe('YouTube MAIN to ISOLATED messages', () => {
   it('accepts guarded raw captions and a same-video POT request snapshot', () => {
+    const generation = {
+      contentGeneration: 3,
+      clockGeneration: 4,
+      selectionGeneration: 5,
+    };
     const captions = youtubeCaptionsMessage('video-one', {
       playerCaptionsTracklistRenderer: { captionTracks: [] },
     });
@@ -264,10 +269,11 @@ describe('YouTube MAIN to ISOLATED messages', () => {
       method: 'GET',
       headers: [['accept', 'application/json']],
       credentials: 'include',
-    });
+    }, generation);
 
     expect(isDuetSubMessage(captions)).toBe(true);
     expect(isDuetSubMessage(request)).toBe(true);
+    expect(request.generation).toEqual(generation);
     expect(
       isDuetSubMessage({
         ...request,
@@ -283,23 +289,37 @@ describe('YouTube MAIN to ISOLATED messages', () => {
         },
       }),
     ).toBe(false);
+    expect(
+      isDuetSubMessage({
+        ...request,
+        generation: { ...generation, selectionGeneration: -1 },
+      }),
+    ).toBe(false);
   });
 
   it('accepts only explicit JSON-safe player getter and primitive commands', () => {
+    const generation = {
+      contentGeneration: 3,
+      clockGeneration: 4,
+      selectionGeneration: 5,
+    };
     const read = youtubePlayerCommand(
       'request-read',
       'video-one',
+      generation,
       'read-caption-state',
     );
     const set = youtubePlayerCommand(
       'request-set',
       'video-one',
+      generation,
       'set-caption-track',
       { languageCode: 'en', kind: 'asr' },
     );
     const result = youtubePlayerCommandResult(
       'request-set',
       'video-one',
+      generation,
       'set-caption-track',
       true,
       { languageCode: 'en', kind: 'asr' },
@@ -308,6 +328,7 @@ describe('YouTube MAIN to ISOLATED messages', () => {
     expect(isDuetSubMessage(read)).toBe(true);
     expect(isDuetSubMessage(set)).toBe(true);
     expect(isDuetSubMessage(result)).toBe(true);
+    expect(result.generation).toEqual(generation);
     expect(
       isDuetSubMessage({
         ...set,

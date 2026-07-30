@@ -15,6 +15,23 @@ export function nextYoutubeEmptyBodyAction(
   return rePrimeAttempts === 0 ? 'reprime' : 'fail-closed';
 }
 
+export function decideYoutubeEmptyBodyRecovery(input: {
+  readonly rePrimeUsed: boolean;
+  readonly requestIsCurrent: boolean;
+  readonly rePrimeInFlight: boolean;
+}): 'reprime' | 'await-reprime' | 'retry-current' | 'fail-closed' {
+  if (!input.requestIsCurrent) return 'retry-current';
+  if (input.rePrimeInFlight) return 'await-reprime';
+  return input.rePrimeUsed ? 'fail-closed' : 'reprime';
+}
+
+export function canRestoreYoutubeCaptionState(
+  originalVideoId: string,
+  currentVideoId: string | undefined,
+): boolean {
+  return originalVideoId === currentVideoId;
+}
+
 export function readRestorableYoutubeCaptionState(
   value: unknown,
 ): RestorableYoutubeCaptionState | undefined {

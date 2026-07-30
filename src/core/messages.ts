@@ -159,6 +159,7 @@ export interface YoutubeTimedTextRequestMessage
   readonly type: 'youtube-timedtext-request';
   readonly siteId: 'youtube';
   readonly videoId: string;
+  readonly generation?: PlaybackGeneration;
   readonly request: YoutubeTimedTextRequestData;
 }
 
@@ -181,6 +182,7 @@ export interface YoutubePlayerCommandMessage extends MessageEnvelope {
   readonly type: 'youtube-player-command';
   readonly siteId: 'youtube';
   readonly videoId: string;
+  readonly generation: PlaybackGeneration;
   readonly operation: YoutubePlayerOperation;
   readonly value?: MessageJsonValue;
 }
@@ -190,6 +192,7 @@ export interface YoutubePlayerCommandResultMessage extends MessageEnvelope {
   readonly type: 'youtube-player-command-result';
   readonly siteId: 'youtube';
   readonly videoId: string;
+  readonly generation: PlaybackGeneration;
   readonly operation: YoutubePlayerOperation;
   readonly ok: boolean;
   readonly value?: MessageJsonValue;
@@ -426,6 +429,7 @@ export function youtubeCaptionsMessage(
 export function youtubeTimedTextRequestMessage(
   videoId: string,
   request: YoutubeTimedTextRequestData,
+  generation?: PlaybackGeneration,
 ): YoutubeTimedTextRequestMessage {
   return {
     channel: CHANNEL,
@@ -434,6 +438,7 @@ export function youtubeTimedTextRequestMessage(
     type: 'youtube-timedtext-request',
     siteId: 'youtube',
     videoId,
+    ...(generation === undefined ? {} : { generation }),
     request,
   };
 }
@@ -441,6 +446,7 @@ export function youtubeTimedTextRequestMessage(
 export function youtubePlayerCommand(
   requestId: string,
   videoId: string,
+  generation: PlaybackGeneration,
   operation: YoutubePlayerOperation,
   value?: MessageJsonValue,
 ): YoutubePlayerCommandMessage {
@@ -452,6 +458,7 @@ export function youtubePlayerCommand(
     siteId: 'youtube',
     requestId,
     videoId,
+    generation,
     operation,
     ...(value === undefined ? {} : { value }),
   };
@@ -460,6 +467,7 @@ export function youtubePlayerCommand(
 export function youtubePlayerCommandResult(
   requestId: string,
   videoId: string,
+  generation: PlaybackGeneration,
   operation: YoutubePlayerOperation,
   ok: boolean,
   value?: MessageJsonValue,
@@ -473,6 +481,7 @@ export function youtubePlayerCommandResult(
     siteId: 'youtube',
     requestId,
     videoId,
+    generation,
     operation,
     ok,
     ...(value === undefined ? {} : { value }),
@@ -558,6 +567,8 @@ export function isDuetSubMessage(value: unknown): value is DuetSubMessage {
       candidate.direction === 'main-to-isolated' &&
       candidate.siteId === 'youtube' &&
       isYoutubeVideoId(candidate.videoId) &&
+      (candidate.generation === undefined ||
+        isPlaybackGeneration(candidate.generation)) &&
       isYoutubeTimedTextRequestData(candidate.request, candidate.videoId)
     );
   }
@@ -582,6 +593,7 @@ export function isDuetSubMessage(value: unknown): value is DuetSubMessage {
       return (
         candidate.siteId === 'youtube' &&
         isYoutubeVideoId(candidate.videoId) &&
+        isPlaybackGeneration(candidate.generation) &&
         isYoutubePlayerOperation(candidate.operation) &&
         (candidate.operation === 'set-caption-track'
           ? isJsonRecord(candidate.value)
@@ -614,6 +626,7 @@ export function isDuetSubMessage(value: unknown): value is DuetSubMessage {
     return (
       candidate.siteId === 'youtube' &&
       isYoutubeVideoId(candidate.videoId) &&
+      isPlaybackGeneration(candidate.generation) &&
       isYoutubePlayerOperation(candidate.operation) &&
       typeof candidate.ok === 'boolean' &&
       (candidate.value === undefined || isMessageJsonValue(candidate.value)) &&
