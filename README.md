@@ -1,29 +1,55 @@
-# DuetSub · 双语同幕 / 雙語同幕
+# DuetSub
 
-> Free and open source. Official subtitles first, AI only when needed.
+[English](README.md) | [简体中文](README.zh-CN.md)
 
-DuetSub is a free and open-source Chrome extension for people who learn, listen, and watch across languages. It places two synchronized subtitle languages together on:
+### Two subtitles. One screen. Keep the original in view.
 
-- Netflix
-- Prime Video
-- Max (`play.hbomax.com`)
-- YouTube
+DuetSub is a free and open-source Chrome extension that places two synchronized subtitle languages together on Netflix, Prime Video, Max, and YouTube.
 
-The default preference is English on top and Traditional Chinese below. The player menu can instead select any two machine-verifiable official languages actually offered for the current title. If one selected official language is missing, the user can optionally translate the missing line through their own DeepSeek, Qwen (Alibaba Cloud Model Studio in China or Singapore), Doubao (Volcengine Ark in China), another OpenAI-compatible HTTPS endpoint, or a loopback service such as Ollama or LM Studio. There are no subscriptions, paid tiers, or DuetSub cloud service—and no analytics tracking, video downloading, or DRM bypass.
+It uses official subtitles whenever they are available. Choose any two official languages verified for the current title, keep the original beside the language you understand, and switch without leaving the player. AI translation is optional and is used only as a fallback for a missing English or Traditional Chinese line—not as a replacement for an available official track.
 
-## What it does
+[Download the latest release](https://github.com/semantic-craft/duetsub/releases/latest) · [Privacy](PRIVACY.md) · [Verification](docs/VERIFICATION.md)
 
-- Places a DuetSub button inside each supported player's native control row.
-- Renders the selected top and bottom official languages using the real video clock.
-- Lists only official languages actually verified for the current title; ASR and platform machine-translation tracks do not enter the manual Official Pair menu.
-- Hides the native subtitle layer only after both DuetSub tracks are ready.
-- Restores the native subtitle selection and layer when DuetSub is disabled or reset.
-- Handles seeking and in-player episode/video changes without reusing stale cues.
-- Converts official Simplified Chinese to Traditional Chinese locally with OpenCC.
+## Why DuetSub
 
-DuetSub only uses subtitle tracks already available to the signed-in viewer. It does not download video, bypass DRM, expose region-locked tracks, inject remote code, or collect analytics.
+- **Official subtitles first.** The player menu lists only official languages verified for the current title. Manual Official Pairs never invoke machine translation.
+- **Any available official pair.** Put English above Chinese, Japanese above Korean, or any other two official languages the title actually provides.
+- **Built for real playback.** DuetSub follows the video clock, handles seeking and in-player title changes, and restores the native subtitle layer when disabled.
+- **Your endpoint, your choice.** Optional fallback supports DeepSeek, Qwen through Alibaba Cloud Model Studio, Doubao through Volcengine Ark, another OpenAI-compatible HTTPS endpoint, or a local Ollama/LM Studio service.
+- **Private by design.** There is no DuetSub cloud service, subscription, analytics tracking, video download, DRM bypass, or remote code execution.
 
-## Install
+## Supported players
+
+| Player | Official Language Pair |
+| --- | --- |
+| Netflix | Supported |
+| Prime Video | Supported |
+| Max (`play.hbomax.com`) | Supported, including verified English-CC alignment when required |
+| YouTube | Supported for creator-provided official captions |
+
+DuetSub only works with subtitle tracks available to the signed-in viewer. It does not expose region-locked tracks or manufacture subtitles that the platform has not provided.
+
+## A language menu inside the player
+
+The dedicated **Language** button opens a menu where you can:
+
+- choose the top and bottom official subtitle languages;
+- swap the two lines;
+- reload official subtitle tracks if a player gets stuck;
+- retry optional translation separately;
+- open settings without leaving the video.
+
+The menu is generated from the current title instead of a static all-language catalog. If DuetSub cannot verify ownership or timing, it fails closed and leaves the native subtitles intact.
+
+## Optional AI fallback
+
+Two verified official tracks never contact a translation service.
+
+When the standard English / Traditional Chinese fallback needs translation, DuetSub sends only the required subtitle text to the endpoint you explicitly configure and authorize. Qwen uses the Responses API with a Workspace ID supplied by the user; optional Qwen web search is off by default. API keys, preferences, and the local translation cache stay in `chrome.storage.local`.
+
+The settings interface is available in English, Simplified Chinese, and Traditional Chinese.
+
+## Install from GitHub
 
 1. Download `duetsub-0.1.6-chrome.zip` from the [latest release](https://github.com/semantic-craft/duetsub/releases/latest).
 2. Unzip it to a permanent folder.
@@ -36,23 +62,15 @@ The standalone GitHub build carries the stable extension ID:
 nopbidmmkeonplhniidecfeibhnanmig
 ```
 
-The Chrome Web Store build intentionally omits `manifest.key`, because the dashboard assigns and preserves the Store Item ID. The two release channels are packaged separately so the standalone key is never accidentally submitted to the store.
+The Chrome Web Store package is built separately without `manifest.key`, because the Store assigns and preserves its own item identity.
 
-## Translation is optional
+## Verification
 
-The four streaming-site permissions are required because the content scripts run on those players. Translation endpoints are not pre-authorized:
+Automated tests cover parsing, track ownership, lifecycle generations, seeking, native-subtitle restoration, translation batching and caching, and release-package invariants.
 
-- DeepSeek, Qwen, Doubao, and custom HTTPS access are requested only when the user saves or tests that endpoint.
-- `localhost`, `127.0.0.1`, and `[::1]` access is requested only when the user saves or tests a loopback endpoint.
-- Declining a request leaves official subtitles working and does not grant background access.
+The Official Language Pair runtime candidate `fa0989e` passed logged-in playback gates on Prime Video, Netflix, Max, and YouTube from one byte-identical unpacked build. The integrated `main` build separately passed the full automated release and Store-package gates.
 
-API keys, settings, and the global top/bottom language preference stay in `chrome.storage.local`. A resolved two-official-track pair never contacts a translation endpoint. Source subtitle text is sent only when a selected official language is missing, DuetSub is enabled, and the configured endpoint has been authorized. See [PRIVACY.md](PRIVACY.md) for the complete data boundary.
-
-## Verification status
-
-Automated tests cover parsing, track ownership, lifecycle generations, seek handling, subtitle restoration, translation batching/cache, and release-package invariants. The Official Language Pair runtime candidate `fa0989e` passed logged-in playback gates on Prime Video, Netflix, Max, and YouTube from one byte-identical unpacked build, including real seeks and native-subtitle restoration.
-
-See [docs/VERIFICATION.md](docs/VERIFICATION.md) for the current evidence and [docs/RELEASE.md](docs/RELEASE.md) for the release process.
+See [docs/VERIFICATION.md](docs/VERIFICATION.md) for the evidence ledger.
 
 ## Development
 
@@ -65,7 +83,7 @@ npm run check
 npm run build
 ```
 
-Create and verify the distributable archive:
+Create and verify the standalone archive:
 
 ```bash
 npm run release:build
@@ -77,7 +95,7 @@ Create and verify the Chrome Web Store archive:
 npm run store:build
 ```
 
-Both archives are written under `.output/`. A `v*` tag triggers the GitHub Actions release workflow, which reruns all standalone release checks before attaching the GitHub archive.
+Both archives are written under `.output/`. A `v*` tag triggers the GitHub Actions release workflow and attaches the verified standalone archive to the GitHub Release.
 
 ## Repository boundaries
 
@@ -87,4 +105,4 @@ Both archives are written under `.output/`. A `v*` tag triggers the GitHub Actio
 - `research/proprietary/` is ignored except for its boundary notice; proprietary research extracts are never published.
 - Signed subtitle URLs, cookies, tokens, API keys, complete proprietary payloads, and private signing keys must never enter git.
 
-The DuetSub code is available under the [MIT License](LICENSE). Files under `research/upstream/` retain their own licenses.
+DuetSub is available under the [MIT License](LICENSE). Files under `research/upstream/` retain their original licenses.
