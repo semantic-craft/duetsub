@@ -35,21 +35,36 @@
         <label class="field">供應商
           <select id="provider">
             <option value="deepseek">DeepSeek</option>
+            <option value="qwen-cn">千問（阿里雲百煉·中國區）</option>
+            <option value="qwen-sg">千問（阿里雲百煉·新加坡區）</option>
+            <option value="doubao">豆包（火山方舟·中國區）</option>
             <option value="openai-compatible">OpenAI 兼容</option>
             <option value="local">本地 OpenAI 兼容</option>
           </select>
         </label>
         <label class="field">Base URL
           <input id="base-url" type="url" required autocomplete="url">
+          <small id="base-url-help" hidden>請將 YOUR_WORKSPACE_ID 替換為百煉控制台中的業務空間 ID。</small>
         </label>
         <label class="field">API key
           <input id="api-key" type="password" autocomplete="off" spellcheck="false">
         </label>
-        <label class="field">模型
+        <label class="field">模型（可選或手動輸入）
           <input id="model" required autocomplete="off" spellcheck="false" list="deepseek-models">
           <datalist id="deepseek-models">
             <option value="deepseek-v4-flash"></option>
             <option value="deepseek-v4-pro"></option>
+          </datalist>
+          <datalist id="qwen-models">
+            <option value="qwen3.6-flash"></option>
+            <option value="qwen3.7-plus"></option>
+            <option value="qwen3.7-max"></option>
+          </datalist>
+          <datalist id="doubao-models">
+            <option value="doubao-seed-2-1-pro-260628"></option>
+            <option value="doubao-seed-2-0-lite-260215"></option>
+            <option value="doubao-seed-2-0-mini-260215"></option>
+            <option value="doubao-seed-2-0-pro-260215"></option>
           </datalist>
         </label>
         <p class="fixed">翻譯 fallback 目標：繁體中文 / 英文（與手動官方語言對分離）</p>

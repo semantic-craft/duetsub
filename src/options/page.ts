@@ -1,5 +1,5 @@
 import {
-  DEFAULT_TRANSLATION_CONFIG,
+  translationProviderDefault,
   validateTranslationConfig,
   type TranslationConfig,
   type TranslationProvider,
@@ -18,6 +18,7 @@ import {
 const form = document.querySelector<HTMLFormElement>('form')!;
 const provider = document.querySelector<HTMLSelectElement>('#provider')!;
 const baseUrl = document.querySelector<HTMLInputElement>('#base-url')!;
+const baseUrlHelp = document.querySelector<HTMLElement>('#base-url-help')!;
 const apiKey = document.querySelector<HTMLInputElement>('#api-key')!;
 const model = document.querySelector<HTMLInputElement>('#model')!;
 const status = document.querySelector<HTMLOutputElement>('#status')!;
@@ -89,12 +90,16 @@ function renderConfig(config: TranslationConfig): void {
   baseUrl.value = config.baseUrl;
   apiKey.value = config.apiKey;
   model.value = config.model;
-  if (config.provider === 'deepseek') {
-    model.setAttribute('list', 'deepseek-models');
-  } else {
+  const modelList = modelListFor(config.provider);
+  if (modelList === undefined) {
     model.removeAttribute('list');
+  } else {
+    model.setAttribute('list', modelList);
   }
-  baseUrl.closest<HTMLElement>('.field')!.hidden = config.provider === 'deepseek';
+  baseUrl.closest<HTMLElement>('.field')!.hidden =
+    config.provider === 'deepseek' || config.provider === 'doubao';
+  baseUrlHelp.hidden =
+    config.provider !== 'qwen-cn' && config.provider !== 'qwen-sg';
 }
 
 function renderLanguagePair(loaded: LoadedLanguagePairPreference): void {
@@ -109,14 +114,30 @@ function renderLanguagePair(loaded: LoadedLanguagePairPreference): void {
 }
 
 function applyProviderDefaults(value: TranslationProvider): void {
-  if (value === 'deepseek') {
-    renderConfig({ ...DEFAULT_TRANSLATION_CONFIG, apiKey: apiKey.value });
-  } else {
-    baseUrl.closest<HTMLElement>('.field')!.hidden = false;
-    if (value === 'local' && baseUrl.value.includes('deepseek.com')) {
-      baseUrl.value = 'http://localhost:11434/v1';
-      model.value = '';
-    }
+  const preset = translationProviderDefault(value);
+  if (preset !== undefined) {
+    renderConfig(preset);
+    return;
+  }
+  renderConfig({
+    provider: value,
+    baseUrl: value === 'local' ? 'http://localhost:11434/v1' : '',
+    apiKey: '',
+    model: '',
+  });
+}
+
+function modelListFor(provider: TranslationProvider): string | undefined {
+  switch (provider) {
+    case 'deepseek':
+      return 'deepseek-models';
+    case 'qwen-cn':
+    case 'qwen-sg':
+      return 'qwen-models';
+    case 'doubao':
+      return 'doubao-models';
+    default:
+      return undefined;
   }
 }
 
