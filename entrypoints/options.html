@@ -42,9 +42,12 @@
             <option value="local">本地 OpenAI 兼容</option>
           </select>
         </label>
+        <label id="workspace-id-field" class="field" hidden>百煉 Workspace ID
+          <input id="workspace-id" type="text" required autocomplete="off" spellcheck="false" placeholder="ws-…">
+          <small>只需填寫 <code>ws-…</code>；DuetSub 會按所選地域自動建立 Responses API 位址。</small>
+        </label>
         <label class="field">Base URL
           <input id="base-url" type="url" required autocomplete="url">
-          <small id="base-url-help" hidden>請將 YOUR_WORKSPACE_ID 替換為百煉控制台中的業務空間 ID。</small>
         </label>
         <label class="field">API key
           <input id="api-key" type="password" autocomplete="off" spellcheck="false">

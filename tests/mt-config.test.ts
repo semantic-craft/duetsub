@@ -7,6 +7,8 @@ import {
   DOUBAO_TRANSLATION_CONFIG,
   QWEN_CN_TRANSLATION_CONFIG,
   QWEN_SG_TRANSLATION_CONFIG,
+  qwenBaseUrl,
+  qwenWorkspaceId,
   translationProviderDefault,
   translationRequestUrl,
   validateTranslationConfig,
@@ -94,13 +96,27 @@ describe('translation config', () => {
     ).toBe(true);
   });
 
+  it('derives recommended Qwen endpoints from the user workspace ID', () => {
+    expect(qwenBaseUrl('qwen-cn', 'ws-test')).toBe(
+      'https://ws-test.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
+    );
+    expect(qwenBaseUrl('qwen-sg', 'ws-test')).toBe(
+      'https://ws-test.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1',
+    );
+    expect(qwenWorkspaceId({
+      ...QWEN_CN_TRANSLATION_CONFIG,
+      baseUrl: qwenBaseUrl('qwen-cn', 'ws-test'),
+    })).toBe('ws-test');
+    expect(qwenWorkspaceId(QWEN_CN_TRANSLATION_CONFIG)).toBe('');
+  });
+
   it('requires replacing the Qwen workspace placeholder before use', () => {
     expect(validateTranslationConfig({
       ...QWEN_CN_TRANSLATION_CONFIG,
       apiKey: 'secret',
     })).toEqual({
       ok: false,
-      error: '請將 Base URL 中的 YOUR_WORKSPACE_ID 替換為百煉業務空間 ID',
+      error: '請填寫有效的百煉 Workspace ID',
     });
   });
 

@@ -1,4 +1,7 @@
 import {
+  QWEN_WORKSPACE_ID_PLACEHOLDER,
+  qwenBaseUrl,
+  qwenWorkspaceId,
   translationProviderDefault,
   validateTranslationConfig,
   type TranslationConfig,
@@ -18,7 +21,11 @@ import {
 const form = document.querySelector<HTMLFormElement>('form')!;
 const provider = document.querySelector<HTMLSelectElement>('#provider')!;
 const baseUrl = document.querySelector<HTMLInputElement>('#base-url')!;
-const baseUrlHelp = document.querySelector<HTMLElement>('#base-url-help')!;
+const baseUrlField = baseUrl.closest<HTMLElement>('.field')!;
+const workspaceId = document.querySelector<HTMLInputElement>('#workspace-id')!;
+const workspaceIdField = document.querySelector<HTMLElement>(
+  '#workspace-id-field',
+)!;
 const apiKey = document.querySelector<HTMLInputElement>('#api-key')!;
 const model = document.querySelector<HTMLInputElement>('#model')!;
 const status = document.querySelector<HTMLOutputElement>('#status')!;
@@ -32,7 +39,9 @@ const resetLanguagePair = document.querySelector<HTMLButtonElement>(
 
 void loadTranslationConfig(chrome.storage.local).then(renderConfig);
 void loadLanguagePairPreference(chrome.storage.local).then(renderLanguagePair);
-provider.addEventListener('change', () => applyProviderDefaults(provider.value as TranslationProvider));
+provider.addEventListener('change', () => {
+  applyProviderDefaults(provider.value as TranslationProvider);
+});
 resetLanguagePair.addEventListener('click', () => {
   void (async () => {
     await resetLanguagePairPreference(chrome.storage.local);
@@ -77,9 +86,15 @@ async function saveCurrent(): Promise<void> {
 }
 
 function readConfig(): TranslationConfig {
+  const selectedProvider = provider.value as TranslationProvider;
   return {
-    provider: provider.value as TranslationProvider,
-    baseUrl: baseUrl.value,
+    provider: selectedProvider,
+    baseUrl: isQwenProvider(selectedProvider)
+      ? qwenBaseUrl(
+        selectedProvider,
+        workspaceId.value.trim() || QWEN_WORKSPACE_ID_PLACEHOLDER,
+      )
+      : baseUrl.value,
     apiKey: apiKey.value,
     model: model.value,
   };
@@ -88,6 +103,11 @@ function readConfig(): TranslationConfig {
 function renderConfig(config: TranslationConfig): void {
   provider.value = config.provider;
   baseUrl.value = config.baseUrl;
+  const qwen = isQwenProvider(config.provider);
+  const configuredWorkspaceId = qwenWorkspaceId(config);
+  if (configuredWorkspaceId !== '' || !qwen) {
+    workspaceId.value = configuredWorkspaceId;
+  }
   apiKey.value = config.apiKey;
   model.value = config.model;
   const modelList = modelListFor(config.provider);
@@ -96,10 +116,11 @@ function renderConfig(config: TranslationConfig): void {
   } else {
     model.setAttribute('list', modelList);
   }
-  baseUrl.closest<HTMLElement>('.field')!.hidden =
-    config.provider === 'deepseek' || config.provider === 'doubao';
-  baseUrlHelp.hidden =
-    config.provider !== 'qwen-cn' && config.provider !== 'qwen-sg';
+  baseUrlField.hidden =
+    config.provider === 'deepseek' || config.provider === 'doubao' || qwen;
+  baseUrl.required = !baseUrlField.hidden;
+  workspaceIdField.hidden = !qwen;
+  workspaceId.required = qwen;
 }
 
 function renderLanguagePair(loaded: LoadedLanguagePairPreference): void {
@@ -116,7 +137,14 @@ function renderLanguagePair(loaded: LoadedLanguagePairPreference): void {
 function applyProviderDefaults(value: TranslationProvider): void {
   const preset = translationProviderDefault(value);
   if (preset !== undefined) {
-    renderConfig(preset);
+    renderConfig(
+      isQwenProvider(value) && workspaceId.value.trim() !== ''
+        ? {
+          ...preset,
+          baseUrl: qwenBaseUrl(value, workspaceId.value),
+        }
+        : preset,
+    );
     return;
   }
   renderConfig({
@@ -125,6 +153,12 @@ function applyProviderDefaults(value: TranslationProvider): void {
     apiKey: '',
     model: '',
   });
+}
+
+function isQwenProvider(
+  value: TranslationProvider,
+): value is Extract<TranslationProvider, 'qwen-cn' | 'qwen-sg'> {
+  return value === 'qwen-cn' || value === 'qwen-sg';
 }
 
 function modelListFor(provider: TranslationProvider): string | undefined {
