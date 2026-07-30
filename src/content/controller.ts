@@ -38,9 +38,8 @@ import {
 } from '../core/synchronizer';
 import {
   decideSubtitleSources,
-  selectBilingualTracks,
+  decideYoutubeSubtitleSources,
   type SubtitleSource,
-  type SubtitleSourceDecision,
 } from '../core/track-selection';
 import { scheduleTranslationBatches } from '../mt/scheduling';
 import { NativeCaptionVisibility } from './native-captions';
@@ -516,7 +515,19 @@ class PlaybackController {
       this.#render();
       return;
     }
-    if (this.#hasSavedLanguagePairPreference || this.#siteId === 'max') {
+    const youtubeFallback =
+      this.#siteId === 'youtube' &&
+      this.#hasSavedLanguagePairPreference &&
+      isDefaultLanguagePair(this.#languagePairPreference) &&
+      resolveOfficialPair({
+        siteId: this.#siteId,
+        tracks,
+        preference: this.#languagePairPreference,
+      }).kind !== 'ready';
+    if (
+      !youtubeFallback &&
+      (this.#hasSavedLanguagePairPreference || this.#siteId === 'max')
+    ) {
       void this.#acquireSelectedOfficialTracks(
         bindPlaybackGeneration(this.#state, tracks),
         this.#interactionRevision,
@@ -648,7 +659,7 @@ class PlaybackController {
     if (tracks === undefined) return;
 
     const decision = this.#siteId === 'youtube'
-      ? decideYouTubeSources(tracks)
+      ? decideYoutubeSubtitleSources(tracks)
       : decideSubtitleSources(tracks);
     if (decision.english === undefined || decision.chinese === undefined) {
       this.#status = '開啟 · 沒有可用的英文或中文來源';
@@ -1209,17 +1220,11 @@ function openOptionsPage(): void {
   window.open(chrome.runtime.getURL('options.html'), '_blank', 'noopener');
 }
 
-function decideYouTubeSources(
-  tracks: readonly TrackInfo[],
-): SubtitleSourceDecision {
-  const selected = selectBilingualTracks(tracks);
-  if (selected.english !== undefined && selected.chinese !== undefined) {
-    return {
-      english: { kind: 'official', track: selected.english },
-      chinese: { kind: 'official', track: selected.chinese },
-    };
-  }
-  return decideSubtitleSources(tracks);
+function isDefaultLanguagePair(
+  preference: LanguagePairPreference,
+): boolean {
+  return preference.top === DEFAULT_LANGUAGE_PAIR_PREFERENCE.top &&
+    preference.bottom === DEFAULT_LANGUAGE_PAIR_PREFERENCE.bottom;
 }
 
 function selectedTrackStatus(

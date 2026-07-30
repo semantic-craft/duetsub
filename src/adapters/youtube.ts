@@ -26,7 +26,7 @@ import {
   type YoutubeTimedTextRequestSnapshot,
 } from './youtube-request';
 import {
-  parseYoutubeCreatorOfficialCaptionTracks,
+  parseYoutubeCaptionTracks,
   type YoutubeTrackHandle,
 } from './youtube-tracks';
 import { youtubeVideoIdFromUrl } from './youtube-url';
@@ -458,7 +458,7 @@ class YoutubeAdapter implements SiteAdapter {
     }
 
     if (message.type === 'youtube-captions') {
-      const candidates = parseYoutubeCreatorOfficialCaptionTracks(
+      const candidates = parseYoutubeCaptionTracks(
         message.captions,
         message.videoId,
       );

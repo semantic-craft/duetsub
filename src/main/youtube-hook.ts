@@ -124,7 +124,7 @@ function patchXmlHttpRequest(): void {
 
   XMLHttpRequest.prototype.setRequestHeader =
     function duetSubYoutubeSetRequestHeader(name: string, value: string): void {
-      xhrRequests.get(this)?.headers.push([name, value]);
+      xhrRequests.get(this)?.headers.push([String(name), String(value)]);
       originalSetRequestHeader.call(this, name, value);
     };
 

@@ -114,6 +114,28 @@ describe('YouTube MAIN-world POT observation', () => {
       },
     });
 
+    const xhr = new XMLHttpRequest();
+    xhr.open(
+      'GET',
+      `https://www.youtube.com/api/timedtext?v=${videoId}` +
+        '&lang=ja&pot=POT_PLACEHOLDER&fmt=json3',
+    );
+    xhr.setRequestHeader(
+      'x-youtube-client-version',
+      123 as unknown as string,
+    );
+    xhr.send();
+
+    const xhrTimedText = postMessage.mock.calls
+      .map(([message]) => message)
+      .filter((message) => message.type === 'youtube-timedtext-request')
+      .at(-1);
+    expect(xhrTimedText).toMatchObject({
+      request: {
+        headers: [['x-youtube-client-version', '123']],
+      },
+    });
+
     documentListeners.get('yt-navigate-start')?.();
     const messageCount = postMessage.mock.calls.length;
     await window.fetch(
