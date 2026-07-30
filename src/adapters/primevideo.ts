@@ -292,7 +292,7 @@ class PrimeVideoAdapter implements SiteAdapter {
     track: TrackInfo,
     generation: PlaybackGeneration,
   ): Promise<Cue[]> {
-    let group = await ensurePrimeSubtitleMenuOpen();
+    let group = await getPrimeSubtitleGroupForSwitch();
     let radio = findRadio(group, track.id);
     if (radio === undefined) throw new Error(`Prime track disappeared: ${track.id}`);
 
@@ -306,7 +306,7 @@ class PrimeVideoAdapter implements SiteAdapter {
         () => isPrimeSubtitleTrackChecked(off.id),
         DOM_TIMEOUT_MS,
       );
-      group = await ensurePrimeSubtitleMenuOpen();
+      group = await getPrimeSubtitleGroupForSwitch();
       radio = findRadio(group, track.id);
       if (radio === undefined) throw new Error(`Prime track disappeared: ${track.id}`);
     }
@@ -657,7 +657,7 @@ export async function restorePrimeSubtitleState(
   menuWasOpen: boolean,
 ): Promise<boolean> {
   try {
-    const group = await ensurePrimeSubtitleMenuOpen();
+    const group = await getPrimeSubtitleGroupForSwitch();
     const original = findRadio(group, originalId);
     if (original === undefined) return false;
     if (!original.checked) {
@@ -715,6 +715,16 @@ export async function ensurePrimeSubtitleMenuOpen(): Promise<HTMLElement> {
   );
   if (group === null) throw new Error('Prime subtitle menu did not open');
   return group;
+}
+
+export async function getPrimeSubtitleGroupForSwitch(): Promise<HTMLElement> {
+  const current = document.querySelector<HTMLElement>(
+    PRIME_SUBTITLE_GROUP_SELECTOR,
+  );
+  if (current !== null && readSubtitleRadios(current).length > 0) {
+    return current;
+  }
+  return ensurePrimeSubtitleMenuOpen();
 }
 
 async function getSubtitleGroup(): Promise<HTMLElement> {

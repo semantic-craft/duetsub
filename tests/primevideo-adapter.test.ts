@@ -9,6 +9,7 @@ import {
   applyPrimeVideoPairAlignmentPolicy,
   createPrimeVideoAdapter,
   ensurePrimeSubtitleMenuOpen,
+  getPrimeSubtitleGroupForSwitch,
   parsePrimeVideoSubtitleTrack,
   restorePrimeSubtitleState,
 } from '../src/adapters/primevideo';
@@ -25,6 +26,45 @@ function cues(text: string, language: string): Cue[] {
 }
 
 describe('Prime official subtitle metadata', () => {
+  it('reuses a hidden subtitle group without opening the Prime menu', async () => {
+    const radio = {
+      checked: true,
+      id: 'zh-hant_Subtitle_Dialog',
+    };
+    const group = {
+      getClientRects: () => [],
+      querySelectorAll: () => [radio],
+    };
+    const button = {
+      click: vi.fn(),
+    };
+
+    vi.stubGlobal('getComputedStyle', () => ({
+      display: 'none',
+      visibility: 'visible',
+    }));
+    vi.stubGlobal('document', {
+      querySelector: (selector: string) => {
+        if (
+          selector ===
+          'div[id^="dv-web-player"].dv-player-fullscreen .atvwebplayersdk-subtitle-radio-group'
+        ) {
+          return group;
+        }
+        if (
+          selector ===
+          'div[id^="dv-web-player"].dv-player-fullscreen button[aria-label="Subtitles and Audio Menu"]'
+        ) {
+          return button;
+        }
+        return null;
+      },
+    });
+
+    await expect(getPrimeSubtitleGroupForSwitch()).resolves.toBe(group);
+    expect(button.click).not.toHaveBeenCalled();
+  });
+
   it('opens a hidden subtitle group before switching the next track', async () => {
     let open = false;
     const group = {
