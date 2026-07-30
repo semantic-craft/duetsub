@@ -274,6 +274,7 @@ export function reanchorToggleHost(
 ): void {
   if (
     isFallbackAnchor &&
+    host.isConnected &&
     !host.hasAttribute('data-fallback-anchor')
   ) {
     return;

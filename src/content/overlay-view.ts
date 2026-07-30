@@ -4,6 +4,7 @@ export const OVERLAY_FONT_SIZE = 'clamp(13.76px, 6.2cqh, 40px)';
 
 export interface OverlayView {
   render(model: OverlayModel): void;
+  reanchor(player: HTMLElement): void;
   destroy(): void;
 }
 
@@ -22,7 +23,7 @@ export function createOverlayView(player: HTMLElement): OverlayView {
   const bottom = createLine('bottom');
   board.append(top.element, bottom.element);
   shadow.append(style, board);
-  player.append(host);
+  reanchorOverlayHost(host, player);
 
   return {
     render(model) {
@@ -34,10 +35,20 @@ export function createOverlayView(player: HTMLElement): OverlayView {
       renderLine(top, model.lines[0]);
       renderLine(bottom, model.lines[1]);
     },
+    reanchor(nextPlayer) {
+      reanchorOverlayHost(host, nextPlayer);
+    },
     destroy() {
       host.remove();
     },
   };
+}
+
+export function reanchorOverlayHost(
+  host: HTMLElement,
+  player: HTMLElement,
+): void {
+  if (host.parentElement !== player) player.append(host);
 }
 
 interface LineElements {

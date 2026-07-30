@@ -27,4 +27,13 @@ describe('player language menu actions', () => {
       'this.#adapter.start()',
     );
   });
+
+  it('reconnects player-owned views during controller reconciliation', () => {
+    expect(controllerSource).toContain(
+      'this.#overlayView.reanchor(target.player)',
+    );
+    expect(controllerSource).toContain(
+      'this.#toggleView.reanchor(',
+    );
+  });
 });

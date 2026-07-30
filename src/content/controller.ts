@@ -233,6 +233,7 @@ class PlaybackController {
       return false;
     }
 
+    this.#overlayView.reanchor(target.player);
     this.#toggleView.reanchor(
       target.controls ?? target.player,
       target.controls === undefined,
