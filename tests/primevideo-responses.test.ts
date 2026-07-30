@@ -29,6 +29,7 @@ const OFF_CAMPUS_ENGLISH_TRACK: TrackInfo = {
 const EPISODE_ONE = {
   contentGeneration: 1,
   clockGeneration: 1,
+  selectionGeneration: 0,
 };
 
 describe('Prime TTML response inbox', () => {
@@ -278,6 +279,7 @@ describe('Prime TTML response inbox', () => {
     const episodeTwo = {
       contentGeneration: 2,
       clockGeneration: 2,
+      selectionGeneration: 0,
     };
 
     const currentInbox = retainPrimeTtmlResponsesForGeneration(
@@ -292,5 +294,32 @@ describe('Prime TTML response inbox', () => {
     );
 
     expect(consumed.cues).toBeUndefined();
+  });
+
+  it('keeps a previous language pair response invisible after selection change', () => {
+    const inbox = recordPrimeTtmlResponse(EMPTY_PRIME_TTML_INBOX, {
+      responseId: 'previous-pair-response',
+      trackId: ENGLISH_TRACK.id,
+      raw: primeVideoFixture,
+      generation: EPISODE_ONE,
+    });
+    const currentSelection = {
+      ...EPISODE_ONE,
+      selectionGeneration: 1,
+    };
+
+    const currentInbox = retainPrimeTtmlResponsesForGeneration(
+      inbox,
+      currentSelection,
+    );
+    expect(
+      consumePrimeTtmlResponse(
+        currentInbox,
+        ENGLISH_TRACK,
+        currentSelection,
+        new DOMParser(),
+        0,
+      ).cues,
+    ).toBeUndefined();
   });
 });

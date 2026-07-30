@@ -46,6 +46,27 @@ interface PendingTimelineOffset {
   readonly generation: PlaybackGeneration;
 }
 
+export interface PrimeVideoSubtitleTrackMetadata {
+  readonly id: string;
+  readonly label: string;
+}
+
+export interface PrimeVideoTrackAcquisition {
+  readonly tracks: readonly TrackInfo[];
+  readonly isCurrent: () => boolean;
+  readonly capture: (track: TrackInfo) => Promise<Cue[]>;
+  readonly restore: () => Promise<boolean>;
+}
+
+export interface PrimeTimelineOffsetOwnership {
+  readonly current: PlaybackGeneration;
+  readonly pending: PendingTimelineOffset | undefined;
+  readonly response: {
+    readonly requestId: string;
+    readonly timelineOffsetMs: number;
+  };
+}
+
 export function createPrimeVideoAdapter(): SiteAdapter {
   return new PrimeVideoAdapter();
 }
@@ -71,6 +92,7 @@ class PrimeVideoAdapter implements SiteAdapter {
   #generation: PlaybackGeneration = {
     contentGeneration: 0,
     clockGeneration: 0,
+    selectionGeneration: 0,
   };
 
   constructor() {
@@ -197,8 +219,7 @@ class PrimeVideoAdapter implements SiteAdapter {
 
     const menuWasOpen = isSubtitleMenuOpen();
     let originalId = '';
-    let captured = new Map<string, Cue[]>();
-    let operationError: unknown;
+    let captured: Map<string, Cue[]>;
 
     try {
       await waitForPrimePlayerReady();
@@ -229,51 +250,21 @@ class PrimeVideoAdapter implements SiteAdapter {
       const orderedTracks = requestedTracks.toSorted((left, right) =>
         left.id === originalId ? 1 : right.id === originalId ? -1 : 0,
       );
-
-      for (const track of orderedTracks) {
-        if (!sameGeneration(this.#generation, generation)) {
-          throw new Error('Prime track request became stale');
-        }
-        const cues = await this.#switchAndCapture(track, generation);
-        captured.set(track.id, cues);
-      }
-
-      const english = requestedTracks.find(isEnglishCcTrack);
-      const chinese = requestedTracks.find(isTraditionalChineseTrack);
-      const englishCues =
-        english === undefined ? undefined : captured.get(english.id);
-      const chineseCues =
-        chinese === undefined ? undefined : captured.get(chinese.id);
-      if (
-        chinese !== undefined &&
-        englishCues !== undefined &&
-        chineseCues !== undefined
-      ) {
-        captured.set(
-          chinese.id,
-          alignPrimeChineseCuesToEnglish(englishCues, chineseCues),
-        );
-      }
+      captured = await acquirePrimeVideoTracks({
+        tracks: orderedTracks,
+        isCurrent: () => sameGeneration(this.#generation, generation),
+        capture: (track) => this.#switchAndCapture(track, generation),
+        restore: async () =>
+          generation.contentGeneration !==
+              this.#generation.contentGeneration ||
+          restoreOriginalState(button, originalId, menuWasOpen),
+      });
+      captured = applyPrimeVideoPairAlignmentPolicy(
+        requestedTracks,
+        captured,
+      );
     } catch (error) {
-      operationError = error;
-    }
-
-    const contentIsCurrent =
-      generation.contentGeneration === this.#generation.contentGeneration;
-    const restored =
-      !contentIsCurrent ||
-      (originalId !== '' &&
-        (await restoreOriginalState(button, originalId, menuWasOpen)));
-    if (!restored) {
-      operationError = new Error('Could not restore Prime subtitle state');
-    }
-    if (!sameGeneration(this.#generation, generation)) {
-      operationError = new Error('Prime track request became stale');
-    }
-
-    if (operationError !== undefined) {
-      captured = new Map();
-      rejectRequests(requests, asError(operationError));
+      rejectRequests(requests, asError(error));
       return;
     }
 
@@ -358,15 +349,13 @@ class PrimeVideoAdapter implements SiteAdapter {
       message.direction === 'main-to-isolated' &&
       message.type === 'prime-timeline-offset'
     ) {
-      const request = this.#pendingTimelineOffset;
-      if (
-        request === undefined ||
-        message.requestId !== request.requestId ||
-        !sameGeneration(this.#generation, request.generation)
-      ) {
-        return;
-      }
-      this.#timelineOffsetMs = message.timelineOffsetMs;
+      const timelineOffsetMs = acceptPrimeTimelineOffset({
+        current: this.#generation,
+        pending: this.#pendingTimelineOffset,
+        response: message,
+      });
+      if (timelineOffsetMs === undefined) return;
+      this.#timelineOffsetMs = timelineOffsetMs;
       this.#pendingTimelineOffset = undefined;
       this.#resolvePendingFromInbox();
       return;
@@ -436,6 +425,120 @@ class PrimeVideoAdapter implements SiteAdapter {
   }
 }
 
+export function parsePrimeVideoSubtitleTrack(
+  metadata: PrimeVideoSubtitleTrackMetadata,
+): TrackInfo | undefined {
+  const id = metadata.id.trim();
+  const label = metadata.label.trim();
+  const match = id.match(
+    /^([a-z]{2,3}(?:-[a-z0-9]{2,8})*)_([a-z][a-z0-9-]*)(?:_|$)/i,
+  );
+  if (id === '' || label === '' || match === null) return undefined;
+
+  let language: string;
+  try {
+    language = Intl.getCanonicalLocales(match[1])[0];
+  } catch {
+    return undefined;
+  }
+
+  const variant = match[2].toLowerCase();
+  const closedCaptions =
+    variant === 'sdh' ||
+    variant === 'cc' ||
+    variant === 'caption' ||
+    variant === 'closedcaption' ||
+    variant === 'closedcaptions';
+  const forcedOnly = variant === 'forced' || variant === 'forcednarrative';
+  if (!closedCaptions && !forcedOnly && variant !== 'subtitle') {
+    return undefined;
+  }
+
+  return {
+    id,
+    language,
+    source: 'official',
+    label,
+    kind: closedCaptions ? 'closed-captions' : 'subtitles',
+    ...(forcedOnly ? { forcedOnly: true } : {}),
+  };
+}
+
+export async function acquirePrimeVideoTracks(
+  input: PrimeVideoTrackAcquisition,
+): Promise<Map<string, Cue[]>> {
+  const captured = new Map<string, Cue[]>();
+  let operationError: unknown;
+
+  try {
+    for (const track of input.tracks) {
+      if (!input.isCurrent()) {
+        throw new Error('Prime track request became stale');
+      }
+      captured.set(track.id, await input.capture(track));
+      if (!input.isCurrent()) {
+        throw new Error('Prime track request became stale');
+      }
+    }
+  } catch (error) {
+    operationError = error;
+  }
+
+  let restored = false;
+  try {
+    restored = await input.restore();
+  } catch {
+    // Restoration failure takes precedence over the triggering operation.
+  }
+  if (!restored) {
+    operationError = new Error('Could not restore Prime subtitle state');
+  }
+  if (!input.isCurrent()) {
+    operationError = new Error('Prime track request became stale');
+  }
+  if (operationError !== undefined) throw asError(operationError);
+
+  return captured;
+}
+
+export function applyPrimeVideoPairAlignmentPolicy(
+  pair: readonly TrackInfo[],
+  captured: ReadonlyMap<string, Cue[]>,
+): Map<string, Cue[]> {
+  const result = new Map(captured);
+  const [top, bottom] = pair;
+  if (
+    pair.length !== 2 ||
+    top === undefined ||
+    bottom === undefined ||
+    !isEnglishCcTrack(top) ||
+    !isTraditionalChineseTrack(bottom) ||
+    bottom.kind !== 'subtitles'
+  ) {
+    return result;
+  }
+  const topCues = result.get(top.id);
+  const bottomCues = result.get(bottom.id);
+  if (topCues !== undefined && bottomCues !== undefined) {
+    result.set(
+      bottom.id,
+      alignPrimeChineseCuesToEnglish(topCues, bottomCues),
+    );
+  }
+  return result;
+}
+
+export function acceptPrimeTimelineOffset(
+  ownership: PrimeTimelineOffsetOwnership,
+): number | undefined {
+  const pending = ownership.pending;
+  return pending !== undefined &&
+      ownership.response.requestId === pending.requestId &&
+      sameGeneration(ownership.current, pending.generation)
+    ? ownership.response.timelineOffsetMs
+    : undefined;
+}
+
 function readOfficialTracks(group: HTMLElement): TrackInfo[] {
   const tracks: TrackInfo[] = [];
   for (const radio of readSubtitleRadios(group)) {
@@ -463,36 +566,10 @@ function readCheckedSubtitleTrackId(): string | undefined {
 }
 
 function trackFromRadio(radio: HTMLInputElement): TrackInfo | undefined {
-  const label = radio.getAttribute('aria-label')?.trim() ?? '';
-  if (radio.id === '' || label === '' || radio.id === 'off') return undefined;
-
-  const language = languageFromRadio(radio.id, label);
-  if (language === undefined) return undefined;
-  return {
+  return parsePrimeVideoSubtitleTrack({
     id: radio.id,
-    language,
-    source: 'official',
-    label,
-    kind: isClosedCaptionVariant(radio.id, label)
-      ? 'closed-captions'
-      : 'subtitles',
-  };
-}
-
-function languageFromRadio(id: string, label: string): string | undefined {
-  const idLanguage = id.match(/^([a-z]{2,3}(?:-[a-z0-9]{2,8})*)_/i)?.[1];
-  if (idLanguage !== undefined) {
-    try {
-      return Intl.getCanonicalLocales(idLanguage)[0];
-    } catch {
-      // Fall through to the verified accessible label vocabulary.
-    }
-  }
-
-  if (/^English(?:\s|\[|$)/i.test(label)) return 'en';
-  if (/中文[（(](?:繁體|繁体)[）)]/.test(label)) return 'zh-Hant';
-  if (/中文[（(](?:簡體|简体)[）)]/.test(label)) return 'zh-Hans';
-  return undefined;
+    label: radio.getAttribute('aria-label') ?? '',
+  });
 }
 
 function uniqueRequestedTracks(requests: readonly TrackRequest[]): TrackInfo[] {
@@ -509,10 +586,6 @@ function isEnglishCcTrack(track: TrackInfo): boolean {
     (language === 'en' || language.startsWith('en-')) &&
     track.kind === 'closed-captions'
   );
-}
-
-function isClosedCaptionVariant(id: string, label: string): boolean {
-  return /(?:^|[_\s[(])(?:cc|sdh)(?:[_\s)\]]|$)/i.test(`${id} ${label}`);
 }
 
 function isTraditionalChineseTrack(track: TrackInfo): boolean {

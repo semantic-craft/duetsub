@@ -123,7 +123,7 @@ function parsePrimeTtmlPayload(
 function normalizePrimeCue(cue: Cue, track: TrackInfo): Cue[] {
   if (
     !track.language.toLowerCase().startsWith('en') ||
-    !/\[CC\]/i.test(track.label)
+    track.kind !== 'closed-captions'
   ) {
     return [cue];
   }
