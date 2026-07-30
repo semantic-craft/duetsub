@@ -13,11 +13,9 @@ export function selectMaxEnglishPrimaryTrack(
         track.language.toLowerCase().startsWith('en-')),
   );
   return officialEnglish.find((track) =>
-    track.id.toLowerCase().endsWith('-closedcaptions')
+    track.kind === 'closed-captions'
   ) ??
-    officialEnglish.find((track) =>
-      track.id.toLowerCase().endsWith('-subtitles')
-    ) ??
+    officialEnglish.find((track) => track.kind === 'subtitles') ??
     officialEnglish[0];
 }
 

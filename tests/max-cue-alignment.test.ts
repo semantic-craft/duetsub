@@ -128,12 +128,14 @@ describe('selectMaxEnglishPrimaryTrack', () => {
       language: 'en-US',
       source: 'official',
       label: 'English',
+      kind: 'subtitles',
     };
     const closedCaptions: TrackInfo = {
       id: 'en-US-closedcaptions',
       language: 'en-US',
       source: 'official',
       label: 'English CC',
+      kind: 'closed-captions',
     };
 
     expect(

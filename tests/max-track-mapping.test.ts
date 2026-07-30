@@ -9,12 +9,14 @@ const ENGLISH: TrackInfo = {
   language: 'en-US',
   source: 'official',
   label: 'English',
+  kind: 'subtitles',
 };
 const TRADITIONAL_CHINESE: TrackInfo = {
   id: 'zh-Hant-TW-subtitles',
   language: 'zh-Hant-TW',
   source: 'official',
   label: 'Traditional Chinese',
+  kind: 'subtitles',
 };
 
 const SYNTHETIC_PLAYBACK_INFO = JSON.stringify({

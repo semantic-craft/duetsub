@@ -216,7 +216,8 @@ class PrimeVideoAdapter implements SiteAdapter {
           radio === undefined ||
           visibleTrack === undefined ||
           visibleTrack.language !== track.language ||
-          visibleTrack.label !== track.label
+          visibleTrack.label !== track.label ||
+          visibleTrack.kind !== track.kind
         ) {
           throw new Error(`Prime track DOM handle changed: ${track.id}`);
         }
@@ -464,7 +465,15 @@ function trackFromRadio(radio: HTMLInputElement): TrackInfo | undefined {
 
   const language = languageFromRadio(radio.id, label);
   if (language === undefined) return undefined;
-  return { id: radio.id, language, source: 'official', label };
+  return {
+    id: radio.id,
+    language,
+    source: 'official',
+    label,
+    kind: isClosedCaptionVariant(radio.id, label)
+      ? 'closed-captions'
+      : 'subtitles',
+  };
 }
 
 function languageFromRadio(id: string, label: string): string | undefined {
@@ -495,8 +504,12 @@ function isEnglishCcTrack(track: TrackInfo): boolean {
   const language = track.language.toLowerCase();
   return (
     (language === 'en' || language.startsWith('en-')) &&
-    /\[CC\]/i.test(track.label)
+    track.kind === 'closed-captions'
   );
+}
+
+function isClosedCaptionVariant(id: string, label: string): boolean {
+  return /(?:^|[_\s[(])(?:cc|sdh)(?:[_\s)\]]|$)/i.test(`${id} ${label}`);
 }
 
 function isTraditionalChineseTrack(track: TrackInfo): boolean {

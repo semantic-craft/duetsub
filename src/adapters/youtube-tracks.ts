@@ -60,6 +60,7 @@ export function parseYoutubeCaptionTracks(
         language,
         source,
         label,
+        kind: 'subtitles',
       },
       handle: {
         videoId,
@@ -95,6 +96,7 @@ export function parseYoutubeCaptionTracks(
           language,
           source: 'platform-mt',
           label: `${source.track.label} → ${targetLabel}`,
+          kind: 'subtitles',
         },
         handle: {
           ...source.handle,

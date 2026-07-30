@@ -116,6 +116,7 @@ class MaxAdapter implements SiteAdapter {
         candidate.id === track.id &&
         candidate.language === track.language &&
         candidate.label === track.label &&
+        candidate.kind === track.kind &&
         candidate.source === 'official',
     );
     if (authoritative === undefined) {
@@ -429,7 +430,15 @@ function trackFromButton(button: HTMLButtonElement): TrackInfo | undefined {
   const language = languageFromTrackId(id);
   return language === undefined
     ? undefined
-    : { id, language, source: 'official', label };
+    : {
+        id,
+        language,
+        source: 'official',
+        label,
+        kind: id.endsWith('-closedcaptions')
+          ? 'closed-captions'
+          : 'subtitles',
+      };
 }
 
 function languageFromTrackId(id: string): string | undefined {

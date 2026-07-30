@@ -784,6 +784,7 @@ function trackFromMenuOption(
     language: option.language,
     source: 'official',
     label: option.label,
+    kind: option.closedCaptions ? 'closed-captions' : 'subtitles',
   };
 }
 
@@ -803,9 +804,9 @@ function findOptionForTrack(
       option.language !== undefined &&
       sameLanguage(option.language, track.language),
   );
-  const trackClosedCaptions = hasClosedCaptionMarker(track.label, track.id);
   const sameCaptionKind = candidates.filter(
-    ({ closedCaptions }) => closedCaptions === trackClosedCaptions,
+    ({ closedCaptions }) =>
+      closedCaptions === (track.kind === 'closed-captions'),
   );
   if (sameCaptionKind.length > 0) candidates = sameCaptionKind;
   if (candidates.length === 1) return candidates[0];

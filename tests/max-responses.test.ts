@@ -14,6 +14,7 @@ const ENGLISH: TrackInfo = {
   language: 'en-US',
   source: 'official',
   label: 'English',
+  kind: 'subtitles',
 };
 const CURRENT_GENERATION = {
   contentGeneration: 1,

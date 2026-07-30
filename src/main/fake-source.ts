@@ -12,12 +12,14 @@ const TRACKS: readonly TrackInfo[] = [
     language: 'en',
     source: 'official',
     label: 'Fake official English',
+    kind: 'subtitles',
   },
   {
     id: 'walking-skeleton-zh-Hant',
     language: 'zh-Hant',
     source: 'official',
     label: 'Fake MT Traditional Chinese',
+    kind: 'subtitles',
   },
 ];
 

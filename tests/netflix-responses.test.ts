@@ -19,23 +19,27 @@ const ENGLISH_TRACK: TrackInfo = {
   language: 'en-US',
   source: 'official',
   label: 'English [CC]',
+  kind: 'closed-captions',
 };
 const ENGLISH_TRACK_PLAIN: TrackInfo = {
   ...ENGLISH_TRACK,
   id: 'english-plain',
   label: 'English',
+  kind: 'subtitles',
 };
 const TRADITIONAL_CHINESE_TRACK: TrackInfo = {
   id: 'traditional-chinese',
   language: 'zh-Hant',
   source: 'official',
   label: '中文（繁體）',
+  kind: 'subtitles',
 };
 const SIMPLIFIED_CHINESE_TRACK: TrackInfo = {
   id: 'simplified-chinese',
   language: 'zh-Hans',
   source: 'official',
   label: '中文（簡體）',
+  kind: 'subtitles',
 };
 const EPISODE_ONE = {
   contentGeneration: 1,

@@ -1,0 +1,242 @@
+import type { SiteId, TrackInfo } from './contracts';
+
+export type CanonicalLanguageTag = string;
+
+export interface LanguagePairPreference {
+  readonly version: 1;
+  readonly top: CanonicalLanguageTag;
+  readonly bottom: CanonicalLanguageTag;
+}
+
+export const DEFAULT_LANGUAGE_PAIR_PREFERENCE: LanguagePairPreference = {
+  version: 1,
+  top: 'en',
+  bottom: 'zh-Hant',
+};
+
+export interface OfficialLanguageOption {
+  readonly language: CanonicalLanguageTag;
+  readonly label: string;
+}
+
+export type OfficialPairResolution =
+  | {
+      readonly kind: 'ready';
+      readonly catalog: readonly OfficialLanguageOption[];
+      readonly top: TrackInfo;
+      readonly bottom: TrackInfo;
+    }
+  | {
+      readonly kind: 'unavailable';
+      readonly catalog: readonly OfficialLanguageOption[];
+      readonly reason:
+        | 'same-language'
+        | 'top-missing'
+        | 'bottom-missing'
+        | 'both-missing'
+        | 'ambiguous-language';
+    };
+
+interface CatalogTrack {
+  readonly track: TrackInfo;
+  readonly language: CanonicalLanguageTag;
+}
+
+type LanguageTrackSelection =
+  | { readonly kind: 'selected'; readonly track: TrackInfo }
+  | { readonly kind: 'missing' }
+  | { readonly kind: 'ambiguous' };
+
+export function resolveOfficialPair(input: {
+  readonly siteId: SiteId;
+  readonly tracks: readonly TrackInfo[];
+  readonly preference: LanguagePairPreference;
+}): OfficialPairResolution {
+  const tracks: CatalogTrack[] = input.tracks.flatMap((track) => {
+    if (track.source !== 'official' || track.forcedOnly === true) return [];
+    const language = canonicalLanguage(track.language);
+    return language === undefined ? [] : [{ track, language }];
+  });
+  const catalog = tracks.flatMap(({ track, language }, index) =>
+    tracks.findIndex((candidate) => candidate.language === language) === index
+      ? [{ language, label: displayLanguage(language, track.label) }]
+      : []
+  );
+  const topLanguage = canonicalLanguage(input.preference.top);
+  const bottomLanguage = canonicalLanguage(input.preference.bottom);
+  if (
+    topLanguage !== undefined &&
+    topLanguage === bottomLanguage
+  ) {
+    return { kind: 'unavailable', catalog, reason: 'same-language' };
+  }
+  const topSelection = selectLanguageTrack(
+    tracks,
+    topLanguage,
+    input.siteId,
+  );
+  const bottomSelection = selectLanguageTrack(
+    tracks,
+    bottomLanguage,
+    input.siteId,
+  );
+  if (
+    topSelection.kind === 'ambiguous' ||
+    bottomSelection.kind === 'ambiguous'
+  ) {
+    return { kind: 'unavailable', catalog, reason: 'ambiguous-language' };
+  }
+  const top = topSelection.kind === 'selected'
+    ? topSelection.track
+    : undefined;
+  const bottom = bottomSelection.kind === 'selected'
+    ? bottomSelection.track
+    : undefined;
+
+  if (top !== undefined && bottom !== undefined) {
+    return { kind: 'ready', catalog, top, bottom };
+  }
+  return {
+    kind: 'unavailable',
+    catalog,
+    reason: top === undefined
+      ? bottom === undefined
+        ? 'both-missing'
+        : 'top-missing'
+      : 'bottom-missing',
+  };
+}
+
+function selectLanguageTrack(
+  tracks: readonly CatalogTrack[],
+  preference: CanonicalLanguageTag | undefined,
+  siteId: SiteId,
+): LanguageTrackSelection {
+  if (preference === undefined) return { kind: 'missing' };
+  const exact = tracks.filter(({ language }) => language === preference);
+  if (exact.length > 0) return selectedVariant(exact, siteId);
+
+  const preferredLanguage = languageParts(preference);
+  const preferredScript = scriptFamily(preferredLanguage);
+  const scriptMatches = tracks.filter(({ language }) => {
+    const candidate = languageParts(language);
+    if (candidate.language !== preferredLanguage.language) return false;
+    const candidateScript = scriptFamily(candidate);
+    if (preferredScript !== undefined) {
+      return candidateScript === preferredScript;
+    }
+    return preferredLanguage.language !== 'zh' &&
+      preferredLanguage.region !== undefined &&
+      candidate.region !== undefined &&
+      candidateScript === undefined;
+  });
+  if (scriptMatches.length > 0) {
+    return selectedVariant(scriptMatches, siteId);
+  }
+
+  if (
+    preferredLanguage.script !== undefined ||
+    preferredLanguage.region !== undefined
+  ) {
+    return { kind: 'missing' };
+  }
+  const baseMatches = tracks.filter(({ language }) =>
+    languageParts(language).language === preferredLanguage.language
+  );
+  const scriptFamilies = new Set(
+    baseMatches
+      .map(({ language }) => scriptFamily(languageParts(language)))
+      .filter((script): script is string => script !== undefined),
+  );
+  if (baseMatches.length === 0) return { kind: 'missing' };
+  if (scriptFamilies.size > 1) return { kind: 'ambiguous' };
+  if (preferredLanguage.language !== 'zh') {
+    return selectedVariant(baseMatches, siteId);
+  }
+  const [onlyFamily] = scriptFamilies;
+  return onlyFamily === undefined
+    ? { kind: 'ambiguous' }
+    : selectedVariant(
+        baseMatches.filter(({ language }) =>
+          scriptFamily(languageParts(language)) === onlyFamily
+        ),
+        siteId,
+      );
+}
+
+function selectedVariant(
+  candidates: readonly CatalogTrack[],
+  siteId: SiteId,
+): LanguageTrackSelection {
+  const track = selectVariant(candidates, siteId);
+  return track === undefined
+    ? { kind: 'missing' }
+    : { kind: 'selected', track };
+}
+
+function selectVariant(
+  candidates: readonly CatalogTrack[],
+  siteId: SiteId,
+): TrackInfo | undefined {
+  const preferredKinds = officialTrackKindPreference(siteId);
+  return candidates.toSorted(
+    (left, right) =>
+      preferredKinds.indexOf(left.track.kind) -
+      preferredKinds.indexOf(right.track.kind),
+  )[0]?.track;
+}
+
+function officialTrackKindPreference(
+  siteId: SiteId,
+): readonly TrackInfo['kind'][] {
+  void siteId;
+  return ['subtitles', 'closed-captions'];
+}
+
+interface LanguageParts {
+  readonly language: string;
+  readonly script: string | undefined;
+  readonly region: string | undefined;
+}
+
+function languageParts(language: CanonicalLanguageTag): LanguageParts {
+  const locale = new Intl.Locale(language);
+  return {
+    language: locale.language,
+    script: locale.script || undefined,
+    region: locale.region || undefined,
+  };
+}
+
+function scriptFamily(parts: LanguageParts): string | undefined {
+  if (parts.language !== 'zh') return parts.script;
+  if (parts.script === 'Hans' || parts.script === 'Hant') {
+    return parts.script;
+  }
+  if (parts.region === 'CN' || parts.region === 'SG') return 'Hans';
+  if (
+    parts.region === 'TW' ||
+    parts.region === 'HK' ||
+    parts.region === 'MO'
+  ) {
+    return 'Hant';
+  }
+  return undefined;
+}
+
+function canonicalLanguage(value: string): string | undefined {
+  try {
+    return Intl.getCanonicalLocales(value)[0];
+  } catch {
+    return undefined;
+  }
+}
+
+function displayLanguage(language: string, fallback: string): string {
+  try {
+    return new Intl.DisplayNames(undefined, { type: 'language' }).of(language) ??
+      fallback;
+  } catch {
+    return fallback;
+  }
+}

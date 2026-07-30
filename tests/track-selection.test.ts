@@ -12,6 +12,7 @@ const officialEnglish: TrackInfo = {
   language: 'en-US',
   source: 'official',
   label: 'English [CC]',
+  kind: 'closed-captions',
 };
 
 const officialTraditionalChinese: TrackInfo = {
@@ -19,6 +20,7 @@ const officialTraditionalChinese: TrackInfo = {
   language: 'zh-Hant',
   source: 'official',
   label: '中文（繁體）',
+  kind: 'subtitles',
 };
 
 describe('selectOfficialDualTracks', () => {

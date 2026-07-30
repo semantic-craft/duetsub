@@ -58,6 +58,7 @@ function parseTrack(value: unknown): TrackInfo | undefined {
       closedCaptions && !/[\[(（]CC[\])）]/i.test(label)
         ? `${label} [CC]`
         : label,
+    kind: closedCaptions ? 'closed-captions' : 'subtitles',
   };
 }
 

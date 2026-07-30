@@ -16,12 +16,14 @@ const ENGLISH_TRACK: TrackInfo = {
   language: 'en-US',
   source: 'official',
   label: 'English [CC]',
+  kind: 'closed-captions',
 };
 const OFF_CAMPUS_ENGLISH_TRACK: TrackInfo = {
   id: 'en-us_Caption_Dialog',
   language: 'en-US',
   source: 'official',
   label: 'English [CC]',
+  kind: 'closed-captions',
 };
 
 const EPISODE_ONE = {

@@ -84,12 +84,14 @@ describe('parseNetflixManifest', () => {
           language: 'en-US',
           source: 'official',
           label: 'English [CC]',
+          kind: 'closed-captions',
         },
         {
           id: 'traditional-chinese',
           language: 'zh-Hant',
           source: 'official',
           label: '中文（繁體）',
+          kind: 'subtitles',
         },
       ],
     });

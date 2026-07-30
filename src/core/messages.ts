@@ -664,7 +664,9 @@ function isTrackInfo(value: unknown): value is TrackInfo {
     (track.source === 'official' ||
       track.source === 'asr' ||
       track.source === 'platform-mt') &&
-    typeof track.label === 'string'
+    typeof track.label === 'string' &&
+    (track.kind === 'subtitles' || track.kind === 'closed-captions') &&
+    (track.forcedOnly === undefined || typeof track.forcedOnly === 'boolean')
   );
 }
 
