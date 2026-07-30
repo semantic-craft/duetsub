@@ -1,5 +1,8 @@
 import type { Cue, SiteAdapter, TrackInfo } from '../core/contracts';
-import type { PlaybackGeneration } from '../core/lifecycle';
+import {
+  samePlaybackGeneration,
+  type PlaybackGeneration,
+} from '../core/lifecycle';
 import { isDuetSubMessage } from '../core/messages';
 import { readNetflixWatchIdentity } from './netflix-location';
 import { parseNetflixManifest, type NetflixManifest } from './netflix-manifest';
@@ -1068,8 +1071,5 @@ function sameGeneration(
   left: PlaybackGeneration,
   right: PlaybackGeneration,
 ): boolean {
-  return (
-    left.contentGeneration === right.contentGeneration &&
-    left.clockGeneration === right.clockGeneration
-  );
+  return samePlaybackGeneration(left, right);
 }

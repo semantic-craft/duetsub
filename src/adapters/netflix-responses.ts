@@ -1,5 +1,8 @@
 import type { Cue, TrackInfo } from '../core/contracts';
-import type { PlaybackGeneration } from '../core/lifecycle';
+import {
+  samePlaybackGeneration,
+  type PlaybackGeneration,
+} from '../core/lifecycle';
 import { parseTtml, type TtmlParserOptions } from '../core/ttml';
 
 const MAX_BUFFERED_RESPONSES = 8;
@@ -55,6 +58,7 @@ export function resolveNetflixUnownedResponseGeneration(
   return {
     contentGeneration: currentGeneration.contentGeneration,
     clockGeneration: currentGeneration.clockGeneration,
+    selectionGeneration: currentGeneration.selectionGeneration ?? 0,
   };
 }
 
@@ -256,6 +260,7 @@ function bindTrack(
     generation: {
       contentGeneration: generation.contentGeneration,
       clockGeneration: generation.clockGeneration,
+      selectionGeneration: generation.selectionGeneration ?? 0,
     },
     track,
   };
@@ -292,8 +297,5 @@ function sameGeneration(
   left: PlaybackGeneration,
   right: PlaybackGeneration,
 ): boolean {
-  return (
-    left.contentGeneration === right.contentGeneration &&
-    left.clockGeneration === right.clockGeneration
-  );
+  return samePlaybackGeneration(left, right);
 }

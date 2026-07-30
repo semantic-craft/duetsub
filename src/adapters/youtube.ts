@@ -1,5 +1,8 @@
 import type { Cue, SiteAdapter, TrackInfo } from '../core/contracts';
-import type { PlaybackGeneration } from '../core/lifecycle';
+import {
+  samePlaybackGeneration,
+  type PlaybackGeneration,
+} from '../core/lifecycle';
 import {
   isDuetSubMessage,
   postDuetSubMessage,
@@ -168,12 +171,7 @@ class YoutubeAdapter implements SiteAdapter {
   }
 
   bindGeneration(generation: PlaybackGeneration): void {
-    if (
-      generation.contentGeneration === this.#generation.contentGeneration &&
-      generation.clockGeneration === this.#generation.clockGeneration
-    ) {
-      return;
-    }
+    if (samePlaybackGeneration(generation, this.#generation)) return;
     this.#generation = generation;
     this.#tracks = [];
     this.#handles.clear();
@@ -479,6 +477,7 @@ class YoutubeAdapter implements SiteAdapter {
           generation: {
             contentGeneration: this.#generation.contentGeneration,
             clockGeneration: this.#generation.clockGeneration,
+            selectionGeneration: this.#generation.selectionGeneration ?? 0,
           },
         };
   }

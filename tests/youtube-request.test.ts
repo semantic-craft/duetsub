@@ -111,6 +111,15 @@ describe('cloneYoutubeTimedTextRequest', () => {
         generation: { contentGeneration: 4, clockGeneration: 4 },
       }),
     ).toThrow('stale');
+    expect(() =>
+      cloneYoutubeTimedTextRequest(snapshot, handle, {
+        ...CONTEXT,
+        generation: {
+          ...CONTEXT.generation,
+          selectionGeneration: 1,
+        },
+      }),
+    ).toThrow('stale');
   });
 
   it('adds ASR, named-track, and tlang parameters only when requested', () => {

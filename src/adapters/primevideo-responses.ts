@@ -1,5 +1,8 @@
 import type { Cue, TrackInfo } from '../core/contracts';
-import type { PlaybackGeneration } from '../core/lifecycle';
+import {
+  samePlaybackGeneration,
+  type PlaybackGeneration,
+} from '../core/lifecycle';
 import { parseTtml, type TtmlParserOptions } from '../core/ttml';
 
 const MAX_BUFFERED_RESPONSES = 8;
@@ -176,8 +179,5 @@ function sameGeneration(
   left: PlaybackGeneration,
   right: PlaybackGeneration,
 ): boolean {
-  return (
-    left.contentGeneration === right.contentGeneration &&
-    left.clockGeneration === right.clockGeneration
-  );
+  return samePlaybackGeneration(left, right);
 }

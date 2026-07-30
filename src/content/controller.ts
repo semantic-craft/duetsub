@@ -12,6 +12,7 @@ import {
   reducePlaybackLifecycle,
   shouldHideNativeCaptions,
   type GenerationBound,
+  type PlaybackGeneration,
   type PlaybackLifecycleState,
 } from '../core/lifecycle';
 import {
@@ -20,6 +21,11 @@ import {
   requestFakeData,
 } from '../core/messages';
 import { createOverlayModel } from '../core/overlay-model';
+import {
+  DEFAULT_LANGUAGE_PAIR_PREFERENCE,
+  FIXED_OFFICIAL_PAIR_TRACER_PREFERENCE,
+  resolveOfficialPairCues,
+} from '../core/official-pair-selection';
 import {
   synchronizeCues,
   type SynchronizerState,
@@ -94,14 +100,16 @@ class PlaybackController {
   readonly #restoredPlayerPosition: string | undefined;
 
   #state: PlaybackLifecycleState = INITIAL_PLAYBACK_LIFECYCLE;
-  #englishCues: readonly Cue[] = [];
-  #chineseCues: readonly Cue[] = [];
-  #englishMachineTranslated = false;
-  #chineseMachineTranslated = false;
+  #topCues: readonly Cue[] = [];
+  #bottomCues: readonly Cue[] = [];
+  #topLanguage = DEFAULT_LANGUAGE_PAIR_PREFERENCE.top;
+  #bottomLanguage = DEFAULT_LANGUAGE_PAIR_PREFERENCE.bottom;
+  #topMachineTranslated = false;
+  #bottomMachineTranslated = false;
   #readyStatus = '官方英文 + 官方繁中 · 100%';
   #tracks: readonly TrackInfo[] = [];
-  #receivedEnglish = false;
-  #receivedChinese = false;
+  #receivedTopTrackId: string | undefined;
+  #receivedBottomTrackId: string | undefined;
   #requestId = '';
   #requestSequence = 0;
   #interactionRevision = 0;
@@ -113,7 +121,7 @@ class PlaybackController {
     | {
         readonly source: readonly Cue[];
         readonly trackId: string;
-        readonly target: 'english' | 'chinese';
+        readonly target: 'top' | 'bottom';
         readonly targetLanguage: 'en' | 'zh-Hant';
       }
     | undefined;
@@ -170,6 +178,7 @@ class PlaybackController {
             {
               contentGeneration: this.#state.contentGeneration,
               clockGeneration: this.#state.clockGeneration,
+              selectionGeneration: this.#state.selectionGeneration,
             },
             revision,
             true,
@@ -334,10 +343,12 @@ class PlaybackController {
     this.#requestSequence += 1;
     this.#requestId = `${Date.now()}-${this.#requestSequence}`;
     this.#tracks = [];
-    this.#englishCues = [];
-    this.#chineseCues = [];
-    this.#receivedEnglish = false;
-    this.#receivedChinese = false;
+    this.#topCues = [];
+    this.#bottomCues = [];
+    this.#topLanguage = FIXED_OFFICIAL_PAIR_TRACER_PREFERENCE.top;
+    this.#bottomLanguage = FIXED_OFFICIAL_PAIR_TRACER_PREFERENCE.bottom;
+    this.#receivedTopTrackId = undefined;
+    this.#receivedBottomTrackId = undefined;
     this.#synchronizerState = undefined;
     this.#state = reducePlaybackLifecycle(this.#state, {
       type: 'tracks-loading',
@@ -356,13 +367,15 @@ class PlaybackController {
   #clearTrackData(): void {
     this.#cancelTranslations();
     this.#tracks = [];
-    this.#englishCues = [];
-    this.#chineseCues = [];
-    this.#englishMachineTranslated = false;
-    this.#chineseMachineTranslated = false;
+    this.#topCues = [];
+    this.#bottomCues = [];
+    this.#topLanguage = DEFAULT_LANGUAGE_PAIR_PREFERENCE.top;
+    this.#bottomLanguage = DEFAULT_LANGUAGE_PAIR_PREFERENCE.bottom;
+    this.#topMachineTranslated = false;
+    this.#bottomMachineTranslated = false;
     this.#readyStatus = '官方英文 + 官方繁中 · 100%';
-    this.#receivedEnglish = false;
-    this.#receivedChinese = false;
+    this.#receivedTopTrackId = undefined;
+    this.#receivedBottomTrackId = undefined;
     this.#synchronizerState = undefined;
     this.#translationPlan = undefined;
   }
@@ -454,12 +467,12 @@ class PlaybackController {
         throw new Error('Max English-primary cue alignment unavailable');
       }
 
-      this.#englishCues = englishCues;
-      this.#chineseCues = displayedChineseCues;
-      this.#englishMachineTranslated = accepted.english.kind === 'mt' ||
+      this.#topCues = englishCues;
+      this.#bottomCues = displayedChineseCues;
+      this.#topMachineTranslated = accepted.english.kind === 'mt' ||
         (accepted.english.kind === 'official' &&
           accepted.english.trackSource === 'platform-mt');
-      this.#chineseMachineTranslated = accepted.chinese.kind === 'mt' ||
+      this.#bottomMachineTranslated = accepted.chinese.kind === 'mt' ||
         (accepted.chinese.kind === 'official' &&
           accepted.chinese.trackSource === 'platform-mt');
       this.#synchronizerState = undefined;
@@ -467,9 +480,9 @@ class PlaybackController {
         type: 'tracks-ready',
       });
       const mt = accepted.english.kind === 'mt'
-        ? { side: 'english' as const, value: accepted.english }
+        ? { side: 'top' as const, value: accepted.english }
         : accepted.chinese.kind === 'mt'
-        ? { side: 'chinese' as const, value: accepted.chinese }
+        ? { side: 'bottom' as const, value: accepted.chinese }
         : undefined;
       if (mt === undefined) {
         this.#readyStatus = maxEnglishPrimaryAligned
@@ -584,25 +597,47 @@ class PlaybackController {
     if (message.type === 'tracks') {
       this.#tracks = message.tracks;
       this.#status = `開啟 · 已收到 ${message.tracks.length} 條假軌`;
-    } else if (message.role === 'english') {
-      this.#englishCues = message.cues;
-      this.#englishMachineTranslated = message.translation === 'mt-fallback';
-      this.#receivedEnglish = true;
+    } else if (message.role === 'top') {
+      this.#topCues = message.cues;
+      this.#topMachineTranslated = message.translation === 'mt-fallback';
+      this.#receivedTopTrackId = message.trackId;
     } else {
-      this.#chineseCues = message.cues;
-      this.#chineseMachineTranslated = message.translation === 'mt-fallback';
-      this.#receivedChinese = true;
+      this.#bottomCues = message.cues;
+      this.#bottomMachineTranslated = message.translation === 'mt-fallback';
+      this.#receivedBottomTrackId = message.trackId;
     }
 
-    if (
-      this.#tracks.length === 2 &&
-      this.#receivedEnglish &&
-      this.#receivedChinese
-    ) {
+    const cuesByTrack = new Map<string, readonly Cue[]>();
+    if (this.#receivedTopTrackId !== undefined) {
+      cuesByTrack.set(this.#receivedTopTrackId, this.#topCues);
+    }
+    if (this.#receivedBottomTrackId !== undefined) {
+      cuesByTrack.set(this.#receivedBottomTrackId, this.#bottomCues);
+    }
+    const pair = resolveOfficialPairCues({
+      siteId: this.#siteId,
+      tracks: this.#tracks,
+      preference: FIXED_OFFICIAL_PAIR_TRACER_PREFERENCE,
+      cuesByTrack,
+    });
+    if (pair.kind === 'ready') {
+      this.#topCues = pair.topCues;
+      this.#bottomCues = pair.bottomCues;
+      this.#topLanguage = FIXED_OFFICIAL_PAIR_TRACER_PREFERENCE.top;
+      this.#bottomLanguage = FIXED_OFFICIAL_PAIR_TRACER_PREFERENCE.bottom;
       this.#state = reducePlaybackLifecycle(this.#state, {
         type: 'tracks-ready',
       });
-      this.#status = '假資料：官方英文 + MT 繁中 · 100%';
+      this.#status = '假資料：官方日語 + 官方簡中 · 100%';
+    } else {
+      this.#state = reducePlaybackLifecycle(this.#state, {
+        type: 'tracks-loading',
+      });
+      this.#status = pair.reason === 'top-empty' ||
+          pair.reason === 'bottom-empty' ||
+          pair.reason === 'both-empty'
+        ? '開啟 · 等待完整的官方日語與簡中假軌'
+        : '開啟 · 固定官方日語或簡中軌不可用';
     }
     this.#render();
   };
@@ -626,7 +661,7 @@ class PlaybackController {
       this.#synchronizerState = undefined;
       this.#state = reducePlaybackLifecycle(this.#state, { type: 'seeked' });
       this.#bindAdapterGeneration();
-      this.#status = this.#englishCues.length > 0 && this.#chineseCues.length > 0
+      this.#status = this.#topCues.length > 0 && this.#bottomCues.length > 0
         ? this.#readyStatus
         : '開啟 · 尚未取得雙軌';
       this.#render();
@@ -635,6 +670,7 @@ class PlaybackController {
           {
             contentGeneration: this.#state.contentGeneration,
             clockGeneration: this.#state.clockGeneration,
+            selectionGeneration: this.#state.selectionGeneration,
           },
           this.#acquisitionRevision,
         );
@@ -680,14 +716,12 @@ class PlaybackController {
     this.#adapter?.bindGeneration?.({
       contentGeneration: this.#state.contentGeneration,
       clockGeneration: this.#state.clockGeneration,
+      selectionGeneration: this.#state.selectionGeneration,
     });
   }
 
   async #translatePlan(
-    generation: {
-      readonly contentGeneration: number;
-      readonly clockGeneration: number;
-    },
+    generation: PlaybackGeneration,
     acquisitionRevision: number,
     skipCache = false,
   ): Promise<void> {
@@ -765,12 +799,12 @@ class PlaybackController {
   }
 
   #mergeTranslatedCues(
-    target: 'english' | 'chinese',
+    target: 'top' | 'bottom',
     cues: readonly Cue[],
   ): void {
-    const current = target === 'english'
-      ? this.#englishCues
-      : this.#chineseCues;
+    const current = target === 'top'
+      ? this.#topCues
+      : this.#bottomCues;
     const merged = new Map(
       current.map((cue) => [`${cue.start}:${cue.end}:${cue.text}`, cue]),
     );
@@ -785,8 +819,8 @@ class PlaybackController {
     const result = [...merged.values()].sort((a, b) =>
       a.start - b.start || a.end - b.end
     );
-    if (target === 'english') this.#englishCues = result;
-    else this.#chineseCues = result;
+    if (target === 'top') this.#topCues = result;
+    else this.#bottomCues = result;
     this.#synchronizerState = undefined;
   }
 
@@ -827,8 +861,8 @@ class PlaybackController {
     const active = isPlaybackOverlayActive(this.#state);
     const synchronized = active
       ? synchronizeCues(
-          this.#englishCues,
-          this.#chineseCues,
+          this.#topCues,
+          this.#bottomCues,
           this.video.currentTime * 1_000,
           this.#synchronizerState,
         )
@@ -838,10 +872,12 @@ class PlaybackController {
     this.#overlayView.render(
       createOverlayModel({
         active,
-        enActive: synchronized?.enActive ?? [],
-        zhActive: synchronized?.zhActive ?? [],
-        englishMachineTranslated: this.#englishMachineTranslated,
-        chineseMachineTranslated: this.#chineseMachineTranslated,
+        topActive: synchronized?.topActive ?? [],
+        bottomActive: synchronized?.bottomActive ?? [],
+        topLanguage: this.#topLanguage,
+        bottomLanguage: this.#bottomLanguage,
+        topMachineTranslated: this.#topMachineTranslated,
+        bottomMachineTranslated: this.#bottomMachineTranslated,
         controlsVisible: this.#controlsVisible,
       }),
     );

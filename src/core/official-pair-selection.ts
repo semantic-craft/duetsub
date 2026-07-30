@@ -1,4 +1,4 @@
-import type { SiteId, TrackInfo } from './contracts';
+import type { Cue, SiteId, TrackInfo } from './contracts';
 
 export type CanonicalLanguageTag = string;
 
@@ -14,10 +14,23 @@ export const DEFAULT_LANGUAGE_PAIR_PREFERENCE: LanguagePairPreference = {
   bottom: 'zh-Hant',
 };
 
+export const FIXED_OFFICIAL_PAIR_TRACER_PREFERENCE: LanguagePairPreference = {
+  version: 1,
+  top: 'ja',
+  bottom: 'zh-Hans',
+};
+
 export interface OfficialLanguageOption {
   readonly language: CanonicalLanguageTag;
   readonly label: string;
 }
+
+export type OfficialPairUnavailableReason =
+  | 'same-language'
+  | 'top-missing'
+  | 'bottom-missing'
+  | 'both-missing'
+  | 'ambiguous-language';
 
 export type OfficialPairResolution =
   | {
@@ -29,12 +42,26 @@ export type OfficialPairResolution =
   | {
       readonly kind: 'unavailable';
       readonly catalog: readonly OfficialLanguageOption[];
+      readonly reason: OfficialPairUnavailableReason;
+    };
+
+export type OfficialPairCueResolution =
+  | {
+      readonly kind: 'ready';
+      readonly catalog: readonly OfficialLanguageOption[];
+      readonly top: TrackInfo;
+      readonly bottom: TrackInfo;
+      readonly topCues: readonly Cue[];
+      readonly bottomCues: readonly Cue[];
+    }
+  | {
+      readonly kind: 'unavailable';
+      readonly catalog: readonly OfficialLanguageOption[];
       readonly reason:
-        | 'same-language'
-        | 'top-missing'
-        | 'bottom-missing'
-        | 'both-missing'
-        | 'ambiguous-language';
+        | OfficialPairUnavailableReason
+        | 'top-empty'
+        | 'bottom-empty'
+        | 'both-empty';
     };
 
 interface CatalogTrack {
@@ -104,6 +131,31 @@ export function resolveOfficialPair(input: {
         ? 'both-missing'
         : 'top-missing'
       : 'bottom-missing',
+  };
+}
+
+export function resolveOfficialPairCues(input: {
+  readonly siteId: SiteId;
+  readonly tracks: readonly TrackInfo[];
+  readonly preference: LanguagePairPreference;
+  readonly cuesByTrack: ReadonlyMap<string, readonly Cue[]>;
+}): OfficialPairCueResolution {
+  const pair = resolveOfficialPair(input);
+  if (pair.kind === 'unavailable') return pair;
+
+  const topCues = input.cuesByTrack.get(pair.top.id) ?? [];
+  const bottomCues = input.cuesByTrack.get(pair.bottom.id) ?? [];
+  if (topCues.length > 0 && bottomCues.length > 0) {
+    return { ...pair, topCues, bottomCues };
+  }
+  return {
+    kind: 'unavailable',
+    catalog: pair.catalog,
+    reason: topCues.length === 0
+      ? bottomCues.length === 0
+        ? 'both-empty'
+        : 'top-empty'
+      : 'bottom-empty',
   };
 }
 

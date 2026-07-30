@@ -54,6 +54,26 @@ describe('playback lifecycle', () => {
     expect(isPlaybackOverlayActive(reset)).toBe(false);
   });
 
+  it('invalidates old cues, errors, and status when the selected pair changes', () => {
+    const ready = readyLifecycle();
+    const oldCues = bindPlaybackGeneration(ready, ['old cue']);
+    const oldError = bindPlaybackGeneration(ready, new Error('old failure'));
+    const oldStatus = bindPlaybackGeneration(ready, 'old status');
+
+    const changed = reducePlaybackLifecycle(ready, {
+      type: 'selection-changed',
+    });
+
+    expect(changed.selectionGeneration).toBe(
+      ready.selectionGeneration + 1,
+    );
+    expect(changed.tracksReady).toBe(false);
+    expect(shouldHideNativeCaptions(changed)).toBe(false);
+    expect(acceptPlaybackGeneration(changed, oldCues)).toBeUndefined();
+    expect(acceptPlaybackGeneration(changed, oldError)).toBeUndefined();
+    expect(acceptPlaybackGeneration(changed, oldStatus)).toBeUndefined();
+  });
+
   it('rejects the previous episode response after the verified content identity changes', () => {
     const episodeOne = readyLifecycle(
       reducePlaybackLifecycle(INITIAL_PLAYBACK_LIFECYCLE, {

@@ -1,8 +1,9 @@
 import type { Cue } from './contracts';
 
 export interface OverlayLineModel {
-  readonly id: 'english' | 'chinese';
-  readonly lang: 'en' | 'zh-Hant';
+  readonly id: 'top' | 'bottom';
+  readonly lang: string;
+  readonly dir: 'ltr' | 'rtl' | 'auto';
   readonly text: string;
   readonly sizePercent: 90 | 100;
   readonly machineTranslated: boolean;
@@ -18,39 +19,43 @@ export interface OverlayModel {
 
 export interface OverlayModelInput {
   readonly active: boolean;
-  readonly enActive: readonly Cue[];
-  readonly zhActive: readonly Cue[];
-  readonly englishMachineTranslated: boolean;
-  readonly chineseMachineTranslated: boolean;
+  readonly topActive: readonly Cue[];
+  readonly bottomActive: readonly Cue[];
+  readonly topLanguage: string;
+  readonly bottomLanguage: string;
+  readonly topMachineTranslated: boolean;
+  readonly bottomMachineTranslated: boolean;
   readonly controlsVisible: boolean;
 }
 
 export function createOverlayModel(input: OverlayModelInput): OverlayModel {
-  const englishText = input.enActive.map((cue) => cue.text).join('\n');
-  const chineseText = input.zhActive.map((cue) => cue.text).join('\n');
-  const hasTopCue = [...input.enActive, ...input.zhActive].some(
+  const topText = input.topActive.map((cue) => cue.text).join('\n');
+  const bottomText = input.bottomActive.map((cue) => cue.text).join('\n');
+  const hasTopCue = [...input.topActive, ...input.bottomActive].some(
     (cue) => cue.position === 'top',
   );
 
   return {
     visible:
-      input.active && (englishText.length > 0 || chineseText.length > 0),
+      input.active && (topText.length > 0 || bottomText.length > 0),
     lines: [
       {
-        id: 'english',
-        lang: 'en',
-        text: englishText,
+        id: 'top',
+        lang: input.topLanguage,
+        dir: languageDirection(input.topLanguage),
+        text: topText,
         sizePercent: 100,
         machineTranslated:
-          input.englishMachineTranslated && englishText.length > 0,
+          input.topMachineTranslated && topText.length > 0,
       },
       {
-        id: 'chinese',
-        lang: 'zh-Hant',
-        text: chineseText,
+        id: 'bottom',
+        lang: input.bottomLanguage,
+        dir: languageDirection(input.bottomLanguage),
+        text: bottomText,
         sizePercent: 90,
         machineTranslated:
-          input.chineseMachineTranslated && chineseText.length > 0,
+          input.bottomMachineTranslated && bottomText.length > 0,
       },
     ],
     placement: hasTopCue
@@ -60,4 +65,25 @@ export function createOverlayModel(input: OverlayModelInput): OverlayModel {
           offset: input.controlsVisible ? '18%' : '8.5%',
         },
   };
+}
+
+const RTL_SCRIPTS = new Set([
+  'Adlm',
+  'Arab',
+  'Hebr',
+  'Mand',
+  'Nkoo',
+  'Rohg',
+  'Samr',
+  'Syrc',
+  'Thaa',
+]);
+
+function languageDirection(language: string): 'ltr' | 'rtl' | 'auto' {
+  try {
+    const script = new Intl.Locale(language).maximize().script;
+    return script !== undefined && RTL_SCRIPTS.has(script) ? 'rtl' : 'ltr';
+  } catch {
+    return 'auto';
+  }
 }

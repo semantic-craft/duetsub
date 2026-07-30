@@ -4,6 +4,7 @@ import type { TrackInfo } from '../src/core/contracts';
 import {
   DEFAULT_LANGUAGE_PAIR_PREFERENCE,
   resolveOfficialPair,
+  resolveOfficialPairCues,
   type LanguagePairPreference,
 } from '../src/core/official-pair-selection';
 
@@ -254,6 +255,65 @@ describe('resolveOfficialPair', () => {
       kind: 'ready',
       top: simplifiedChinese,
       bottom: traditionalChinese,
+    });
+  });
+
+  it('resolves a non-English European official pair without fallback', () => {
+    const german = track('german', 'de');
+    const french = track('french', 'fr');
+
+    expect(
+      resolveOfficialPair({
+        siteId: 'netflix',
+        tracks: [german, french],
+        preference: {
+          version: 1,
+          top: 'de',
+          bottom: 'fr',
+        },
+      }),
+    ).toMatchObject({
+      kind: 'ready',
+      top: german,
+      bottom: french,
+    });
+  });
+
+  it('fails closed when either resolved official track has no cues', () => {
+    const japanese = track('japanese', 'ja');
+    const simplifiedChinese = track('simplified', 'zh-Hans');
+    const preference: LanguagePairPreference = {
+      version: 1,
+      top: 'ja',
+      bottom: 'zh-Hans',
+    };
+
+    expect(
+      resolveOfficialPairCues({
+        siteId: 'youtube',
+        tracks: [japanese, simplifiedChinese],
+        preference,
+        cuesByTrack: new Map([
+          [
+            japanese.id,
+            [{ start: 0, end: 1_000, text: '日本語', language: 'ja' }],
+          ],
+        ]),
+      }),
+    ).toMatchObject({
+      kind: 'unavailable',
+      reason: 'bottom-empty',
+    });
+    expect(
+      resolveOfficialPairCues({
+        siteId: 'youtube',
+        tracks: [japanese, simplifiedChinese],
+        preference,
+        cuesByTrack: new Map(),
+      }),
+    ).toMatchObject({
+      kind: 'unavailable',
+      reason: 'both-empty',
     });
   });
 

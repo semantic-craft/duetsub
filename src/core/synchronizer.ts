@@ -2,8 +2,8 @@ import type { Cue } from './contracts';
 
 export interface SynchronizerState {
   readonly timeMs: number;
-  readonly english: TrackCursor;
-  readonly chinese: TrackCursor;
+  readonly top: TrackCursor;
+  readonly bottom: TrackCursor;
 }
 
 interface TrackCursor {
@@ -12,29 +12,29 @@ interface TrackCursor {
 }
 
 export interface SynchronizerResult {
-  readonly enActive: readonly Cue[];
-  readonly zhActive: readonly Cue[];
+  readonly topActive: readonly Cue[];
+  readonly bottomActive: readonly Cue[];
   readonly state: SynchronizerState;
 }
 
 export function synchronizeCues(
-  englishCues: readonly Cue[],
-  chineseCues: readonly Cue[],
+  topCues: readonly Cue[],
+  bottomCues: readonly Cue[],
   timeMs: number,
   previous?: SynchronizerState,
 ): SynchronizerResult {
   const canAdvance = previous !== undefined && timeMs >= previous.timeMs;
-  const english = canAdvance
-    ? advanceCursor(englishCues, timeMs, previous.english)
-    : locateCursor(englishCues, timeMs);
-  const chinese = canAdvance
-    ? advanceCursor(chineseCues, timeMs, previous.chinese)
-    : locateCursor(chineseCues, timeMs);
+  const top = canAdvance
+    ? advanceCursor(topCues, timeMs, previous.top)
+    : locateCursor(topCues, timeMs);
+  const bottom = canAdvance
+    ? advanceCursor(bottomCues, timeMs, previous.bottom)
+    : locateCursor(bottomCues, timeMs);
 
   return {
-    enActive: english.activeIndices.map((index) => englishCues[index]),
-    zhActive: chinese.activeIndices.map((index) => chineseCues[index]),
-    state: { timeMs, english, chinese },
+    topActive: top.activeIndices.map((index) => topCues[index]),
+    bottomActive: bottom.activeIndices.map((index) => bottomCues[index]),
+    state: { timeMs, top, bottom },
   };
 }
 

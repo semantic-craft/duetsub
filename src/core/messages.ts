@@ -31,7 +31,7 @@ export interface TracksMessage extends MessageEnvelope {
 export interface CuesMessage extends MessageEnvelope {
   readonly direction: 'main-to-isolated';
   readonly type: 'cues';
-  readonly role: 'english' | 'chinese';
+  readonly role: 'top' | 'bottom';
   readonly trackId: string;
   readonly cues: readonly Cue[];
   readonly translation: 'official' | 'mt-fallback';
@@ -518,7 +518,7 @@ export function isDuetSubMessage(value: unknown): value is DuetSubMessage {
   }
   return (
     candidate.type === 'cues' &&
-    (candidate.role === 'english' || candidate.role === 'chinese') &&
+    (candidate.role === 'top' || candidate.role === 'bottom') &&
     typeof candidate.trackId === 'string' &&
     Array.isArray(candidate.cues) &&
     candidate.cues.every(isCue) &&

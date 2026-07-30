@@ -44,10 +44,12 @@ const SIMPLIFIED_CHINESE_TRACK: TrackInfo = {
 const EPISODE_ONE = {
   contentGeneration: 1,
   clockGeneration: 1,
+  selectionGeneration: 0,
 };
 const UNBOUND_GENERATION = {
   contentGeneration: 0,
   clockGeneration: 0,
+  selectionGeneration: 0,
 };
 
 describe('Netflix TTML response ownership', () => {
@@ -64,7 +66,7 @@ describe('Netflix TTML response ownership', () => {
   it('fails closed for a stale pending request and ambiguous current tracks', () => {
     expect(
       resolveNetflixResponseOwner(
-        { contentGeneration: 2, clockGeneration: 2 },
+        { contentGeneration: 2, clockGeneration: 2, selectionGeneration: 0 },
         { track: ENGLISH_TRACK, generation: EPISODE_ONE },
         [ENGLISH_TRACK, ENGLISH_TRACK_PLAIN],
       ),
@@ -202,9 +204,13 @@ describe('Netflix TTML response ownership', () => {
         'netflix:81262753',
         EPISODE_ONE,
         'netflix:81262753',
-        { contentGeneration: 2, clockGeneration: 2 },
+        { contentGeneration: 2, clockGeneration: 2, selectionGeneration: 0 },
       ),
-    ).toEqual({ contentGeneration: 2, clockGeneration: 2 });
+    ).toEqual({
+      contentGeneration: 2,
+      clockGeneration: 2,
+      selectionGeneration: 0,
+    });
   });
 
   it('rejects an early response from another title', () => {
