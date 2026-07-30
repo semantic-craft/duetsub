@@ -19,10 +19,12 @@ const SITE_UI: Record<SiteId, SiteUiBinding> = {
       '.player-timedtext, [data-duetsub-native-captions="netflix"]',
   },
   primevideo: {
-    videoSelector: '#dv-web-player video',
-    playerSelector: '#dv-web-player',
+    videoSelector:
+      'div[id^="dv-web-player"].dv-player-fullscreen video',
+    playerSelector:
+      'div[id^="dv-web-player"].dv-player-fullscreen',
     nativeCaptionSelector:
-      '#dv-web-player .atvwebplayersdk-captions-overlay, [data-duetsub-native-captions="primevideo"]',
+      '.atvwebplayersdk-captions-overlay, [data-duetsub-native-captions="primevideo"]',
   },
   max: {
     videoSelector: '[data-testid="VideoElement"]',

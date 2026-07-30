@@ -26,8 +26,17 @@ describe('Prime Video site UI', () => {
 
     vi.stubGlobal('document', {
       querySelector: (selector: string) => {
-        if (selector === '#dv-web-player video') return video;
-        if (selector === '#dv-web-player') return player;
+        if (
+          selector ===
+          'div[id^="dv-web-player"].dv-player-fullscreen video'
+        ) {
+          return video;
+        }
+        if (
+          selector === 'div[id^="dv-web-player"].dv-player-fullscreen'
+        ) {
+          return player;
+        }
         return null;
       },
     });
@@ -40,6 +49,9 @@ describe('Prime Video site UI', () => {
 
     expect(target?.controls).toBe(controls);
     expect(target?.toggleBefore).toBe(subtitleWrapper);
+    expect(target?.nativeCaptionSelector).toBe(
+      '.atvwebplayersdk-captions-overlay, [data-duetsub-native-captions="primevideo"]',
+    );
   });
 
   it('uses the visible movie title as the verified content identity', () => {
@@ -56,8 +68,17 @@ describe('Prime Video site UI', () => {
 
     vi.stubGlobal('document', {
       querySelector: (selector: string) => {
-        if (selector === '#dv-web-player video') return video;
-        if (selector === '#dv-web-player') return player;
+        if (
+          selector ===
+          'div[id^="dv-web-player"].dv-player-fullscreen video'
+        ) {
+          return video;
+        }
+        if (
+          selector === 'div[id^="dv-web-player"].dv-player-fullscreen'
+        ) {
+          return player;
+        }
         return null;
       },
     });
