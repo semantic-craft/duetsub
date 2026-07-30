@@ -30,6 +30,29 @@ export interface ToggleView {
   destroy(): void;
 }
 
+export interface PopoverPlacementInput {
+  readonly triggerTop: number;
+  readonly triggerBottom: number;
+  readonly popoverHeight: number;
+  readonly viewportHeight: number;
+  readonly gap: number;
+}
+
+export type PopoverPlacement = 'above' | 'below';
+
+export function choosePopoverPlacement(
+  input: PopoverPlacementInput,
+): PopoverPlacement {
+  const roomAbove = Math.max(0, input.triggerTop - input.gap);
+  const roomBelow = Math.max(
+    0,
+    input.viewportHeight - input.triggerBottom - input.gap,
+  );
+  if (roomAbove >= input.popoverHeight) return 'above';
+  if (roomBelow >= input.popoverHeight) return 'below';
+  return roomBelow >= roomAbove ? 'below' : 'above';
+}
+
 export function createToggleView(
   anchor: HTMLElement,
   isFallbackAnchor: boolean,
@@ -98,7 +121,16 @@ export function createToggleView(
 
   const showPopover = () => {
     callbacks.onOpenLanguagePair();
+    popover.dataset.placement = 'below';
     popover.hidden = false;
+    const triggerRect = host.getBoundingClientRect();
+    popover.dataset.placement = choosePopoverPlacement({
+      triggerTop: triggerRect.top,
+      triggerBottom: triggerRect.bottom,
+      popoverHeight: popover.getBoundingClientRect().height,
+      viewportHeight: window.innerHeight,
+      gap: 8,
+    });
     languageButton.setAttribute('aria-expanded', 'true');
   };
   const hidePopover = () => {
@@ -411,15 +443,26 @@ const TOGGLE_CSS = `
   .popover {
     position: absolute;
     right: 0;
-    bottom: calc(100% + 8px);
     width: max-content;
     min-width: 13rem;
-    overflow: hidden;
+    max-height: calc(100vh - 16px);
+    overflow-x: hidden;
+    overflow-y: auto;
     border: 1px solid rgb(255 255 255 / 18%);
     border-radius: 8px;
     background: rgb(24 28 36 / 96%);
     box-shadow: 0 8px 28px rgb(0 0 0 / 45%);
     color: #fff;
+  }
+
+  .popover[data-placement="above"] {
+    top: auto;
+    bottom: calc(100% + 8px);
+  }
+
+  .popover[data-placement="below"] {
+    top: calc(100% + 8px);
+    bottom: auto;
   }
 
   .status,
