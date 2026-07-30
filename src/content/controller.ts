@@ -620,10 +620,15 @@ class PlaybackController {
       this.#state = reducePlaybackLifecycle(this.#state, {
         type: 'tracks-ready',
       });
+      const resolvedPreference: LanguagePairPreference = {
+        version: 1,
+        top: cues.top.language,
+        bottom: cues.bottom.language,
+      };
       this.#readyStatus = maxCues?.policy ===
           'english-cc-traditional-chinese'
-        ? `${pairLabel(this.#languagePairPreference)} 對齊 · 100%`
-        : `${pairLabel(this.#languagePairPreference)} · 100%`;
+        ? `${pairLabel(resolvedPreference)} 對齊 · 100%`
+        : `${pairLabel(resolvedPreference)} · 100%`;
       this.#status = this.#readyStatus;
       this.#render();
     } catch (error) {
@@ -1135,7 +1140,11 @@ class PlaybackController {
       this.#state.enabled,
       this.#status,
       createOfficialTrackCatalog(this.#tracks),
-      this.#languagePairPreference,
+      {
+        version: 1,
+        top: this.#topLanguage,
+        bottom: this.#bottomLanguage,
+      },
     );
   }
 }

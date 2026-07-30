@@ -36,4 +36,19 @@ describe('player language menu actions', () => {
       'this.#toggleView.reanchor(',
     );
   });
+
+  it('renders the acquired site languages without overwriting the saved preference', () => {
+    expect(controllerSource).toContain(
+      'top: this.#topLanguage',
+    );
+    expect(controllerSource).toContain(
+      'bottom: this.#bottomLanguage',
+    );
+    expect(controllerSource).toContain(
+      'top: cues.top.language',
+    );
+    expect(controllerSource).toContain(
+      'bottom: cues.bottom.language',
+    );
+  });
 });
