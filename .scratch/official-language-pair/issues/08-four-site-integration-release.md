@@ -44,9 +44,9 @@ release gates below. Logged-in playback evidence remains attributed only to
   logged-in subtitle sample, direct debug statement, source map, proprietary
   research file or static all-language catalog.
 - Standalone archive SHA-256:
-  `67f9a1177d4d5a18bfaa67b4125c550532ff5190c9d7d94ec0cb3a3adeb9c066`.
+  `66fd5a46345b9debdc6a9100d94bbe4fac26bfccfa278ccd1dcc23efb4892467`.
 - Chrome Web Store archive SHA-256:
-  `98312d9bd549c3e6c7baee46e3076a62465ba9dc19f978b7dc5e29135d82719d`.
+  `de5ab76fbcbde27c09e7f302af891475c7605bbaa3423bc523b7c6d55453fbd8`.
 
 ### Logged-in human
 

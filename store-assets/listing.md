@@ -4,7 +4,7 @@
 
 ### Product name
 
-DuetSub
+DuetSub – Bilingual Subtitles
 
 ### Summary
 
