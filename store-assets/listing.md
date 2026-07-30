@@ -114,7 +114,7 @@ DuetSub 可以：
 
 DuetSub 只使用目前登入帳號原本就能存取的字幕軌。它不會下載影片、繞過 DRM、解鎖地區限制字幕、執行遠端程式碼或收集行為分析資料。
 
-## Version 0.1.6 update notes / 版本 0.1.6 更新说明
+## Version 0.1.7 update notes / 版本 0.1.7 更新说明
 
 ### English
 
@@ -123,7 +123,9 @@ DuetSub 只使用目前登入帳號原本就能存取的字幕軌。它不會下
 - Improves seeking, episode/video changes, track ownership, and native-subtitle restoration across all four supported players.
 - Adds English, Simplified Chinese, and Traditional Chinese interface localization.
 - Adds Responses API support for Qwen in China or Singapore and Doubao through Volcengine Ark. Qwen Workspace ID is user-provided, and optional web search is off by default.
-- Enlarges the player language menu, with an additional size increase on Netflix.
+- Uses `qwen3.7-flash` as the first Qwen model candidate without replacing an existing saved model choice.
+- Adds separate film/TV and YouTube translation prompts that preserve cue timing, dialogue voice, technical details, numbers, units, corrections, and operational directions.
+- Fits translations to each cue's duration and reading budget, then applies deterministic subtitle line breaking without moving text between cues.
 
 ### 中文
 
@@ -132,7 +134,9 @@ DuetSub 只使用目前登入帳號原本就能存取的字幕軌。它不會下
 - 改进四个播放器上的拖动进度、站内换集/换视频、轨道归属与原生字幕恢复。
 - 新增英文、简体中文和繁体中文界面。
 - 新增阿里云百炼千问（中国区/新加坡区）与火山方舟豆包的 Responses API 支持；千问 Workspace ID 由用户填写，联网搜索默认关闭。
-- 放大播放器语言选单，并针对 Netflix 进一步增大尺寸。
+- 选择千问时默认优先 `qwen3.7-flash`，不会覆盖用户已经保存的模型选择。
+- 分别使用影视剧和 YouTube 翻译提示词，保留时间轴、人物语气、技术细节、数字、单位、纠错和操作方向。
+- 根据每条字幕的显示时长与阅读预算控制译文，并以确定性排版断行，不把文字移动到其他字幕时间段。
 
 ## Single purpose
 
