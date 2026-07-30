@@ -12,6 +12,8 @@
       form { display: grid; gap: 1rem; }
       .field { display: grid; gap: .35rem; }
       input, select, button { box-sizing: border-box; min-height: 2.5rem; padding: .55rem .7rem; font: inherit; }
+      .field > span { display: flex; align-items: center; gap: .5rem; }
+      input[type="checkbox"] { width: 1rem; min-height: 1rem; padding: 0; }
       .actions { display: flex; gap: .75rem; }
       output { display: block; min-height: 1.5rem; margin-top: 1rem; }
       section { margin-bottom: 2rem; padding-bottom: 1.5rem; border-bottom: 1px solid color-mix(in srgb, CanvasText 18%, transparent); }
@@ -46,6 +48,10 @@
           <input id="workspace-id" type="text" required autocomplete="off" spellcheck="false" placeholder="ws-…">
           <small>只需填寫 <code>ws-…</code>；DuetSub 會按所選地域自動建立 Responses API 位址。</small>
         </label>
+        <label id="web-search-field" class="field" hidden>
+          <span><input id="web-search" type="checkbox">允許千問按需聯網搜尋</span>
+          <small>使用 Responses API 的 <code>web_search</code> 工具並開啟低強度思考；模型自行決定是否搜尋，可能增加延遲與費用，預設關閉。</small>
+        </label>
         <label class="field">Base URL
           <input id="base-url" type="url" required autocomplete="url">
         </label>
@@ -59,9 +65,10 @@
             <option value="deepseek-v4-pro"></option>
           </datalist>
           <datalist id="qwen-models">
-            <option value="qwen3.6-flash"></option>
+            <option value="qwen3.7-flash"></option>
             <option value="qwen3.7-plus"></option>
             <option value="qwen3.7-max"></option>
+            <option value="qwen3.6-flash"></option>
           </datalist>
           <datalist id="doubao-models">
             <option value="doubao-seed-2-1-pro-260628"></option>

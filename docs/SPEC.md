@@ -150,9 +150,10 @@ interface SiteAdapter {
 
 ### D. 机翻兜底细则（ticket 06 就地拍板）
 
-- **引擎/模型/key**（2026-07-30）：默认仍为 DeepSeek；新增千问（阿里云百炼·中国区）、千问（阿里云百炼·新加坡区）与豆包（火山方舟·中国区）预设，并继续支持任意 OpenAI 兼容端点及**本机模型**（Ollama / LM Studio 等）。模型栏提供当前候选但始终可编辑，用户可自行选择或手动填写其他模型 ID；豆包候选含 `doubao-seed-2-1-pro-260628`。供应商 / Workspace ID（仅千问）/ Base URL / key / 模型在 options page 配置、存 `chrome.storage.local`（详见 §I）；千问与豆包走各自 OpenAI 兼容 Responses API，DeepSeek、自定义与本机端点保持 Chat Completions。
+- **引擎/模型/key**（2026-07-30）：默认仍为 DeepSeek；新增千问（阿里云百炼·中国区）、千问（阿里云百炼·新加坡区）与豆包（火山方舟·中国区）预设，并继续支持任意 OpenAI 兼容端点及**本机模型**（Ollama / LM Studio 等）。千问默认 `qwen3.7-flash`，并提供 `qwen3.7-plus`、`qwen3.7-max` 与 `qwen3.6-flash` 候选；模型栏始终可编辑，用户可手动填写其他模型 ID。豆包候选含 `doubao-seed-2-1-pro-260628`。供应商 / Workspace ID（仅千问）/ Base URL / key / 模型 / 联网搜索（仅千问）在 options page 配置、存 `chrome.storage.local`（详见 §I）；千问与豆包走各自 OpenAI 兼容 Responses API，DeepSeek、自定义与本机端点保持 Chat Completions。
 - **繁体产出**：prompt 指定输出繁体中文；所有供应商的 zh-Hant 输出再过一遍 OpenCC(s2t) 作保险，避免偶发简体混入。
-- **请求约束**：字幕翻译使用明确的 system prompt，锁定目标语言、逐项保序、不增删拆并、保留语气/专名/标点/换行，并给出 `{"translations":[...]}` JSON 输出样例。千问 Responses 使用 `reasoning.effort: none` 且不存储响应；豆包 Responses 使用 `thinking.type: disabled`、`text.format: json_object` 且不存储响应；DeepSeek 保持现有 JSON Output Chat Completions；自定义端点只发送通用 OpenAI-compatible 字段。
+- **请求约束**：字幕翻译使用明确的 system prompt，锁定目标语言、逐项保序、不增删拆并、保留语气/专名/标点/换行，并给出 `{"translations":[...]}` JSON 输出样例。千问 Responses 默认使用 `reasoning.effort: none`，允许联网搜索时切换为 `low`，且始终不存储响应；豆包 Responses 使用 `thinking.type: disabled`、`text.format: json_object` 且不存储响应；DeepSeek 保持现有 JSON Output Chat Completions；自定义端点只发送通用 OpenAI-compatible 字段。
+- **千问联网搜索**：仅作为默认关闭的显式用户选项；启用时按百炼 Responses API 文档添加 `tools: [{"type":"web_search"}]` 与低强度思考，由模型自行决定是否搜索。不得发送 Chat Completions 的 `enable_search`，也不暴露 Responses API 不支持的强制搜索、搜索策略、来源站点或角标来源设置。搜索开关进入翻译缓存身份，开关前后的结果不得互相命中。
 - **批处理**：整轨 **warmup 预热 + 沿播放位置滚动补翻**（承 ticket 02 的 Read Frog 模板）。按播放头优先级分批（当前 cue 最高、其后若干条次高），每次模型请求限定 N 条 cue（避免单请求过长超时；一集 ~35k 字符分多批完成）。快进/跳转用 AbortController 取消在途请求。
 - **翻译保时轴**：机翻**逐 cue 翻译、沿用官方源轨的 `start/end`**，不重新拆句、不做时间轴再对齐。译文写回对应 cue 的 `text`，时轴不变。
 - **缓存**：service worker 侧 IndexedDB 持久化；key = `hash(contentId + trackId + 归一化源文本 + 目标语言 + 模型)`，内容寻址，重看/回拖命中。失效按内容 identity + 模型（换 key/模型自然 miss）；容量上限 + LRU 淘汰。
@@ -209,6 +210,7 @@ zhActive = Chinese cues where start <= t < end
 - 标准 MV3 options page（经扩展 action / chrome://extensions 打开）。**翻译服务**区块：
   - **供应商**下拉：`DeepSeek`（默认）/ `千问（阿里云百炼·中国区）` / `千问（阿里云百炼·新加坡区）` / `豆包（火山方舟·中国区）` / `OpenAI 兼容`（自定义云端）/ `本地`（Ollama、LM Studio 等本机 OpenAI 兼容端点）。
   - **Workspace ID / Base URL**：DeepSeek、豆包的 Base URL 预设并隐藏；千问显示独立 Workspace ID 输入框，用户只填控制台中的 `ws-…`，扩展按中国区（华北 2）或新加坡区自动生成阿里云推荐的业务空间专属 Responses API 地址，并在重新打开设置时从已存地址回填 Workspace ID；自定义/本地时显示 Base URL（本地默认形如 `http://localhost:11434/v1`）。
+  - **联网搜索**：仅千问显示，默认关闭；开启后使用百炼 Responses API 的 `web_search` 工具和 `reasoning.effort: low`，明确告知搜索由模型按需决定，并提示可能增加延迟与费用。
   - **API Key**（掩码）：云端必填；本地无鉴权时可留空。
   - **模型**：DeepSeek、千问、豆包均给出当前候选；候选不构成锁定，用户可自行选择或手动填写其他模型 ID；自定义/本地同样可填。
   - **测试连接**按钮 + 状态徽标（未配置 / 已配置 / 测试通过）。

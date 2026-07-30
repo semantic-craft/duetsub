@@ -26,6 +26,10 @@ const workspaceId = document.querySelector<HTMLInputElement>('#workspace-id')!;
 const workspaceIdField = document.querySelector<HTMLElement>(
   '#workspace-id-field',
 )!;
+const webSearch = document.querySelector<HTMLInputElement>('#web-search')!;
+const webSearchField = document.querySelector<HTMLElement>(
+  '#web-search-field',
+)!;
 const apiKey = document.querySelector<HTMLInputElement>('#api-key')!;
 const model = document.querySelector<HTMLInputElement>('#model')!;
 const status = document.querySelector<HTMLOutputElement>('#status')!;
@@ -97,6 +101,7 @@ function readConfig(): TranslationConfig {
       : baseUrl.value,
     apiKey: apiKey.value,
     model: model.value,
+    webSearchEnabled: isQwenProvider(selectedProvider) && webSearch.checked,
   };
 }
 
@@ -121,6 +126,8 @@ function renderConfig(config: TranslationConfig): void {
   baseUrl.required = !baseUrlField.hidden;
   workspaceIdField.hidden = !qwen;
   workspaceId.required = qwen;
+  webSearchField.hidden = !qwen;
+  webSearch.checked = qwen && config.webSearchEnabled;
 }
 
 function renderLanguagePair(loaded: LoadedLanguagePairPreference): void {
@@ -142,6 +149,7 @@ function applyProviderDefaults(value: TranslationProvider): void {
         ? {
           ...preset,
           baseUrl: qwenBaseUrl(value, workspaceId.value),
+          webSearchEnabled: webSearch.checked,
         }
         : preset,
     );
@@ -152,6 +160,7 @@ function applyProviderDefaults(value: TranslationProvider): void {
     baseUrl: value === 'local' ? 'http://localhost:11434/v1' : '',
     apiKey: '',
     model: '',
+    webSearchEnabled: false,
   });
 }
 

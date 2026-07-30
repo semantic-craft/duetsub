@@ -20,6 +20,7 @@ describe('options storage seam', () => {
       baseUrl: 'http://localhost:11434/v1',
       apiKey: 'local-test-token',
       model: 'qwen',
+      webSearchEnabled: false,
     };
     await saveTranslationConfig(storage, config);
     expect(await loadTranslationConfig(storage)).toEqual(config);
@@ -43,6 +44,31 @@ describe('options storage seam', () => {
       baseUrl: 'https://api.deepseek.com',
       apiKey: 'preserve-this-key',
       model: 'deepseek-v4-flash',
+      webSearchEnabled: false,
+    });
+  });
+
+  it('keeps an existing Qwen config and defaults the new search option off', async () => {
+    const storage = {
+      get: vi.fn(async (key: string) => ({
+        [key]: {
+          provider: 'qwen-cn',
+          baseUrl:
+            'https://ws-legacy-test.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
+          apiKey: 'preserve-qwen-key',
+          model: 'qwen3.6-flash',
+        },
+      })),
+      set: vi.fn(async () => undefined),
+    };
+
+    expect(await loadTranslationConfig(storage)).toEqual({
+      provider: 'qwen-cn',
+      baseUrl:
+        'https://ws-legacy-test.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
+      apiKey: 'preserve-qwen-key',
+      model: 'qwen3.6-flash',
+      webSearchEnabled: false,
     });
   });
 
@@ -52,7 +78,8 @@ describe('options storage seam', () => {
       baseUrl:
         'https://ws-cn-test.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
       apiKey: 'qwen-cn-test-token',
-      model: 'qwen3.6-flash',
+      model: 'qwen3.7-flash',
+      webSearchEnabled: true,
     },
     {
       provider: 'qwen-sg' as const,
@@ -60,12 +87,14 @@ describe('options storage seam', () => {
         'https://ws-sg-test.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1',
       apiKey: 'qwen-sg-test-token',
       model: 'qwen3.7-plus',
+      webSearchEnabled: false,
     },
     {
       provider: 'doubao' as const,
       baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
       apiKey: 'doubao-test-token',
       model: 'doubao-seed-2-1-pro-260628',
+      webSearchEnabled: false,
     },
   ])('loads a saved $provider config', async (config) => {
     const storage = {

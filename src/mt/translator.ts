@@ -63,6 +63,7 @@ export async function translateCueBatch(
       provider: validation.config.provider,
       endpoint: validation.config.baseUrl,
       model: validation.config.model,
+      webSearchEnabled: validation.config.webSearchEnabled,
     })
   ));
 
@@ -190,8 +191,13 @@ function translationProviderOptions(
     case 'qwen-cn':
     case 'qwen-sg':
       return {
-        reasoning: { effort: 'none' },
+        reasoning: {
+          effort: config.webSearchEnabled ? 'low' : 'none',
+        },
         store: false,
+        ...(config.webSearchEnabled
+          ? { tools: [{ type: 'web_search' }] }
+          : {}),
       };
     case 'doubao':
       return {

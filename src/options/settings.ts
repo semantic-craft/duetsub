@@ -15,8 +15,9 @@ export async function loadTranslationConfig(
 ): Promise<TranslationConfig> {
   const stored = await storage.get(TRANSLATION_CONFIG_STORAGE_KEY);
   const value = stored[TRANSLATION_CONFIG_STORAGE_KEY];
-  return isTranslationConfig(value)
-    ? migrateRetiredDeepSeekDefaults(value)
+  const config = readTranslationConfig(value);
+  return config !== undefined
+    ? migrateRetiredDeepSeekDefaults(config)
     : DEFAULT_TRANSLATION_CONFIG;
 }
 
@@ -43,13 +44,24 @@ function migrateRetiredDeepSeekDefaults(
   };
 }
 
-function isTranslationConfig(value: unknown): value is TranslationConfig {
-  if (typeof value !== 'object' || value === null) return false;
+function readTranslationConfig(
+  value: unknown,
+): TranslationConfig | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
   const config = value as Partial<TranslationConfig>;
-  return (
+  if (
     isTranslationProvider(config.provider) &&
     typeof config.baseUrl === 'string' &&
     typeof config.apiKey === 'string' &&
     typeof config.model === 'string'
-  );
+  ) {
+    return {
+      provider: config.provider,
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey,
+      model: config.model,
+      webSearchEnabled: config.webSearchEnabled === true,
+    };
+  }
+  return undefined;
 }

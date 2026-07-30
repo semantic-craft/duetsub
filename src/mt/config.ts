@@ -11,6 +11,7 @@ export interface TranslationConfig {
   readonly baseUrl: string;
   readonly apiKey: string;
   readonly model: string;
+  readonly webSearchEnabled: boolean;
 }
 
 export const TRANSLATION_CONFIG_STORAGE_KEY = 'duetsub:translation-config';
@@ -19,9 +20,10 @@ export const DEEPSEEK_MODELS = [
   'deepseek-v4-pro',
 ] as const;
 export const QWEN_MODELS = [
-  'qwen3.6-flash',
+  'qwen3.7-flash',
   'qwen3.7-plus',
   'qwen3.7-max',
+  'qwen3.6-flash',
 ] as const;
 export const QWEN_WORKSPACE_ID_PLACEHOLDER = 'YOUR_WORKSPACE_ID';
 export const DOUBAO_MODELS = [
@@ -35,24 +37,28 @@ export const DEFAULT_TRANSLATION_CONFIG: TranslationConfig = {
   baseUrl: 'https://api.deepseek.com',
   apiKey: '',
   model: DEEPSEEK_MODELS[0],
+  webSearchEnabled: false,
 };
 export const QWEN_CN_TRANSLATION_CONFIG: TranslationConfig = {
   provider: 'qwen-cn',
   baseUrl: qwenBaseUrl('qwen-cn', QWEN_WORKSPACE_ID_PLACEHOLDER),
   apiKey: '',
   model: QWEN_MODELS[0],
+  webSearchEnabled: false,
 };
 export const QWEN_SG_TRANSLATION_CONFIG: TranslationConfig = {
   provider: 'qwen-sg',
   baseUrl: qwenBaseUrl('qwen-sg', QWEN_WORKSPACE_ID_PLACEHOLDER),
   apiKey: '',
   model: QWEN_MODELS[0],
+  webSearchEnabled: false,
 };
 export const DOUBAO_TRANSLATION_CONFIG: TranslationConfig = {
   provider: 'doubao',
   baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
   apiKey: '',
   model: DOUBAO_MODELS[0],
+  webSearchEnabled: false,
 };
 
 export type ConfigValidation =
