@@ -41,16 +41,61 @@ const testButton = document.querySelector<HTMLButtonElement>('#test')!;
 const languagePair = document.querySelector<HTMLOutputElement>(
   '#official-language-pair',
 )!;
-const topLanguage = document.querySelector<HTMLInputElement>(
+const topLanguage = document.querySelector<HTMLSelectElement>(
   '#official-language-top',
 )!;
-const bottomLanguage = document.querySelector<HTMLInputElement>(
+const topLanguageCustom = document.querySelector<HTMLInputElement>(
+  '#official-language-top-custom',
+)!;
+const bottomLanguage = document.querySelector<HTMLSelectElement>(
   '#official-language-bottom',
+)!;
+const bottomLanguageCustom = document.querySelector<HTMLInputElement>(
+  '#official-language-bottom-custom',
 )!;
 const resetLanguagePair = document.querySelector<HTMLButtonElement>(
   '#reset-official-language-pair',
 )!;
 
+const CUSTOM_LANGUAGE_VALUE = '__custom__';
+const COMMON_LANGUAGE_TAGS = [
+  'en',
+  'zh-Hant',
+  'zh-Hans',
+  'ja',
+  'ko',
+  'es-ES',
+  'es-419',
+  'fr',
+  'de',
+  'it',
+  'pt-BR',
+  'pt-PT',
+  'ar',
+  'hi',
+  'id',
+  'ms',
+  'th',
+  'vi',
+  'tr',
+  'pl',
+  'nl',
+  'sv',
+  'da',
+  'nb',
+  'fi',
+  'cs',
+  'el',
+  'he',
+  'hu',
+  'ro',
+  'ca',
+  'ta',
+  'te',
+] as const;
+
+populateLanguageSelect(topLanguage);
+populateLanguageSelect(bottomLanguage);
 void loadTranslationConfig(chrome.storage.local).then(renderConfig);
 void loadLanguagePairPreference(chrome.storage.local).then(renderLanguagePair);
 provider.addEventListener('change', () => {
@@ -59,6 +104,12 @@ provider.addEventListener('change', () => {
 languagePairForm.addEventListener('submit', (event) => {
   event.preventDefault();
   void saveCurrentLanguagePair();
+});
+topLanguage.addEventListener('change', () => {
+  updateCustomLanguageField(topLanguage, topLanguageCustom);
+});
+bottomLanguage.addEventListener('change', () => {
+  updateCustomLanguageField(bottomLanguage, bottomLanguageCustom);
 });
 resetLanguagePair.addEventListener('click', () => {
   void (async () => {
@@ -106,8 +157,8 @@ async function saveCurrent(): Promise<void> {
 async function saveCurrentLanguagePair(): Promise<void> {
   const saved = await saveLanguagePairPreference(chrome.storage.local, {
     version: 1,
-    top: topLanguage.value.trim(),
-    bottom: bottomLanguage.value.trim(),
+    top: selectedLanguage(topLanguage, topLanguageCustom),
+    bottom: selectedLanguage(bottomLanguage, bottomLanguageCustom),
   });
   if (!saved) {
     languagePair.dataset.state = 'error';
@@ -161,8 +212,16 @@ function renderConfig(config: TranslationConfig): void {
 
 function renderLanguagePair(loaded: LoadedLanguagePairPreference): void {
   const { preference } = loaded;
-  topLanguage.value = preference.top;
-  bottomLanguage.value = preference.bottom;
+  renderLanguageSelect(
+    topLanguage,
+    topLanguageCustom,
+    preference.top,
+  );
+  renderLanguageSelect(
+    bottomLanguage,
+    bottomLanguageCustom,
+    preference.bottom,
+  );
   languagePair.value = `${
     languageName(preference.top)
   }（${preference.top}）在上，${
@@ -228,4 +287,50 @@ function languageName(language: string): string {
   } catch {
     return language;
   }
+}
+
+function populateLanguageSelect(select: HTMLSelectElement): void {
+  for (const language of COMMON_LANGUAGE_TAGS) {
+    const option = document.createElement('option');
+    option.value = language;
+    option.textContent = `${languageName(language)}（${language}）`;
+    select.append(option);
+  }
+  const custom = document.createElement('option');
+  custom.value = CUSTOM_LANGUAGE_VALUE;
+  custom.textContent = '其他語言…';
+  select.append(custom);
+}
+
+function updateCustomLanguageField(
+  select: HTMLSelectElement,
+  custom: HTMLInputElement,
+): void {
+  custom.hidden = select.value !== CUSTOM_LANGUAGE_VALUE;
+  custom.required = !custom.hidden;
+  if (!custom.hidden) custom.focus();
+}
+
+function selectedLanguage(
+  select: HTMLSelectElement,
+  custom: HTMLInputElement,
+): string {
+  return select.value === CUSTOM_LANGUAGE_VALUE
+    ? custom.value.trim()
+    : select.value;
+}
+
+function renderLanguageSelect(
+  select: HTMLSelectElement,
+  custom: HTMLInputElement,
+  language: string,
+): void {
+  if (COMMON_LANGUAGE_TAGS.some((candidate) => candidate === language)) {
+    select.value = language;
+    custom.value = '';
+  } else {
+    select.value = CUSTOM_LANGUAGE_VALUE;
+    custom.value = language;
+  }
+  updateCustomLanguageField(select, custom);
 }
