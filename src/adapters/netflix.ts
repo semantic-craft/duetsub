@@ -682,7 +682,8 @@ export function parseNetflixMenuOptionMetadata(input: {
   const language = off
     ? undefined
     : canonicalLanguage(input.languageCode) ??
-      languageFromMenuDataUia(dataUia);
+      languageFromMenuDataUia(dataUia) ??
+      languageFromMenuLabel(label);
 
   return {
     key: [
@@ -801,6 +802,39 @@ function languageFromMenuDataUia(dataUia: string): string | undefined {
     if (matched !== undefined) return matched;
   }
   return undefined;
+}
+
+const NETFLIX_MENU_LANGUAGE_LABELS = new Map<string, string>([
+  ['english', 'en'],
+  ['英語', 'en'],
+  ['英语', 'en'],
+  ['chinese [traditional]', 'zh-Hant'],
+  ['traditional chinese', 'zh-Hant'],
+  ['中文[繁體]', 'zh-Hant'],
+  ['中文[繁体]', 'zh-Hant'],
+  ['chinese [simplified]', 'zh-Hans'],
+  ['simplified chinese', 'zh-Hans'],
+  ['中文[簡體]', 'zh-Hans'],
+  ['中文[简体]', 'zh-Hans'],
+  ['japanese', 'ja'],
+  ['日本語', 'ja'],
+  ['日語', 'ja'],
+  ['日语', 'ja'],
+  ['korean', 'ko'],
+  ['한국어', 'ko'],
+  ['韓語', 'ko'],
+  ['韩语', 'ko'],
+]);
+
+function languageFromMenuLabel(label: string): string | undefined {
+  return NETFLIX_MENU_LANGUAGE_LABELS.get(
+    normalizeLabel(
+      label.replace(
+        /\s*[\[(（]\s*(?:CC|SDH)\s*[\])）]\s*$/i,
+        '',
+      ),
+    ),
+  );
 }
 
 function canonicalLanguage(value: string | null | undefined): string | undefined {

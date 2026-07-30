@@ -21,7 +21,7 @@ function track(
 }
 
 describe('Netflix subtitle menu metadata', () => {
-  it('reads arbitrary machine BCP-47 codes without guessing localized labels', () => {
+  it('prefers arbitrary machine BCP-47 codes and limits localized label aliases', () => {
     expect(
       parseNetflixMenuOptionMetadata({
         dataUia: 'subtitle-item-selected-ja-JP',
@@ -47,6 +47,15 @@ describe('Netflix subtitle menu metadata', () => {
       parseNetflixMenuOptionMetadata({
         dataUia: 'subtitle-item-selected-日本語',
         label: '日本語',
+        selected: true,
+      }),
+    ).toMatchObject({
+      language: 'ja',
+    });
+    expect(
+      parseNetflixMenuOptionMetadata({
+        dataUia: 'subtitle-item-selected-Српски',
+        label: 'Српски',
         selected: true,
       }),
     ).toMatchObject({

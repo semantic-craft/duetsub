@@ -1,7 +1,10 @@
 import { DOMParser } from '@xmldom/xmldom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createNetflixAdapter } from '../src/adapters/netflix';
+import {
+  createNetflixAdapter,
+  parseNetflixMenuOptionMetadata,
+} from '../src/adapters/netflix';
 import {
   NETFLIX_TRACK_REQUEST_ATTRIBUTE,
   netflixManifestMessage,
@@ -15,6 +18,64 @@ afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+describe('Netflix localized menu metadata', () => {
+  it('recognizes current Traditional Chinese UI labels without lang attributes', () => {
+    expect(
+      parseNetflixMenuOptionMetadata({
+        dataUia: 'subtitle-item-selected-中文（繁體）',
+        label: '中文（繁體）',
+        selected: false,
+      }),
+    ).toMatchObject({
+      language: 'zh-Hant',
+      selected: true,
+      kind: 'subtitles',
+    });
+    expect(
+      parseNetflixMenuOptionMetadata({
+        dataUia: 'subtitle-item-英語 (CC)',
+        label: '英語 (CC)',
+        selected: false,
+      }),
+    ).toMatchObject({
+      language: 'en',
+      selected: false,
+      kind: 'closed-captions',
+    });
+    expect(
+      parseNetflixMenuOptionMetadata({
+        dataUia: 'subtitle-item-中文（簡體）',
+        label: '中文（簡體）',
+        selected: false,
+      }),
+    ).toMatchObject({
+      language: 'zh-Hans',
+      selected: false,
+      kind: 'subtitles',
+    });
+    expect(
+      parseNetflixMenuOptionMetadata({
+        dataUia: 'subtitle-item-日語 (CC)',
+        label: '日語 (CC)',
+        selected: false,
+      }),
+    ).toMatchObject({
+      language: 'ja',
+      kind: 'closed-captions',
+    });
+    expect(
+      parseNetflixMenuOptionMetadata({
+        dataUia: 'subtitle-item-韓語',
+        label: '韓語',
+        selected: false,
+      }),
+    ).toMatchObject({
+      language: 'ko',
+      kind: 'subtitles',
+    });
+  });
 });
 
 describe('Netflix adapter lifecycle', () => {
