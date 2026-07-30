@@ -114,6 +114,7 @@ function onTrackRequest(event: MessageEvent<unknown>): void {
     readNetflixWatchIdentity(window.location.href) === message.contentIdentity;
   if (ok) activeTrackRequest = message;
   postDuetSubMessage(netflixTrackRequestReady(message, ok));
+  if (ok) void replayCachedTimedText(message);
 }
 
 function currentObservation(
@@ -130,6 +131,63 @@ function currentObservation(
     )
     ? { url, request }
     : undefined;
+}
+
+async function replayCachedTimedText(
+  request: NetflixTrackRequestMessage,
+): Promise<void> {
+  const urls = cachedTimedTextUrls();
+  if (urls.length === 0) return;
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (activeTrackRequest?.requestId !== request.requestId) return;
+    if (
+      document.documentElement?.getAttribute(
+        NETFLIX_TRACK_REQUEST_ATTRIBUTE,
+      ) === request.requestId
+    ) {
+      break;
+    }
+    await delay(25);
+  }
+
+  for (const url of urls) {
+    if (
+      activeTrackRequest?.requestId !== request.requestId ||
+      document.documentElement?.getAttribute(
+          NETFLIX_TRACK_REQUEST_ATTRIBUTE,
+        ) !== request.requestId
+    ) {
+      return;
+    }
+    await window.fetch(url).catch(() => undefined);
+  }
+}
+
+function cachedTimedTextUrls(): string[] {
+  if (typeof performance === 'undefined') return [];
+
+  const urls = performance
+    .getEntriesByType('resource')
+    .map(({ name }) => name)
+    .filter(isNetflixCachedTimedTextUrl);
+  return [...new Set(urls)].slice(-8).reverse();
+}
+
+export function isNetflixCachedTimedTextUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === 'https:' &&
+      url.username === '' &&
+      url.password === '' &&
+      url.hostname.endsWith('.nflxvideo.net') &&
+      url.pathname === '/' &&
+      url.search.length > 1
+    );
+  } catch {
+    return false;
+  }
 }
 
 function manifestCandidate(value: unknown): unknown | undefined {
@@ -190,7 +248,14 @@ function forwardXmlCandidate(
   raw: string,
   observation: NetflixRequestObservation,
 ): void {
-  if (raw.length === 0 || raw.length > 2_000_000 || !hasXmlMagic(raw)) return;
+  if (
+    raw.length === 0 ||
+    raw.length > 2_000_000 ||
+    !hasXmlMagic(raw) ||
+    !matchesNetflixTimedTextKind(raw, observation.request.trackKind)
+  ) {
+    return;
+  }
   postDuetSubMessage(
     netflixTtmlResponseMessage(
       crypto.randomUUID(),
@@ -199,9 +264,22 @@ function forwardXmlCandidate(
       observation.request,
     ),
   );
-  if (activeTrackRequest?.requestId === observation.request.requestId) {
-    activeTrackRequest = undefined;
-  }
+}
+
+export function matchesNetflixTimedTextKind(
+  raw: string,
+  kind: NetflixTrackRequestMessage['trackKind'],
+): boolean {
+  const value = raw
+    .slice(0, 8_192)
+    .match(/\b(?:[\w.-]+:)?textType\s*=\s*["']([^"']+)["']/i)
+    ?.[1]
+    ?.trim()
+    .toLowerCase();
+  const closedCaptions = value === 'cc' || value === 'sdh';
+  return kind === 'closed-captions'
+    ? closedCaptions
+    : !closedCaptions;
 }
 
 function isXmlMimeType(value: string | null): boolean {
@@ -224,4 +302,10 @@ function resolveUrl(value: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
