@@ -1,4 +1,8 @@
 import type { SiteId } from '../core/contracts';
+import {
+  PRIME_PLAYER_SELECTOR,
+  PRIME_VIDEO_SELECTOR,
+} from '../core/primevideo-dom';
 import { readNetflixWatchIdentity } from '../adapters/netflix-location';
 import { readMaxContentIdentity } from '../adapters/max-location';
 import { youtubeVideoIdFromUrl } from '../adapters/youtube-url';
@@ -19,10 +23,8 @@ const SITE_UI: Record<SiteId, SiteUiBinding> = {
       '.player-timedtext, [data-duetsub-native-captions="netflix"]',
   },
   primevideo: {
-    videoSelector:
-      'div[id^="dv-web-player"].dv-player-fullscreen video',
-    playerSelector:
-      'div[id^="dv-web-player"].dv-player-fullscreen',
+    videoSelector: PRIME_VIDEO_SELECTOR,
+    playerSelector: PRIME_PLAYER_SELECTOR,
     nativeCaptionSelector:
       '.atvwebplayersdk-captions-overlay, [data-duetsub-native-captions="primevideo"]',
   },

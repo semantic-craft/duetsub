@@ -4,6 +4,11 @@ import {
   type PlaybackGeneration,
 } from '../core/lifecycle';
 import {
+  PRIME_SUBTITLE_GROUP_SELECTOR,
+  PRIME_SUBTITLE_MENU_BUTTON_SELECTOR,
+  PRIME_VIDEO_SELECTOR,
+} from '../core/primevideo-dom';
+import {
   isDuetSubMessage,
   postDuetSubMessage,
   requestPrimeCachedTtml,
@@ -19,10 +24,6 @@ import {
   type PrimeTtmlResponseInbox,
 } from './primevideo-responses';
 
-const MENU_BUTTON_SELECTOR =
-  '#dv-web-player button[aria-label="Subtitles and Audio Menu"]';
-const SUBTITLE_GROUP_SELECTOR =
-  '#dv-web-player .atvwebplayersdk-subtitle-radio-group';
 const SUBTITLE_RADIO_SELECTOR = 'input[type="radio"][name="subtitle"]';
 const OBSERVATION_REQUEST_ATTRIBUTE = 'data-duetsub-observation-request';
 const OBSERVATION_GENERATION_ATTRIBUTE =
@@ -684,27 +685,35 @@ async function restoreMenuState(
 async function ensureSubtitleMenuOpen(
   button: HTMLButtonElement,
 ): Promise<HTMLElement> {
-  const current = document.querySelector<HTMLElement>(SUBTITLE_GROUP_SELECTOR);
+  const current = document.querySelector<HTMLElement>(
+    PRIME_SUBTITLE_GROUP_SELECTOR,
+  );
   if (current !== null && isVisible(current)) return current;
   button.click();
   await waitUntil(() => isSubtitleMenuOpen(), DOM_TIMEOUT_MS);
-  const group = document.querySelector<HTMLElement>(SUBTITLE_GROUP_SELECTOR);
+  const group = document.querySelector<HTMLElement>(
+    PRIME_SUBTITLE_GROUP_SELECTOR,
+  );
   if (group === null) throw new Error('Prime subtitle menu did not open');
   return group;
 }
 
 async function getSubtitleGroup(): Promise<HTMLElement> {
   await waitUntil(
-    () => document.querySelector(SUBTITLE_GROUP_SELECTOR) !== null,
+    () => document.querySelector(PRIME_SUBTITLE_GROUP_SELECTOR) !== null,
     DOM_TIMEOUT_MS,
   );
-  const group = document.querySelector<HTMLElement>(SUBTITLE_GROUP_SELECTOR);
+  const group = document.querySelector<HTMLElement>(
+    PRIME_SUBTITLE_GROUP_SELECTOR,
+  );
   if (group === null) throw new Error('Prime subtitle menu DOM unavailable');
   return group;
 }
 
 function isSubtitleMenuOpen(): boolean {
-  const group = document.querySelector<HTMLElement>(SUBTITLE_GROUP_SELECTOR);
+  const group = document.querySelector<HTMLElement>(
+    PRIME_SUBTITLE_GROUP_SELECTOR,
+  );
   return group !== null && isVisible(group);
 }
 
@@ -719,7 +728,8 @@ function isVisible(element: HTMLElement): boolean {
 
 async function waitForPrimePlayerReady(): Promise<void> {
   await waitUntil(() => {
-    const video = document.querySelector<HTMLVideoElement>('#dv-web-player video');
+    const video =
+      document.querySelector<HTMLVideoElement>(PRIME_VIDEO_SELECTOR);
     return video !== null && isVisible(video) && video.readyState >= 2;
   }, DOM_TIMEOUT_MS);
 }
@@ -749,10 +759,13 @@ async function waitForStableSubtitleSelection(
 
 async function waitForMenuButton(): Promise<HTMLButtonElement> {
   await waitUntil(
-    () => document.querySelector(MENU_BUTTON_SELECTOR) !== null,
+    () =>
+      document.querySelector(PRIME_SUBTITLE_MENU_BUTTON_SELECTOR) !== null,
     DOM_TIMEOUT_MS,
   );
-  const button = document.querySelector<HTMLButtonElement>(MENU_BUTTON_SELECTOR);
+  const button = document.querySelector<HTMLButtonElement>(
+    PRIME_SUBTITLE_MENU_BUTTON_SELECTOR,
+  );
   if (button === null) throw new Error('Prime subtitle menu button unavailable');
   return button;
 }

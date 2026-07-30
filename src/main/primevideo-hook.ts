@@ -6,6 +6,7 @@ import {
   primeTtmlResponseMessage,
   type PrimeTtmlObservationOwnership,
 } from '../core/messages';
+import { PRIME_VIDEO_SELECTOR } from '../core/primevideo-dom';
 
 const xhrUrls = new WeakMap<XMLHttpRequest, string>();
 const completeFragmentedTextPayloads = new Map<string, Promise<string>>();
@@ -167,9 +168,8 @@ function observePrimePlaybackTimeline(): () => number | undefined {
   });
 
   return () => {
-    const video = document.querySelector<HTMLVideoElement>(
-      '#dv-web-player video',
-    );
+    const video =
+      document.querySelector<HTMLVideoElement>(PRIME_VIDEO_SELECTOR);
     const mediaSourceUrl = video?.currentSrc || video?.src;
     if (mediaSourceUrl === undefined || mediaSourceUrl === '') {
       return undefined;
@@ -414,9 +414,8 @@ function replayCachedPrimeTtml(
 }
 
 function activePrimeMediaSource(): string | undefined {
-  const video = document.querySelector<HTMLVideoElement>(
-    '#dv-web-player video',
-  );
+  const video =
+    document.querySelector<HTMLVideoElement>(PRIME_VIDEO_SELECTOR);
   const mediaSource = video?.currentSrc || video?.src;
   return mediaSource === undefined || mediaSource === ''
     ? undefined

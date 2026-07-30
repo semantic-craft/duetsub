@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Cue, TrackInfo } from '../src/core/contracts';
 import { resolveOfficialPair } from '../src/core/official-pair-selection';
@@ -7,15 +7,100 @@ import {
   acceptPrimeTimelineOffset,
   acquirePrimeVideoTracks,
   applyPrimeVideoPairAlignmentPolicy,
+  createPrimeVideoAdapter,
   parsePrimeVideoSubtitleTrack,
 } from '../src/adapters/primevideo';
 import { primeTtmlResponseMessage } from '../src/core/messages';
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 function cues(text: string, language: string): Cue[] {
   return [{ start: 0, end: 1_000, text, language }];
 }
 
 describe('Prime official subtitle metadata', () => {
+  it('enumerates the visible fullscreen player when Prime keeps a stale hidden player', async () => {
+    vi.useFakeTimers();
+    const activeVideo = {
+      readyState: 4,
+      getClientRects: () => [{}],
+    };
+    const staleVideo = {
+      readyState: 0,
+      getClientRects: () => [],
+    };
+    const button = {
+      getClientRects: () => [{}],
+    };
+    const radio = {
+      checked: true,
+      id: 'en-us_Caption_Dialog',
+      getAttribute: (name: string) =>
+        name === 'aria-label' ? 'English [CC]' : null,
+    };
+    const group = {
+      getClientRects: () => [{}],
+      querySelectorAll: (selector: string) =>
+        selector === 'input[type="radio"][name="subtitle"]' ? [radio] : [],
+    };
+
+    vi.stubGlobal('window', {
+      addEventListener: vi.fn(),
+      setTimeout,
+      clearTimeout,
+    });
+    vi.stubGlobal('getComputedStyle', (element: unknown) => ({
+      display: element === staleVideo ? 'none' : 'block',
+      visibility: 'visible',
+    }));
+    vi.stubGlobal('document', {
+      querySelector: (selector: string) => {
+        if (selector === '#dv-web-player video') return staleVideo;
+        if (
+          selector ===
+          'div[id^="dv-web-player"].dv-player-fullscreen video'
+        ) {
+          return activeVideo;
+        }
+        if (
+          selector ===
+          'div[id^="dv-web-player"].dv-player-fullscreen button[aria-label="Subtitles and Audio Menu"]'
+        ) {
+          return button;
+        }
+        if (
+          selector ===
+          'div[id^="dv-web-player"].dv-player-fullscreen .atvwebplayersdk-subtitle-radio-group'
+        ) {
+          return group;
+        }
+        return null;
+      },
+    });
+
+    const adapter = createPrimeVideoAdapter();
+    let observedTracks: TrackInfo[] | undefined;
+    adapter.onTracks((tracks) => {
+      observedTracks = tracks;
+    });
+    adapter.start();
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    expect(observedTracks).toEqual([
+      {
+        id: 'en-us_Caption_Dialog',
+        language: 'en-US',
+        source: 'official',
+        label: 'English [CC]',
+        kind: 'closed-captions',
+      },
+    ]);
+  });
+
   it('builds canonical tracks from machine ids without guessing localized labels', () => {
     expect(
       parsePrimeVideoSubtitleTrack({

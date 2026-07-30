@@ -86,7 +86,12 @@ describe('Prime MAIN-world response observation', () => {
         if (type === 'click') clickListener = listener;
       },
       querySelector(selector: string) {
-        if (selector !== '#dv-web-player video') return null;
+        if (
+          selector !==
+          'div[id^="dv-web-player"].dv-player-fullscreen video'
+        ) {
+          return null;
+        }
         return {
           currentSrc: activeVideoSource,
           src: activeVideoSource,
