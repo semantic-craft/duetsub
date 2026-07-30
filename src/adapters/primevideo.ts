@@ -667,7 +667,19 @@ export async function restorePrimeSubtitleState(
         DOM_TIMEOUT_MS,
       );
     }
-    return await restoreMenuState(menuWasOpen);
+    await restoreMenuState(menuWasOpen);
+  } catch {
+    // Prime can replace its menu DOM while the click is still settling.
+  }
+
+  try {
+    await waitUntil(
+      () =>
+        isPrimeSubtitleTrackChecked(originalId) &&
+        isSubtitleMenuOpen() === menuWasOpen,
+      DOM_TIMEOUT_MS,
+    );
+    return true;
   } catch {
     return false;
   }

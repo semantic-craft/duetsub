@@ -121,6 +121,48 @@ describe('Prime official subtitle metadata', () => {
     await expect(restored).resolves.toBe(true);
   });
 
+  it('accepts a restored final state after a transient menu action fails', async () => {
+    const radio = {
+      checked: true,
+      id: 'zh-hant_Subtitle_Dialog',
+    };
+    const group = {
+      getClientRects: () => [],
+      querySelectorAll: () => [radio],
+    };
+    const button = {
+      click: vi.fn(() => {
+        throw new Error('stale Prime menu action');
+      }),
+    };
+
+    vi.stubGlobal('getComputedStyle', () => ({
+      display: 'none',
+      visibility: 'visible',
+    }));
+    vi.stubGlobal('document', {
+      querySelector: (selector: string) => {
+        if (
+          selector ===
+          'div[id^="dv-web-player"].dv-player-fullscreen .atvwebplayersdk-subtitle-radio-group'
+        ) {
+          return group;
+        }
+        if (
+          selector ===
+          'div[id^="dv-web-player"].dv-player-fullscreen button[aria-label="Subtitles and Audio Menu"]'
+        ) {
+          return button;
+        }
+        return null;
+      },
+    });
+
+    await expect(
+      restorePrimeSubtitleState(radio.id, false),
+    ).resolves.toBe(true);
+  });
+
   it('enumerates the visible fullscreen player when Prime keeps a stale hidden player', async () => {
     vi.useFakeTimers();
     const activeVideo = {
