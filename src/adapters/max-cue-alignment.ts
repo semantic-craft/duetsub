@@ -40,7 +40,12 @@ export function resolveMaxOfficialPairCues(input: {
     input.bottomCues,
   );
   return bottomCues.length === 0
-    ? { kind: 'unavailable', reason: 'alignment-coverage' }
+    ? {
+        kind: 'ready',
+        policy: 'original-timing',
+        topCues: input.topCues,
+        bottomCues: input.bottomCues,
+      }
     : {
         kind: 'ready',
         policy: 'english-cc-traditional-chinese',

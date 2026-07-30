@@ -34,7 +34,10 @@ function alignMaxChineseCuesToEnglish(
     topCues,
     bottomCues,
   });
-  return result.kind === 'ready' ? result.bottomCues : [];
+  return result.kind === 'ready' &&
+      result.policy === 'english-cc-traditional-chinese'
+    ? result.bottomCues
+    : [];
 }
 
 describe('alignMaxChineseCuesToEnglish', () => {
@@ -233,7 +236,16 @@ describe('resolveMaxOfficialPairCues', () => {
     });
   });
 
-  it('fails the whole verified pair when unique alignment coverage is too low', () => {
+  it('falls back to both original timelines when alignment coverage is too low', () => {
+    const topCues = [
+      cue(1_000, 2_000, 'First English cue', 'en-US'),
+      cue(4_000, 5_000, 'Second English cue', 'en-US'),
+    ];
+    const bottomCues = [
+      cue(1_500, 2_500, '可驗證', 'zh-Hant-TW'),
+      cue(3_000, 3_500, '無候選', 'zh-Hant-TW'),
+    ];
+
     expect(
       resolveMaxOfficialPairCues({
         top: officialTrack(
@@ -245,22 +257,30 @@ describe('resolveMaxOfficialPairCues', () => {
           'zh-Hant-TW-subtitles',
           'zh-Hant-TW',
         ),
-        topCues: [
-          cue(1_000, 2_000, 'First English cue', 'en-US'),
-          cue(4_000, 5_000, 'Second English cue', 'en-US'),
-        ],
-        bottomCues: [
-          cue(1_500, 2_500, '可驗證', 'zh-Hant-TW'),
-          cue(3_000, 3_500, '無候選', 'zh-Hant-TW'),
-        ],
+        topCues,
+        bottomCues,
       }),
     ).toEqual({
-      kind: 'unavailable',
-      reason: 'alignment-coverage',
+      kind: 'ready',
+      policy: 'original-timing',
+      topCues,
+      bottomCues,
     });
   });
 
-  it('fails the verified pair instead of dropping an unmappable overflow line', () => {
+  it('keeps an unmappable overflow cue on its original timeline', () => {
+    const topCues = [
+      cue(1_000, 2_000, 'One English cue.', 'en-US'),
+    ];
+    const bottomCues = [
+      cue(
+        1_000,
+        2_500,
+        '-第一行\n-無法承接的第二行',
+        'zh-Hant-TW',
+      ),
+    ];
+
     expect(
       resolveMaxOfficialPairCues({
         top: officialTrack(
@@ -272,21 +292,14 @@ describe('resolveMaxOfficialPairCues', () => {
           'zh-Hant-TW-subtitles',
           'zh-Hant-TW',
         ),
-        topCues: [
-          cue(1_000, 2_000, 'One English cue.', 'en-US'),
-        ],
-        bottomCues: [
-          cue(
-            1_000,
-            2_500,
-            '-第一行\n-無法承接的第二行',
-            'zh-Hant-TW',
-          ),
-        ],
+        topCues,
+        bottomCues,
       }),
     ).toEqual({
-      kind: 'unavailable',
-      reason: 'alignment-coverage',
+      kind: 'ready',
+      policy: 'original-timing',
+      topCues,
+      bottomCues,
     });
   });
 });
