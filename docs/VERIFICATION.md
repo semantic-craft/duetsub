@@ -44,8 +44,13 @@ The command output for the release commit is the authoritative count; this docum
 - **NOT RUN — exact `0.2.0` archive playback replay:** the version-only packaged
   candidate was not reloaded for a redundant playback replay; it is not counted
   as an exact-archive human gate.
-- **PENDING — GitHub Release and Chrome Web Store:** the verified archives are
-  ready for the `v0.2.0` tag and the existing Store item's update submission.
+- **PASS — GitHub Release:** tag `v0.2.0` triggered the release workflow on
+  commit `679dccf`; the repeated build passed and the GitHub Release was
+  created with the verified standalone archive and bilingual release notes.
+- **PENDING — Chrome Web Store:** the previous `0.1.7` review was cancelled so
+  it can be replaced without creating a second item. The published version
+  remains unchanged; the verified `0.2.0` Store archive has not yet been
+  uploaded or submitted for review.
 
 ## Disney+ integration candidate
 
