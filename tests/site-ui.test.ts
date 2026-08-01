@@ -197,10 +197,85 @@ describe('Netflix site UI', () => {
   });
 });
 
+describe('Disney+ site UI', () => {
+  it('binds the visible video, native caption host, and controls before mute', () => {
+    const player = element();
+    const inactiveVideo = videoElement(player, 0, 0, 0);
+    const video = videoElement(player, 1_280, 720, 4);
+    const disneyUi = element();
+    const controls = element();
+    const mute = element(controls);
+    Object.defineProperty(mute, 'localName', { value: 'toggle-mute-button' });
+    Object.defineProperty(controls, 'children', { value: [mute] });
+    const controlsOverlay = element(disneyUi);
+    Object.defineProperty(controlsOverlay, 'shadowRoot', {
+      value: {
+        querySelectorAll: () => [controls],
+      },
+    });
+    disneyUi.querySelector = vi.fn((selector: string) =>
+      selector === 'main-app-controls-overlay' ? controlsOverlay : null
+    ) as typeof disneyUi.querySelector;
+
+    vi.stubGlobal('window', {
+      location: {
+        href:
+          'https://www.disneyplus.com/zh-hant/play/' +
+          '12345678-1234-1234-1234-123456789abc',
+      },
+    });
+    vi.stubGlobal('document', {
+      querySelectorAll: (selector: string) => {
+        if (
+          selector ===
+          'disney-web-player video'
+        ) {
+          return [inactiveVideo, video];
+        }
+        return [];
+      },
+      querySelector: (selector: string) => {
+        if (selector === 'disney-web-player') return player;
+        if (selector === 'disney-web-player-ui') return disneyUi;
+        return null;
+      },
+    });
+    vi.stubGlobal('getComputedStyle', () => ({
+      display: 'flex',
+      visibility: 'visible',
+    }));
+
+    expect(findSiteUiTarget('disneyplus')).toMatchObject({
+      video,
+      player,
+      controls,
+      toggleBefore: mute,
+      nativeCaptionRoot: disneyUi,
+      nativeCaptionSelector:
+        'timed-text-override-region, [data-duetsub-native-captions="disneyplus"]',
+      contentIdentity: '/play/12345678-1234-1234-1234-123456789abc',
+      nativeCueVideos: [inactiveVideo, video],
+    });
+  });
+});
+
 function element(parentElement: HTMLElement | null = null): HTMLElement {
   return {
     parentElement,
     querySelector: vi.fn(() => null),
     getClientRects: () => [{}] as unknown as DOMRectList,
   } as unknown as HTMLElement;
+}
+
+function videoElement(
+  parentElement: HTMLElement,
+  width: number,
+  height: number,
+  readyState: number,
+): HTMLVideoElement {
+  return {
+    parentElement,
+    readyState,
+    getBoundingClientRect: () => ({ width, height }),
+  } as unknown as HTMLVideoElement;
 }

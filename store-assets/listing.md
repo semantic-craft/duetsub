@@ -8,7 +8,7 @@ DuetSub – Bilingual Subtitles
 
 ### Summary
 
-Official-first bilingual subtitles for Netflix, Prime Video, Max, and YouTube.
+Official-first bilingual subtitles for Netflix, Prime Video, Max, Disney+, and YouTube.
 
 ### Detailed description
 
@@ -32,6 +32,7 @@ Supported players:
 - Netflix
 - Prime Video
 - Max at play.hbomax.com
+- Disney+
 - YouTube creator-provided captions
 
 The interface is available in English, Simplified Chinese, and Traditional Chinese.
@@ -46,7 +47,7 @@ DuetSub · 双语同幕
 
 ### 简短说明
 
-官方字幕优先的双语字幕工具，支持 Netflix、Prime Video、Max 和 YouTube。
+官方字幕优先的双语字幕工具，支持 Netflix、Prime Video、Max、Disney+ 和 YouTube。
 
 ### 详细说明
 
@@ -70,6 +71,7 @@ DuetSub 可以：
 - Netflix
 - Prime Video
 - Max（play.hbomax.com）
+- Disney+
 - YouTube 创作者提供的字幕
 
 界面支持简体中文、繁体中文和英文。
@@ -84,7 +86,7 @@ DuetSub · 雙語同幕
 
 ### 簡短說明
 
-官方字幕優先的雙語字幕工具，支援 Netflix、Prime Video、Max 和 YouTube。
+官方字幕優先的雙語字幕工具，支援 Netflix、Prime Video、Max、Disney+ 和 YouTube。
 
 ### 詳細說明
 
@@ -108,6 +110,7 @@ DuetSub 可以：
 - Netflix
 - Prime Video
 - Max（play.hbomax.com）
+- Disney+
 - YouTube 創作者提供的字幕
 
 介面支援簡體中文、繁體中文和英文。
@@ -189,7 +192,7 @@ Display two synchronized subtitle languages together on supported video players,
 
 Stores the per-site on/off preference, interface language, official top/bottom language preference, optional translation settings, API key, and local translation cache inside the browser profile.
 
-### Netflix, Prime Video, Max, and YouTube host access
+### Netflix, Prime Video, Max, Disney+, and YouTube host access
 
 Required to insert the DuetSub player control, observe subtitle responses already available to the signed-in user, synchronize cues to the current video, and render or restore subtitle layers.
 

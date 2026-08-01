@@ -22,11 +22,12 @@ export interface TrackInfo {
 }
 
 export interface SiteAdapter {
-  id: 'netflix' | 'primevideo' | 'max' | 'youtube';
+  id: 'netflix' | 'primevideo' | 'max' | 'youtube' | 'disneyplus';
   start(): void;
   onTracks(cb: (tracks: TrackInfo[]) => void): void;
   onCues(cb: (trackId: string, cues: Cue[]) => void): void;
   fetchTrack(track: TrackInfo): Promise<Cue[]>;
+  getPlaybackTimeMs?(): number | undefined;
   bindGeneration?(generation: PlaybackGeneration): void;
   onAdState?(
     cb: (active: boolean, programClockContinuous: boolean) => void,

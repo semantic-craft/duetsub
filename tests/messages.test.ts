@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  disneyManifestMessage,
+  disneyTimelineMessage,
   isDuetSubMessage,
   maxSubtitleResponseMessage,
   netflixManifestMessage,
@@ -24,6 +26,8 @@ const PRIME_FRAGMENTED_TEXT_URL =
   'english_text_1.mp4?token=SIGNED_PLACEHOLDER';
 const MAX_CONTENT_IDENTITY =
   '/video/watch/41c7eddd-2eea-4ed3-a299-474d693063f4/35a8260d-3bc6-4b91-b370-a5f3c72ad6d5';
+const DISNEY_CONTENT_IDENTITY =
+  '/play/12345678-1234-1234-1234-123456789abc';
 
 describe('fake official catalog requests', () => {
   it('validates catalog-only and selected-pair smoke requests', () => {
@@ -195,6 +199,49 @@ describe('Max MAIN to ISOLATED messages', () => {
     ]) {
       expect(isDuetSubMessage({ ...valid, url })).toBe(false);
     }
+  });
+});
+
+describe('Disney+ MAIN to ISOLATED messages', () => {
+  it('accepts a trusted master manifest and rejects forged media hosts', () => {
+    const message = disneyManifestMessage(
+      'response-disney',
+      'https://vod-edge.media.dssott.com/signed/title/master.m3u8',
+      '#EXTM3U\n#EXT-X-MEDIA:TYPE=SUBTITLES,LANGUAGE="en"',
+      DISNEY_CONTENT_IDENTITY,
+    );
+
+    expect(isDuetSubMessage(message)).toBe(true);
+    expect(
+      isDuetSubMessage({
+        ...message,
+        url: 'https://media.dssott.com.attacker.example/title/master.m3u8',
+      }),
+    ).toBe(false);
+    expect(
+      isDuetSubMessage({
+        ...message,
+        contentIdentity: `${DISNEY_CONTENT_IDENTITY}/forged`,
+      }),
+    ).toBe(false);
+  });
+
+  it('accepts only finite Disney program-clock positions for the current title', () => {
+    const message = disneyTimelineMessage(
+      991_000,
+      DISNEY_CONTENT_IDENTITY,
+    );
+
+    expect(isDuetSubMessage(message)).toBe(true);
+    expect(isDuetSubMessage({ ...message, timeMs: Number.POSITIVE_INFINITY }))
+      .toBe(false);
+    expect(isDuetSubMessage({ ...message, timeMs: -1 })).toBe(false);
+    expect(
+      isDuetSubMessage({
+        ...message,
+        contentIdentity: `${DISNEY_CONTENT_IDENTITY}/forged`,
+      }),
+    ).toBe(false);
   });
 });
 

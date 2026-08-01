@@ -421,6 +421,10 @@ const TOGGLE_CSS = `
     bottom: 2.5%;
   }
 
+  :host([data-fallback-anchor][data-site="disneyplus"]) {
+    right: calc(1.5% + 10rem);
+  }
+
   :host([data-site="max"]:not([data-fallback-anchor])) {
     align-self: flex-start;
     height: 48px;

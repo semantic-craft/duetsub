@@ -32,6 +32,17 @@ describe('release-channel manifest', () => {
       'https://*.amazon.pv-cdn.net/*',
     );
   });
+
+  it('matches Disney+ pages without granting a media-CDN host permission', async () => {
+    const value = await manifest(env('production'));
+
+    expect(value.host_permissions).toContain(
+      'https://www.disneyplus.com/*',
+    );
+    expect(value.host_permissions).not.toContain(
+      'https://*.media.dssott.com/*',
+    );
+  });
 });
 
 function env(mode: string): ConfigEnv {

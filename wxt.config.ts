@@ -17,6 +17,7 @@ export default defineConfig({
       'https://*.amazon.pv-cdn.net/*',
       'https://play.hbomax.com/*',
       'https://www.youtube.com/*',
+      'https://www.disneyplus.com/*',
     ],
     optional_host_permissions: [
       'https://*/*',

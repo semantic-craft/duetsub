@@ -4,7 +4,7 @@
 
 ### 两种字幕，同一画面；理解内容，也保留原文。
 
-DuetSub 是一款免费、开源的 Chrome 扩展，可在 Netflix、Prime Video、Max 和 YouTube 的播放画面中同步显示两种字幕。
+DuetSub 是一款免费、开源的 Chrome 扩展，可在 Netflix、Prime Video、Max、Disney+ 和 YouTube 的播放画面中同步显示两种字幕。
 
 有官方字幕时，DuetSub 默认永远优先使用官方字幕。你可以从当前节目真实提供的语言中任选两种，把原文和熟悉的语言放在一起，并直接在播放器内切换。AI 翻译完全可选：既可在英文或繁体中文字幕缺失时补位，也可由你主动要求以上方字幕为源，把下方字幕重译为英文、简体中文或繁体中文。
 
@@ -25,6 +25,7 @@ DuetSub 是一款免费、开源的 Chrome 扩展，可在 Netflix、Prime Video
 | Netflix | 支持 |
 | Prime Video | 支持 |
 | Max（`play.hbomax.com`） | 支持；必要时使用经过验证的英文 CC 对齐策略 |
+| Disney+ | 支持从当前节目完整的官方 HLS 字幕目录自由配对 |
 | YouTube | 支持创作者提供的官方字幕 |
 
 DuetSub 只使用当前登录账号本来就能访问的字幕轨，不会解锁地区限制字幕，也不会伪造平台没有提供的官方字幕。

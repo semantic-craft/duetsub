@@ -1,6 +1,6 @@
 # Verification ledger
 
-Last updated: July 31, 2026
+Last updated: August 1, 2026
 
 Gate labels are strict:
 
@@ -21,6 +21,41 @@ Run `npm run release:build`. It must pass:
 - archive checks excluding source maps, environment files, and private keys.
 
 The command output for the release commit is the authoritative count; this document does not freeze a stale test total.
+
+## Disney+ integration candidate
+
+- **PASS — native control placement:** on the logged-in Disney+ player, the
+  DuetSub toggle and language button were rendered inside the active native
+  controls shadow tree, as the leftmost items of the right-side function group
+  immediately before mute. They were not left at the viewport corner fallback.
+- **PASS — one subtitle renderer at a time:** with DuetSub enabled, the native
+  `timed-text-override-region` renderer was hidden and only the Japanese /
+  Traditional Chinese DuetSub board remained. Disabling DuetSub removed that
+  board and restored Disney's native Traditional Chinese renderer.
+- **PASS — whole-program timing across PTS resets:** the failure was reproduced
+  before the fix: Disney was around 22 minutes into the program while newly
+  requested subtitle segment PTS values had reset to only a few seconds. The
+  adapter now derives a continuous VOD presentation timeline from ordered
+  `EXTINF` durations and uses Disney's MAIN-world `playheadPositionMs` program
+  clock instead of the period-local `<video>.currentTime`.
+- **PASS — same-frame official subtitle comparison:** with playback explicitly
+  paused at `16:31.004`, Disney's native Traditional Chinese line and DuetSub's
+  active bottom cue were both `提醒我「複試」是什麼`; the active Japanese cue was
+  `コールバックって何だっけ？`. A second paused comparison at `21:57.365`
+  matched `祝你生日快樂`, paired with `お誕生日おめでとう`. These reads used a
+  sanitized, read-only timing probe that was removed before the final build.
+- **PASS — automated regression coverage:** tests cover program-clock message
+  validation and ownership, MAIN-world clock reading, adapter exposure,
+  controller clock preference, complete playlist acquisition, and a subtitle
+  PTS reset after an HLS discontinuity.
+- **PASS — live Disney+ machine translation and restoration:** the exact
+  candidate's `用 AI 重译下方字幕` action produced an official Japanese top cue
+  and an `MT`-marked Traditional Chinese bottom cue in the logged-in player
+  (for example, `もちろん どうして？` / `當然，為什麼這麼問？`). Selecting
+  `重新加载官方字幕` removed the MT marker and restored the official Japanese /
+  Traditional Chinese pair while playback remained paused.
+- **NOT RUN — Disney+ ads and episode replacement:** neither was counted as a
+  PASS or WAIVED gate in this run.
 
 ## Official Language Pair integration candidate
 

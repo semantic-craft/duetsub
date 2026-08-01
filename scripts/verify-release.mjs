@@ -49,6 +49,7 @@ assertExactStrings(
     'https://*.amazon.pv-cdn.net/*',
     'https://play.hbomax.com/*',
     'https://www.youtube.com/*',
+    'https://www.disneyplus.com/*',
   ],
   'required host permissions',
 );

@@ -52,7 +52,7 @@ The configured provider processes those requests under its own terms and privacy
 DuetSub does not collect or transmit:
 
 - video or audio content;
-- browsing history outside the four supported player sites;
+- browsing history outside the five supported player sites;
 - cookies, account passwords, payment information, or DRM data;
 - advertising identifiers or analytics events;
 - signed subtitle query parameters, session tokens, or complete proprietary playback payloads.
@@ -60,7 +60,7 @@ DuetSub does not collect or transmit:
 ## Permissions
 
 - `storage` stores extension settings, per-site toggle state, and the local translation cache.
-- Access to Netflix, Prime Video, Max, and YouTube is required to insert the player control, read subtitle responses already available to the signed-in viewer, and render the overlay.
+- Access to Netflix, Prime Video, Max, Disney+, and YouTube is required to insert the player control, read subtitle responses already available to the signed-in viewer, and render the overlay.
 - Access to arbitrary HTTPS origins is optional and is requested only for the exact translation host selected by the user.
 - Access to loopback HTTP origins is optional and is requested only for a user-selected local translation service.
 

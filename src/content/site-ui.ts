@@ -5,6 +5,7 @@ import {
 } from '../core/primevideo-dom';
 import { readNetflixWatchIdentity } from '../adapters/netflix-location';
 import { readMaxContentIdentity } from '../adapters/max-location';
+import { readDisneyContentIdentity } from '../adapters/disney-location';
 import { youtubeVideoIdFromUrl } from '../adapters/youtube-url';
 
 interface SiteUiBinding {
@@ -13,6 +14,7 @@ interface SiteUiBinding {
   readonly controlsSelector?: string;
   readonly toggleBeforeSelector?: string;
   readonly nativeCaptionSelector: string;
+  readonly suppressNativeVideoCues?: boolean;
 }
 
 const SITE_UI: Record<SiteId, SiteUiBinding> = {
@@ -44,6 +46,13 @@ const SITE_UI: Record<SiteId, SiteUiBinding> = {
     nativeCaptionSelector:
       '.ytp-caption-window-container, [data-duetsub-native-captions="youtube"]',
   },
+  disneyplus: {
+    videoSelector: 'disney-web-player video',
+    playerSelector: 'disney-web-player',
+    nativeCaptionSelector:
+      'timed-text-override-region, [data-duetsub-native-captions="disneyplus"]',
+    suppressNativeVideoCues: true,
+  },
 };
 
 export interface SiteUiTarget {
@@ -52,7 +61,9 @@ export interface SiteUiTarget {
   readonly controls?: HTMLElement;
   readonly toggleBefore?: HTMLElement;
   readonly nativeCaptionSelector: string;
+  readonly nativeCaptionRoot?: HTMLElement;
   readonly contentIdentity?: string;
+  readonly nativeCueVideos?: readonly HTMLVideoElement[];
 }
 
 export function findSiteUiTarget(siteId: SiteId): SiteUiTarget | undefined {
@@ -68,9 +79,18 @@ export function findSiteUiTarget(siteId: SiteId): SiteUiTarget | undefined {
   ) {
     return undefined;
   }
+  if (
+    siteId === 'disneyplus' &&
+    readDisneyContentIdentity(window.location.href) === undefined
+  ) {
+    return undefined;
+  }
   const binding = SITE_UI[siteId];
-  const video = document.querySelector<HTMLVideoElement>(binding.videoSelector);
-  if (video === null) return undefined;
+  const video = siteId === 'disneyplus'
+    ? findDisneyVideo(binding.videoSelector)
+    : document.querySelector<HTMLVideoElement>(binding.videoSelector) ??
+      undefined;
+  if (video === undefined) return undefined;
 
   const selectedPlayer = binding.playerSelector
     ? document.querySelector<HTMLElement>(binding.playerSelector)
@@ -83,7 +103,12 @@ export function findSiteUiTarget(siteId: SiteId): SiteUiTarget | undefined {
     siteId === 'primevideo' ? findPrimeVideoControls(player) : undefined;
   const netflixControls =
     siteId === 'netflix' ? findNetflixControls(player) : undefined;
+  const disneyUi = siteId === 'disneyplus'
+    ? document.querySelector<HTMLElement>('disney-web-player-ui') ?? undefined
+    : undefined;
+  const disneyControls = findDisneyControls(disneyUi);
   const controls =
+    disneyControls.controls ??
     netflixControls?.controls ??
     primeControls?.controls ??
     (binding.controlsSelector
@@ -91,6 +116,7 @@ export function findSiteUiTarget(siteId: SiteId): SiteUiTarget | undefined {
         undefined
       : undefined);
   const selectedToggleBefore =
+    disneyControls.toggleBefore ??
     netflixControls?.toggleBefore ??
     primeControls?.toggleBefore ??
     (binding.toggleBeforeSelector
@@ -107,6 +133,10 @@ export function findSiteUiTarget(siteId: SiteId): SiteUiTarget | undefined {
     controls,
     toggleBefore,
     nativeCaptionSelector: binding.nativeCaptionSelector,
+    nativeCaptionRoot: disneyUi,
+    nativeCueVideos: binding.suppressNativeVideoCues
+      ? [...document.querySelectorAll<HTMLVideoElement>(binding.videoSelector)]
+      : undefined,
     contentIdentity:
       siteId === 'primevideo'
         ? readPrimeContentIdentity(player)
@@ -114,8 +144,43 @@ export function findSiteUiTarget(siteId: SiteId): SiteUiTarget | undefined {
           ? readMaxContentIdentity(window.location.href)
           : siteId === 'netflix'
             ? readNetflixWatchIdentity(window.location.href)
+          : siteId === 'disneyplus'
+            ? readDisneyContentIdentity(window.location.href)
           : undefined,
   };
+}
+
+function findDisneyControls(disneyUi?: HTMLElement): {
+  readonly controls?: HTMLElement;
+  readonly toggleBefore?: HTMLElement;
+} {
+  const root = disneyUi
+    ?.querySelector<HTMLElement>('main-app-controls-overlay')
+    ?.shadowRoot;
+  if (root === undefined || root === null) return {};
+
+  const candidates = root.querySelectorAll<HTMLElement>(
+    '.experience-controls, ' +
+    '.experience-controls-narrow, ' +
+    '.experience-controls-extra-narrow',
+  );
+  for (const controls of candidates) {
+    if (!isVisible(controls)) continue;
+    const toggleBefore = [...controls.children].find(
+      (element) => element.localName === 'toggle-mute-button',
+    ) as HTMLElement | undefined;
+    if (toggleBefore !== undefined) return { controls, toggleBefore };
+  }
+  return {};
+}
+
+function findDisneyVideo(selector: string): HTMLVideoElement | undefined {
+  const candidates = [...document.querySelectorAll<HTMLVideoElement>(selector)];
+  return candidates.find((video) => {
+    const bounds = video.getBoundingClientRect();
+    return bounds.width > 0 && bounds.height > 0;
+  }) ?? candidates.find((video) => video.readyState > HTMLMediaElement.HAVE_NOTHING) ??
+    candidates[0];
 }
 
 function findNetflixControls(player: HTMLElement): {

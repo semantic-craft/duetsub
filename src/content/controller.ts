@@ -65,6 +65,7 @@ import {
 import { scheduleTranslationBatches } from '../mt/scheduling';
 import { NativeCaptionVisibility } from './native-captions';
 import { createOverlayView, type OverlayView } from './overlay-view';
+import { resolvePlaybackTimeMs } from './playback-clock';
 import { findSiteUiTarget, type SiteUiTarget } from './site-ui';
 import { createToggleView, type ToggleView } from './toggle-view';
 
@@ -196,7 +197,9 @@ class PlaybackController {
     this.#restoredPlayerPosition = ensurePositioned(this.#player);
     this.#nativeCaptions = new NativeCaptionVisibility(
       target.nativeCaptionSelector,
-      siteId === 'netflix' ? target.player : undefined,
+      target.nativeCaptionRoot ??
+        (siteId === 'netflix' ? target.player : undefined),
+      target.nativeCueVideos,
     );
     this.#overlayView = createOverlayView(this.#player);
     this.#toggleView = createToggleView(
@@ -247,6 +250,8 @@ class PlaybackController {
     ) {
       return false;
     }
+
+    this.#nativeCaptions.setCueVideos(target.nativeCueVideos ?? []);
 
     this.#overlayView.reanchor(target.player);
     this.#toggleView.reanchor(
@@ -400,7 +405,7 @@ class PlaybackController {
       requestFakeData(
         this.#siteId,
         this.#requestId,
-        this.video.currentTime * 1_000,
+        this.#playbackTimeMs(),
         {
           catalogOnly,
           preference: this.#languagePairPreference,
@@ -1175,7 +1180,6 @@ class PlaybackController {
   };
 
   #rebindVideo(video: HTMLVideoElement): void {
-    this.#nativeCaptions.restore();
     this.video.removeEventListener('seeking', this.#onSeeking);
     this.video.removeEventListener('seeked', this.#onSeeked);
     this.video.removeEventListener('loadeddata', this.#onVideoReady);
@@ -1227,7 +1231,7 @@ class PlaybackController {
     if (plan === undefined) return;
     const batches = scheduleTranslationBatches(
       plan.source,
-      this.video.currentTime * 1_000,
+      this.#playbackTimeMs(),
     );
     let hadFailure = false;
     for (const batch of batches) {
@@ -1334,7 +1338,8 @@ class PlaybackController {
     return (
       (this.#siteId !== 'primevideo' &&
         this.#siteId !== 'max' &&
-        this.#siteId !== 'netflix') ||
+        this.#siteId !== 'netflix' &&
+        this.#siteId !== 'disneyplus') ||
       this.#state.contentIdentity !== undefined
     );
   }
@@ -1353,11 +1358,12 @@ class PlaybackController {
 
   #render(): void {
     const active = isPlaybackOverlayActive(this.#state);
+    const playbackTimeMs = this.#playbackTimeMs();
     const synchronized = active
       ? synchronizeCues(
           this.#topCues,
           this.#bottomCues,
-          this.video.currentTime * 1_000,
+          playbackTimeMs,
           this.#synchronizerState,
         )
       : undefined;
@@ -1387,6 +1393,10 @@ class PlaybackController {
         bottom: this.#bottomLanguage,
       },
     );
+  }
+
+  #playbackTimeMs(): number {
+    return resolvePlaybackTimeMs(this.#adapter, this.video);
   }
 }
 
@@ -1595,5 +1605,7 @@ function siteLabel(siteId: SiteId): string {
       return 'Max';
     case 'youtube':
       return 'YouTube';
+    case 'disneyplus':
+      return 'Disney+';
   }
 }

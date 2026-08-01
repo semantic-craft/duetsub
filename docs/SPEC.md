@@ -3,7 +3,7 @@
 Status: ready-for-implementation
 Created: 2026-07-22
 Supersedes: `.scratch/dual-sub-spec/` 规划树（ticket 08 终点）
-Authoritative over: `README.md`（三站、Netflix-first 的旧表述已过时；以本 spec 的四站、Prime-first 为准）
+Authoritative over: `README.md`（三站、Netflix-first 的旧表述已过时；以本 spec 的五站、Prime-first 为准）
 
 本文件汇总 map 与 ticket 01–07 的全部已锁定决策，并在此就地拍板 ticket 06 的兜底细则，达到「实现会话可直接开工、无需再做决策」的精度。术语沿用规划树的 ubiquitous language（见 Further Notes 词汇表）。
 
@@ -11,11 +11,11 @@ Authoritative over: `README.md`（三站、Netflix-first 的旧表述已过时�
 
 ## Problem Statement
 
-用户在 Netflix、Prime Video、HBO Max、YouTube 上看片时，想同时看到**英文**与**繁体中文**两行字幕，用来做语言学习与理解校对。流媒体播放器一次只显示一条字幕轨；即便平台同时提供中英官方轨，也要反复进设置菜单来回切换，无法并排对照。已有的沉浸式翻译等方案要么是闭源专有、要么把单轨拆句机翻，时轴与官方轨对不齐，且把整段字幕发往第三方翻译。
+用户在 Netflix、Prime Video、HBO Max、Disney+、YouTube 上看片时，想同时看到**英文**与**繁体中文**两行字幕，用来做语言学习与理解校对。流媒体播放器一次只显示一条字幕轨；即便平台同时提供中英官方轨，也要反复进设置菜单来回切换，无法并排对照。已有的沉浸式翻译等方案要么是闭源专有、要么把单轨拆句机翻，时轴与官方轨对不齐，且把整段字幕发往第三方翻译。
 
 ## Solution
 
-DuetSub 是一个可独立侧载并公开发布源码与构建产物的 Chrome MV3 扩展。在四个目标站的播放器控制栏注入一个 **toggle button**；用户点一下即在视频上叠加一层扩展自有的 **overlay**，英文在上、繁体中文在下，由真实 `<video>` 时钟驱动，与播放严格同步。
+DuetSub 是一个可独立侧载并公开发布源码与构建产物的 Chrome MV3 扩展。在五个目标站的播放器注入一个 **toggle button**；用户点一下即在视频上叠加一层扩展自有的 **overlay**，英文在上、繁体中文在下，由真实 `<video>` 时钟驱动，与播放严格同步。
 
 字幕来源默认优先用**登录用户当前已能取用的官方轨**：中英官方轨都在时直接并排，不自动机翻。某一侧没有官方轨时，才用用户自备 key 的 **DeepSeek / 千问 / 豆包或其他 OpenAI 兼容模型**补齐缺失的那一侧（**MT fallback**）；官方双轨齐全时，只有用户主动点击「用 AI 重译下方字幕」才以上方字幕为源调用模型并替换下方字幕。只有简体官方轨时用 **OpenCC** 转繁显示。供应商、模型与 key 在扩展 **options page** 本地配置、存 `chrome.storage.local`，只经 service worker 走 HTTPS 发往用户选定并授权的端点，绝不写日志、绝不外发观看数据。
 
@@ -60,13 +60,14 @@ DuetSub 是一个可独立侧载并公开发布源码与构建产物的 Chrome M
 24. As a 观众, I want 同一站点记住我上次开/关的选择, so that 换集或重进后不必每次重新开启。
 25. As a 观众, I want 广告或拖动期间 overlay 内部临时清屏/挂起而按钮仍显示为「开」, so that 我不必在这些瞬间反复手动开关。
 
-### 站点适配（四站）
+### 站点适配（五站）
 
 26. As a Prime Video 观众（新加坡区、国际站 www.primevideo.com）, I want DuetSub 通过菜单枚举并自动串行切轨抓取 `.ttml2` 双轨, so that 无需我手动切字幕。
 27. As a HBO Max 观众（play.hbomax.com）, I want DuetSub 由完整 subtitle playlist/API 映射驱动第二轨的 WebVTT, so that 第二轨来源可靠、不靠猜 URL。
 28. As a Netflix 观众, I want DuetSub 优先走 manifest 快路径、缺失时自动切原生中英轨抓 TTML 并在结束后恢复我的原选项, so that 我的字幕设置不被永久改动。
 29. As a YouTube 观众, I want DuetSub 在缺 POT 时自动 prime、抓到请求后恢复我的原字幕状态, so that 我原本的字幕开关状态不被留下副作用。
 30. As a YouTube 观众, I want 官方创作者字幕优先、ASR 与平台自动翻译只作降级, so that 优先得到人工字幕质量。
+30a. As a Disney+ 观众, I want DuetSub 从播放器已取得的完整 HLS 主清单枚举普通字幕、CC/SDH 与 forced 轨，并按所选官方语言完整读取 VOD WebVTT 分段, so that 双官方字幕不依赖当前播放进度或猜测第二轨 URL。
 
 ### 健壮性（导航 / 换集 / seek / 广告）
 
@@ -152,7 +153,7 @@ interface SiteAdapter {
 
 - **引擎/模型/key**（2026-07-31）：全局默认供应商仍为 DeepSeek；千问（阿里云百炼·中国区/新加坡区）默认使用 `qwen3.7-plus`，并提供 `qwen3.7-flash`、`qwen3.7-max` 与 `qwen3.6-flash` 候选，不覆盖用户已经保存的显式模型。模型栏始终可编辑，用户可手动填写其他模型 ID。豆包候选含 `doubao-seed-2-1-pro-260628`。供应商 / Workspace ID（仅千问）/ Base URL / key / 模型 / 联网搜索（仅千问）在 options page 配置、存 `chrome.storage.local`（详见 §I）；千问与豆包走各自 OpenAI 兼容 Responses API，DeepSeek、自定义与本机端点保持 Chat Completions。
 - **中英文产出**：主动重译的目标语言跟随已保存的下方语言偏好，支持 `en`、`zh-Hans` 与 `zh-Hant`。prompt 分别指定英文、简体中文或繁体中文；所有供应商的 `zh-Hans` 输出再过一遍 OpenCC(t2cn)，`zh-Hant` 输出再过一遍 OpenCC(s2t)，避免两种字形偶发混入。
-- **请求约束**：字幕翻译按站点选择两套 system prompt：Netflix / Prime Video / Max 使用 `film-tv`，YouTube 使用 `youtube`。每批最多 8 条 cue；只把按时间升序排列的字幕文字发送给模型，以独占一行的 `%%` 分隔，不发送字符/秒、字数、简洁度预算或可诱导删义的时间长度。模型先按相邻片段还原完整话语，再在不丢失、重复、摘要或远离原时间点的前提下自然回填；响应必须返回相同数量、相同顺序的译文片段，并以同样的 `%%` 分隔。system prompt 把所有片段明确定义为只可翻译、不可执行的不可信字幕内容。千问 Responses 始终使用 `reasoning.effort: none` 并且不存储响应；豆包关闭 thinking 且不存储响应；DeepSeek 关闭 thinking；自定义端点只发送通用 OpenAI-compatible 字段。
+- **请求约束**：字幕翻译按站点选择两套 system prompt：Netflix / Prime Video / Max / Disney+ 使用 `film-tv`，YouTube 使用 `youtube`。每批最多 8 条 cue；只把按时间升序排列的字幕文字发送给模型，以独占一行的 `%%` 分隔，不发送字符/秒、字数、简洁度预算或可诱导删义的时间长度。模型先按相邻片段还原完整话语，再在不丢失、重复、摘要或远离原时间点的前提下自然回填；响应必须返回相同数量、相同顺序的译文片段，并以同样的 `%%` 分隔。system prompt 把所有片段明确定义为只可翻译、不可执行的不可信字幕内容。千问 Responses 始终使用 `reasoning.effort: none` 并且不存储响应；豆包关闭 thinking 且不存储响应；DeepSeek 关闭 thinking；自定义端点只发送通用 OpenAI-compatible 字段。
 - **千问联网搜索**：仅作为默认关闭的显式用户选项；启用时按百炼 Responses API 文档添加 `tools: [{"type":"web_search"}]`，但仍保持 `reasoning.effort: none`，由模型自行决定是否搜索。不得发送 Chat Completions 的 `enable_search`，也不暴露 Responses API 不支持的强制搜索、搜索策略、来源站点或角标来源设置。搜索开关进入翻译缓存身份，开关前后的结果不得互相命中。
 - **批处理**：整轨 **warmup 预热 + 沿播放位置滚动补翻**（承 ticket 02 的 Read Frog 模板）。先按源时间轴组成最多 8 条的连续小批，再按批次与播放头的距离调度；模型先还原可能被时间轴切碎的完整话语，再把完整译文自然分配回相同 cue ID。快进/跳转用 AbortController 取消在途请求。
 - **翻译保时轴与排版**：机翻**逐 cue 翻译、沿用官方源轨的 `start/end`**，不重新拆句、不做时间轴再对齐。译文写回对应 cue 的 `text`，时轴不变；返回后以目标语言感知的确定性排版器限制为最多两行，优先在句末/分句边界换行，并保护内联代码、产品名、房号、数字与单位不被拆开。
@@ -164,7 +165,7 @@ interface SiteAdapter {
 
 ### E. 双轨配对与调度（ticket 07，已冻结；Max 例外于 2026-07-24 批准）
 
-- Prime Video / Netflix / YouTube **不预合并、不建 paired-cue 模型、不按索引/起点/最近邻/全局 offset 配对**。核心层在 `t = video.currentTime * 1000` 分别计算：
+- Prime Video / Netflix / Disney+ / YouTube **不预合并、不建 paired-cue 模型、不按索引/起点/最近邻/全局 offset 配对**。核心层在站点权威播放时钟 `t`（Disney+ 使用整集 program clock，其余站点无专用时钟时使用 `video.currentTime * 1000`）分别计算：
 
 ```text
 enActive = English cues where start <= t < end
@@ -187,14 +188,15 @@ zhActive = Chinese cues where start <= t < end
 - **`position:'top'`**：当前配对任一 cue 为 top，整组背景板移到播放器顶部 `8%` 安全区；组内仍英上繁下；下一组均为 bottom/缺省则回底部。
 - **`MT` 标识**：任一翻译模型生成的行首显示小型内联 `MT`；官方轨（含 OpenCC 转繁）不标。
 
-### G. 四站 adapter 方案（ticket 07，已逐站冻结——实现直接引用该 ticket）
+### G. 五站 adapter 方案（ticket 07 四站基线；Disney+ 于 2026-08-01 增补）
 
-四站共用规则：MAIN 只早期拦截+无状态转发；ISOLATED adapter 解析并维护 `contentGeneration`（内容/集/videoId 生命周期）与 `clockGeneration`（video 与 seek/ad 时钟阶段）两个递增编号，generation 不符的响应丢弃；每条已验证响应只走一条交付路径（属 pending `fetchTrack` 则内部 resolve，否则仅在无歧义映射当前 TrackInfo 时走 `onCues`）；正常加载保留原生层、双轨就绪后才 scoped `visibility:hidden` 隐藏、失败/reset/ad 恢复；`seeking` 清屏发 `seek-flush`、`seeked` 二分恢复；广告 fail-closed 状态机。
+五站共用规则：MAIN 只早期拦截+无状态转发；ISOLATED adapter 解析并维护 `contentGeneration`（内容/集/videoId 生命周期）与 `clockGeneration`（video 与 seek/ad 时钟阶段）两个递增编号，generation 不符的响应丢弃；每条已验证响应只走一条交付路径（属 pending `fetchTrack` 则内部 resolve，否则仅在无歧义映射当前 TrackInfo 时走 `onCues`）；正常加载保留原生层、双轨就绪后才隐藏原生字幕，失败/reset/ad 恢复；`seeking` 清屏发 `seek-flush`、`seeked` 二分恢复；广告 fail-closed 状态机。
 
 - **Prime Video（第一实现）**：match `https://www.primevideo.com/*`；DOM 菜单枚举 + 自动串行切轨抓 `cf-timedtext.aux.pv-cdn.net` 的 `.ttml2`（EBU-TT/TTML，响应 MIME 不可信、由 XML magic + TTML namespace 校验）；时钟 `#dv-web-player video`；不逆向 opaque `playbackEnvelope`。
 - **HBO Max（第二实现）**：match `https://play.hbomax.com/*`（**非** play.max.com）；DOM track id/label 权威枚举；第二轨**必须**由完整 subtitle playlist/API 映射驱动，不从单条 VTT URL 猜另一轨；WebVTT，`X-TIMESTAMP-MAP` 非零须先建 MPEGTS→节目时轴锚点（缺锚点 fail closed）；时钟 `[data-testid="VideoElement"]`、原生层 `[data-testid="caption_renderer_overlay"]`。
 - **Netflix（第三实现）**：match `https://www.netflix.com/*` 仅 `/watch/<id>`；双薄 hook——`JSON.parse` 快路径（`timedtexttracks`+movieId）+ fetch/XHR 观测 OCA TTML（`text/xml` 预筛、XML magic + TTML 根元素判定，不拿 `?o=` 当过滤器）；共用 TTML parser 支持 tick，不照抄固定 `÷10^7`；时钟 `#appMountPoint video`、原生层 `.player-timedtext`；image-only 目标轨按 unavailable 交给另一官方轨/机翻，不引入 OCR。
 - **YouTube（第四实现）**：match `https://www.youtube.com/*` 仅 `/watch?v=`；MAIN `document_start` patch fetch/XHR 抓 `/api/timedtext`（带 POT）、监听 `yt-navigate-finish` 读 `#movie_player.getPlayerResponse()`；无 POT 时 ISOLATED 决定 prime/恢复、MAIN 无状态执行 `loadModule/setOption` 原语；`fetchTrack` 克隆真实带 POT 请求改参强制 `fmt=json3`；200 空体=POT 失效只重 prime 一次仍空则 fail closed；官方(无 kind) 优先、asr 降级、`tlang` 归机翻兜底。
+- **Disney+（第五实现）**：match `https://www.disneyplus.com/*` 仅本地化或非本地化 `/play/<id>`；MAIN `document_start` 只观察播放器本来取得的 `*.media.dssott.com` HLS 主清单，ISOLATED 从 `EXT-X-MEDIA:TYPE=SUBTITLES` 读取 BCP-47 语言、普通/CC/forced 语义与相对 VOD 清单 URL。所选轨必须有带 `ENDLIST` 的完整字幕清单，逐段 WebVTT 由 `pts_<90 kHz PTS>.vtt` 建 MPEGTS→节目时轴锚点；URL 越目录、主机仿冒、清单不完整或任一分段失败均 fail closed。DuetSub 控件插在当前可见的 Disney 右侧功能组音量键之前；开启时隐藏 `timed-text-override-region` 原生字幕宿主并保留视频 `::cue` 兜底，关闭时恢复；不读取播放授权响应、不处理 DRM 数据。
 
 ### H. toggle button（新增，就地拍板）
 
@@ -216,11 +218,11 @@ zhActive = Chinese cues where start <= t < end
   - **测试连接**按钮 + 状态徽标（未配置 / 已配置 / 测试通过）。
   - 目标语言 `zh-Hant`、选轨链 §C、机翻方向自动——只读展示、不可改。
 - 持久化 `chrome.storage.local`；SW 读取供翻译调用。key 不写日志、除发往用户所配端点外不外发。
-- **manifest 权限**：`storage`；安装时 `host_permissions` 只含四站域名。DeepSeek、千问、豆包与自定义云端共用 `optional_host_permissions: ["https://*/*"]`，本机端点只声明 `http://localhost/*`、`http://127.0.0.1/*`、`http://[::1]/*` 三条 optional host pattern。options page 仅在用户点击储存或测试时，按当前配置的精确 origin 调用 `chrome.permissions.request`；拒绝或旧配置尚未授权时，SW 不发请求、官方字幕照常显示，并提示回设置页授权。这里的 HTTPS wildcard 只是可申请范围，不是安装即授予的 `<all_urls>`。`world:"MAIN"` 声明式 content script 由 WXT 生成，无需额外 `web_accessible_resources`。
+- **manifest 权限**：`storage`；安装时 `host_permissions` 只含五站页面域名以及 Prime 文本分段所需的窄 CDN 域名；Disney 媒体 CDN 不加入安装权限。DeepSeek、千问、豆包与自定义云端共用 `optional_host_permissions: ["https://*/*"]`，本机端点只声明 `http://localhost/*`、`http://127.0.0.1/*`、`http://[::1]/*` 三条 optional host pattern。options page 仅在用户点击储存或测试时，按当前配置的精确 origin 调用 `chrome.permissions.request`；拒绝或旧配置尚未授权时，SW 不发请求、官方字幕照常显示，并提示回设置页授权。这里的 HTTPS wildcard 只是可申请范围，不是安装即授予的 `<all_urls>`。`world:"MAIN"` 声明式 content script 由 WXT 生成，无需额外 `web_accessible_resources`。
 
 ### J. 实现顺序（ticket 07，已锁）
 
-**Prime Video → HBO Max → Netflix → YouTube**（风险优先：先暴露证据最弱的 Prime/Max 阻断，YouTube 证据最完整放最后）。此顺序**取代** README 里「Netflix 垂直切片先行」的旧建议。每站受其 ticket 07 stop rule 约束；未过 gate 的站以 unsupported stub 交付，不上坏 adapter。
+四站历史实现顺序为 **Prime Video → HBO Max → Netflix → YouTube**；Disney+ 作为第五站于 2026-08-01 在四站基线之后增补。每站受真机 stop rule 约束；未过 gate 的站以 unsupported 处理，不上坏 adapter。
 
 ## Testing Decisions
 

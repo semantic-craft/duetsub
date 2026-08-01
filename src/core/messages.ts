@@ -100,6 +100,26 @@ export interface MaxSubtitleResponseMessage
   readonly raw: string;
 }
 
+export interface DisneyManifestMessage
+  extends UncorrelatedMessageEnvelope {
+  readonly direction: 'main-to-isolated';
+  readonly type: 'disney-manifest';
+  readonly siteId: 'disneyplus';
+  readonly responseId: string;
+  readonly contentIdentity: string;
+  readonly url: string;
+  readonly raw: string;
+}
+
+export interface DisneyTimelineMessage
+  extends UncorrelatedMessageEnvelope {
+  readonly direction: 'main-to-isolated';
+  readonly type: 'disney-timeline';
+  readonly siteId: 'disneyplus';
+  readonly contentIdentity: string;
+  readonly timeMs: number;
+}
+
 export interface NetflixManifestMessage extends UncorrelatedMessageEnvelope {
   readonly direction: 'main-to-isolated';
   readonly type: 'netflix-manifest';
@@ -213,6 +233,8 @@ export type MainToIsolatedMessage =
   | PrimeTtmlResponseMessage
   | PrimeTimelineOffsetMessage
   | MaxSubtitleResponseMessage
+  | DisneyManifestMessage
+  | DisneyTimelineMessage
   | NetflixManifestMessage
   | NetflixTrackRequestReadyMessage
   | NetflixTtmlResponseMessage
@@ -358,6 +380,40 @@ export function maxSubtitleResponseMessage(
     contentIdentity,
     url,
     raw,
+  };
+}
+
+export function disneyManifestMessage(
+  responseId: string,
+  url: string,
+  raw: string,
+  contentIdentity: string,
+): DisneyManifestMessage {
+  return {
+    channel: CHANNEL,
+    version: VERSION,
+    direction: 'main-to-isolated',
+    type: 'disney-manifest',
+    siteId: 'disneyplus',
+    responseId,
+    contentIdentity,
+    url,
+    raw,
+  };
+}
+
+export function disneyTimelineMessage(
+  timeMs: number,
+  contentIdentity: string,
+): DisneyTimelineMessage {
+  return {
+    channel: CHANNEL,
+    version: VERSION,
+    direction: 'main-to-isolated',
+    type: 'disney-timeline',
+    siteId: 'disneyplus',
+    contentIdentity,
+    timeMs,
   };
 }
 
@@ -555,6 +611,34 @@ export function isDuetSubMessage(value: unknown): value is DuetSubMessage {
       typeof candidate.raw === 'string' &&
       candidate.raw.length > 0 &&
       candidate.raw.length <= 5_000_000
+    );
+  }
+  if (candidate.type === 'disney-manifest') {
+    return (
+      candidate.direction === 'main-to-isolated' &&
+      candidate.siteId === 'disneyplus' &&
+      typeof candidate.responseId === 'string' &&
+      candidate.responseId.length > 0 &&
+      candidate.responseId.length <= 128 &&
+      isDisneyContentIdentity(candidate.contentIdentity) &&
+      typeof candidate.url === 'string' &&
+      isDisneyManifestUrl(candidate.url) &&
+      typeof candidate.raw === 'string' &&
+      candidate.raw.length > 0 &&
+      candidate.raw.length <= 2_000_000 &&
+      candidate.raw.replace(/^\uFEFF/, '').startsWith('#EXTM3U') &&
+      candidate.raw.includes('#EXT-X-MEDIA:TYPE=SUBTITLES')
+    );
+  }
+  if (candidate.type === 'disney-timeline') {
+    return (
+      candidate.direction === 'main-to-isolated' &&
+      candidate.siteId === 'disneyplus' &&
+      isDisneyContentIdentity(candidate.contentIdentity) &&
+      typeof candidate.timeMs === 'number' &&
+      Number.isFinite(candidate.timeMs) &&
+      candidate.timeMs >= 0 &&
+      candidate.timeMs <= 86_400_000
     );
   }
   if (candidate.type === 'netflix-manifest') {
@@ -771,8 +855,31 @@ function isSiteId(value: unknown): value is SiteId {
     value === 'netflix' ||
     value === 'primevideo' ||
     value === 'max' ||
-    value === 'youtube'
+    value === 'youtube' ||
+    value === 'disneyplus'
   );
+}
+
+export function isDisneyManifestUrl(value: string): boolean {
+  if (value.length === 0 || value.length > 8_192) return false;
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === 'https:' &&
+      url.username === '' &&
+      url.password === '' &&
+      (url.hostname === 'media.dssott.com' ||
+        url.hostname.endsWith('.media.dssott.com')) &&
+      url.pathname.endsWith('.m3u8')
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isDisneyContentIdentity(value: unknown): value is string {
+  return typeof value === 'string' &&
+    /^\/play\/[A-Za-z0-9-]{36}$/.test(value);
 }
 
 function isTimelineOffsetMs(value: unknown): value is number {
