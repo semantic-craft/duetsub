@@ -271,9 +271,14 @@ DuetSub does not execute remotely hosted code. Translation services return subti
 
 https://github.com/semantic-craft/duetsub/blob/main/PRIVACY.md
 
+## Store URLs
+
+- Homepage: https://github.com/semantic-craft/duetsub
+- Support: https://github.com/semantic-craft/duetsub/issues
+
 ## Category
 
-Productivity
+Tools
 
 ## Languages
 

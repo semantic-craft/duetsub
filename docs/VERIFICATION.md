@@ -47,10 +47,16 @@ The command output for the release commit is the authoritative count; this docum
 - **PASS — GitHub Release:** tag `v0.2.0` triggered the release workflow on
   commit `679dccf`; the repeated build passed and the GitHub Release was
   created with the verified standalone archive and bilingual release notes.
-- **PENDING — Chrome Web Store:** the previous `0.1.7` review was cancelled so
-  it can be replaced without creating a second item. The published version
-  remains unchanged; the verified `0.2.0` Store archive has not yet been
-  uploaded or submitted for review.
+- **PENDING — Chrome Web Store review:** the verified `0.2.0` Store archive was
+  uploaded to the existing item `gacjhmmjoinbahljhhnbimhdmpafhdkg`; the Package
+  page reports draft version `0.2.0`. English, Simplified Chinese, and
+  Traditional Chinese descriptions were updated with the Disney+ and Qwen
+  changes, the project homepage links to the open-source GitHub repository, the
+  support URL links to GitHub Issues, and the single-purpose, storage, and host
+  permission explanations were brought up to date. The dashboard accepted the
+  submission on August 1, 2026 and now reports **Pending review**, with automatic
+  publication selected after approval. The currently published version remains
+  `0.1.5` until the review passes.
 
 ## Disney+ integration candidate
 
