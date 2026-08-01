@@ -6,13 +6,13 @@
 
 DuetSub is a free and open-source Chrome extension that places two synchronized subtitle languages together on Netflix, Prime Video, Max, and YouTube.
 
-It uses official subtitles whenever they are available. Choose any two official languages verified for the current title, keep the original beside the language you understand, and switch without leaving the player. AI translation is optional and is used only as a fallback for a missing English or Traditional Chinese line—not as a replacement for an available official track.
+It uses official subtitles by default whenever they are available. Choose any two official languages verified for the current title, keep the original beside the language you understand, and switch without leaving the player. AI translation remains optional: it can fill a missing English or Traditional Chinese line, or retranslate the bottom line into English, Simplified Chinese, or Traditional Chinese from the current top subtitles only when you explicitly request it.
 
 [Download the latest release](https://github.com/semantic-craft/duetsub/releases/latest) · [Privacy](PRIVACY.md) · [Verification](docs/VERIFICATION.md)
 
 ## Why DuetSub
 
-- **Official subtitles first.** The player menu lists only official languages verified for the current title. Manual Official Pairs never invoke machine translation.
+- **Official subtitles first.** The player menu lists only official languages verified for the current title. Selecting a pair does not invoke machine translation; the separate AI action is always explicit.
 - **Any available official pair.** Put English above Chinese, Japanese above Korean, or any other two official languages the title actually provides.
 - **Built for real playback.** DuetSub follows the video clock, handles seeking and in-player title changes, and restores the native subtitle layer when disabled.
 - **Your endpoint, your choice.** Optional fallback supports DeepSeek, Qwen through Alibaba Cloud Model Studio, Doubao through Volcengine Ark, another OpenAI-compatible HTTPS endpoint, or a local Ollama/LM Studio service.
@@ -36,22 +36,22 @@ The dedicated **Language** button opens a menu where you can:
 - choose the top and bottom official subtitle languages;
 - swap the two lines;
 - reload official subtitle tracks if a player gets stuck;
-- retry optional translation separately;
+- use AI to retranslate the bottom subtitles from the current top subtitles;
 - open settings without leaving the video.
 
 The menu is generated from the current title instead of a static all-language catalog. If DuetSub cannot verify ownership or timing, it fails closed and leaves the native subtitles intact.
 
-## Optional AI fallback
+## Optional AI translation
 
-Two verified official tracks never contact a translation service.
+Two verified official tracks do not contact a translation service by default. DuetSub contacts your configured endpoint only when a fallback is required or you explicitly choose **Use AI to retranslate bottom subtitles**. The manual action sends the current top subtitle text, translates it into the saved bottom-language preference when that preference is English, Simplified Chinese, or Traditional Chinese, and replaces only the bottom line; **Reload official subtitles** restores the official pair.
 
-When the standard English / Traditional Chinese fallback needs translation, DuetSub sends only the required subtitle text to the endpoint you explicitly configure and authorize. Qwen uses the Responses API with a Workspace ID supplied by the user; new Qwen configurations default to the live-tested `qwen3.7-flash`, while existing saved model choices are preserved. Optional Qwen web search is off by default. API keys, preferences, and the local translation cache stay in `chrome.storage.local`.
+When the standard English / Traditional Chinese fallback needs translation, DuetSub sends only the required subtitle text to the endpoint you explicitly configure and authorize. Qwen uses the Responses API with a Workspace ID supplied by the user; new Qwen configurations default to `qwen3.7-plus`, while existing saved model choices are preserved. Optional Qwen web search is off by default. API keys, preferences, and the local translation cache stay in `chrome.storage.local`.
 
 The settings interface is available in English, Simplified Chinese, and Traditional Chinese.
 
 ## Install from GitHub
 
-1. Download `duetsub-0.1.6-chrome.zip` from the [latest release](https://github.com/semantic-craft/duetsub/releases/latest).
+1. Download `duetsub-0.1.8-chrome.zip` from the [latest release](https://github.com/semantic-craft/duetsub/releases/latest).
 2. Unzip it to a permanent folder.
 3. Open `chrome://extensions`, enable **Developer mode**, and choose **Load unpacked**.
 4. Select the unzipped folder.

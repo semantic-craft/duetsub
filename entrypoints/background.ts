@@ -5,7 +5,10 @@ import {
   type TranslationConfig,
 } from '../src/mt/config';
 import { testTranslationConnection } from '../src/mt/connection';
-import { convertCuesToTraditional } from '../src/mt/opencc';
+import {
+  convertCuesToSimplified,
+  convertCuesToTraditional,
+} from '../src/mt/opencc';
 import { hasEndpointPermission } from '../src/mt/permissions';
 import { isMtRequest } from '../src/mt/protocol';
 import { translateCueBatch } from '../src/mt/translator';
@@ -102,8 +105,12 @@ export default defineBackground(() => {
       requests.delete(request.requestId);
       sendResponse({
         ...result,
-        cues: result.status === 'ok' && request.targetLanguage === 'zh-Hant'
+        cues: result.status !== 'ok'
+          ? result.cues
+          : request.targetLanguage === 'zh-Hant'
           ? convertCuesToTraditional(result.cues)
+          : request.targetLanguage === 'zh-Hans'
+          ? convertCuesToSimplified(result.cues)
           : result.cues,
         generation: request.generation,
       });

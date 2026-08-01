@@ -1,4 +1,4 @@
-import type { Cue } from '../core/contracts';
+import type { Cue, TranslationTargetLanguage } from '../core/contracts';
 import type { PlaybackGeneration } from '../core/lifecycle';
 import type { TranslationConfig } from './config';
 import type { SubtitlePromptProfile } from './prompt';
@@ -12,7 +12,7 @@ export interface TranslateRequest {
   readonly contentId: string;
   readonly trackId: string;
   readonly promptProfile: SubtitlePromptProfile;
-  readonly targetLanguage: 'en' | 'zh-Hant';
+  readonly targetLanguage: TranslationTargetLanguage;
   readonly cues: readonly Cue[];
   readonly skipCache?: boolean;
 }

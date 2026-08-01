@@ -84,6 +84,8 @@ export type OfficialPairResolution =
       readonly kind: 'unavailable';
       readonly catalog: readonly OfficialLanguageOption[];
       readonly reason: OfficialPairUnavailableReason;
+      readonly top: TrackInfo | undefined;
+      readonly bottom: TrackInfo | undefined;
     };
 
 export type OfficialPairCueResolution =
@@ -128,7 +130,13 @@ export function resolveOfficialPair(input: {
     topLanguage !== undefined &&
     topLanguage === bottomLanguage
   ) {
-    return { kind: 'unavailable', catalog, reason: 'same-language' };
+    return {
+      kind: 'unavailable',
+      catalog,
+      reason: 'same-language',
+      top: undefined,
+      bottom: undefined,
+    };
   }
   const topSelection = selectLanguageTrack(
     tracks,
@@ -144,7 +152,13 @@ export function resolveOfficialPair(input: {
     topSelection.kind === 'ambiguous' ||
     bottomSelection.kind === 'ambiguous'
   ) {
-    return { kind: 'unavailable', catalog, reason: 'ambiguous-language' };
+    return {
+      kind: 'unavailable',
+      catalog,
+      reason: 'ambiguous-language',
+      top: undefined,
+      bottom: undefined,
+    };
   }
   const top = topSelection.kind === 'selected'
     ? topSelection.track
@@ -159,6 +173,8 @@ export function resolveOfficialPair(input: {
   return {
     kind: 'unavailable',
     catalog,
+    top,
+    bottom,
     reason: top === undefined
       ? bottom === undefined
         ? 'both-missing'

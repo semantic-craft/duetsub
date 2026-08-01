@@ -8,6 +8,8 @@ export interface Cue {
   position?: 'top' | 'bottom';
 }
 
+export type TranslationTargetLanguage = 'en' | 'zh-Hans' | 'zh-Hant';
+
 export type OfficialTrackKind = 'subtitles' | 'closed-captions';
 
 export interface TrackInfo {

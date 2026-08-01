@@ -13,7 +13,7 @@ export interface ToggleViewCallbacks {
     preference: LanguagePairPreference,
   ) => void;
   readonly onReloadOfficialTracks: () => void;
-  readonly onRetranslate: () => void;
+  readonly onAiRetranslateBottom: () => void;
   readonly onOpenSettings: () => void;
 }
 
@@ -111,7 +111,7 @@ export function createToggleView(
 
   const swap = menuButton('交換上下');
   const reloadOfficial = menuButton('重新載入官方字幕');
-  const retranslate = menuButton('重新翻譯');
+  const retranslate = menuButton('用 AI 重譯下方字幕');
   const settings = menuButton('打開設定');
   popover.append(
     status,
@@ -221,7 +221,7 @@ export function createToggleView(
     hidePopover();
   });
   retranslate.addEventListener('click', () => {
-    callbacks.onRetranslate();
+    callbacks.onAiRetranslateBottom();
     hidePopover();
   });
   settings.addEventListener('click', () => {

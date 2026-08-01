@@ -1016,6 +1016,7 @@ async function waitForNetflixPlayerReady(): Promise<void> {
 }
 
 async function waitForMenuButton(): Promise<HTMLElement> {
+  revealNetflixControls();
   await waitUntil(
     () => document.querySelector(MENU_BUTTON_SELECTOR) !== null,
     DOM_TIMEOUT_MS,

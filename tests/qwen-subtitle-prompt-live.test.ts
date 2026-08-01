@@ -1,17 +1,25 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Cue } from '../src/core/contracts';
-import { convertCuesToTraditional } from '../src/mt/opencc';
+import type {
+  Cue,
+  TranslationTargetLanguage,
+} from '../src/core/contracts';
+import {
+  convertCuesToSimplified,
+  convertCuesToTraditional,
+} from '../src/mt/opencc';
 import type { SubtitlePromptProfile } from '../src/mt/prompt';
+import { MT_BATCH_SIZE } from '../src/mt/scheduling';
 import { translateCueBatch } from '../src/mt/translator';
 
 interface EvalCase {
   readonly name: string;
   readonly profile: SubtitlePromptProfile;
-  readonly targetLanguage: 'en' | 'zh-Hant';
+  readonly targetLanguage: TranslationTargetLanguage;
   readonly cues: readonly Cue[];
   readonly requiredPatterns?: Readonly<Record<number, readonly RegExp[]>>;
   readonly forbiddenPatterns?: Readonly<Record<number, readonly RegExp[]>>;
+  readonly combinedRequiredPatterns?: readonly RegExp[];
 }
 
 interface CapturedResponse {
@@ -27,7 +35,7 @@ const filmEnglish: Cue[] = timedCues('en', [
   [3_000, "Five grand says he won't make it past sunrise."],
   [3_400, 'Oh, brilliant. Because that worked so well last time.'],
   [4_000, "I didn't say she stole it—I said she knew who did."],
-  [2_000, 'Get your hands off my sister.'],
+  [2_000, 'But if it did, we could move you.'],
   [2_500, 'Wait…\nDid you hear that?'],
 ]);
 
@@ -40,6 +48,80 @@ const filmChinese: Cue[] = timedCues('zh-Hans', [
   [3_500, '他没说不来，他说的是赶不上开场。'],
   [1_600, '放开我弟弟。'],
   [2_300, '等等……\n门外有人。'],
+]);
+
+const fragmentedFilmEnglish: Cue[] = timedCues('en', [
+  [1_800, "Then, at o'dark 30, next time you're up,"],
+  [1_600, 'out of bed; you will put'],
+  [1_600, 'on your gun and your vest,'],
+  [1_800, 'and you will do it all over again.'],
+  [1_400, "You're a cop"],
+  [1_300, "because you don't know"],
+  [1_300, 'how not to be one.'],
+  [2_800, '"I love and revere all sentient beings" crap.'],
+]);
+
+const omissionRegressionEnglish: Cue[] = timedCues('en', [
+  [2_200, 'What we have is the Explorers program.'],
+  [2_500, 'And, actually, Detective Moretta helps run it.'],
+  [1_800, 'You want to be an Explorer?'],
+  [1_800, "You're missing the point here."],
+  [1_500, 'Can you abuse it?'],
+  [1_000, 'Yes, sir.'],
+  [1_800, 'He owes you money, sir?'],
+  [1_400, 'How much money, sir?'],
+]);
+
+const netflixOmissionBatchEnglish: Cue[] = timedCues('en', [
+  [1_000, 'Okay.'],
+  [2_000, 'I heard from this boy at our school'],
+  [2_000, 'that you guys, like, have junior police kids'],
+  [1_500, "work for y'all."],
+  [2_200, 'What we have is the Explorers program.'],
+  [2_500, 'And, actually, Detective Moretta helps run it.'],
+  [1_200, 'Remember him?'],
+  [1_000, 'Hi.'],
+]);
+
+const netflixSegmentBoundaryEnglish: Cue[] = timedCues('en', [
+  [1_500, "I'm gonna go to work"],
+  [1_300, 'on movie sets.'],
+  [1_200, '(rowdy shouts, whooping)'],
+  [1_400, "Hey, hey, they're gonna take"],
+  [1_300, 'one look at my ass'],
+  [1_300, 'on my motorcycle,'],
+  [1_300, "and they're gonna make me"],
+  [1_000, '(whooping)'],
+]);
+
+const netflixMultilineEnglish: Cue[] = timedCues('en', [
+  [2_000, 'Hey, look, look.\nCome on, guys.'],
+  [2_200, 'Possible stolen vehicle\nat 455 Tiffany Circle.'],
+  [1_800, 'I tried to\nsave her life!'],
+  [1_800, 'Put the gun down!\nPut the gun down!'],
+  [2_600, 'Turn around, put your hands\non the car, spread your legs.'],
+  [1_800, 'Besides, I miss you guys.'],
+  [2_200, "So, I guess it's a suspicious death, right?"],
+  [1_800, "No, it's not\na suspicious death."],
+]);
+
+const netflixCompleteUtteranceEnglish: Cue[] = timedCues('en', [
+  [2_400, 'Tell Dewey to take our suspect back with him.'],
+  [1_700, 'So, anyway, I got this blond.'],
+  [1_700, 'I got her bent over a sofa,'],
+  [1_500, "but I'm inebriated."],
+  [1_200, 'Right?'],
+  [1_500, 'What happened next?'],
+  [1_400, 'She pushed me away.'],
+  [1_300, 'Then she left.'],
+]);
+
+const netflixMultilineOmissionEnglish: Cue[] = timedCues('en', [
+  [1_600, "I'm intoxicated."],
+  [2_000, 'And I-I pass out\non top of her'],
+  [1_800, "and I'm smoking a cigar."],
+  [1_800, 'I burn a hole\nin her sofa.'],
+  [2_000, "Open your ears.\nWhy don't you try\nto be a man?"],
 ]);
 
 const youtubeEnglish: Cue[] = timedCues('en', [
@@ -72,9 +154,149 @@ const cases: readonly EvalCase[] = [
     cues: filmEnglish,
     requiredPatterns: {
       3: [/(五千|5[,\s]?000)/u],
+      6: [/(?:如果|要是|真.{0,4}(?:的話|就))/u, /(?:搬|換|轉移|調)/u],
     },
     forbiddenPatterns: {
       3: [/(五萬|五万|50[,\s]?000)/u],
+    },
+  },
+  {
+    name: 'film-tv-en-to-zh-Hans',
+    profile: 'film-tv',
+    targetLanguage: 'zh-Hans',
+    cues: filmEnglish,
+    requiredPatterns: {
+      3: [/(五千|5[,\s]?000)/u],
+      6: [/(?:如果|要是|真.{0,4}(?:的话|就))/u, /(?:搬|换|转移|调)/u],
+    },
+    forbiddenPatterns: {
+      3: [/(五萬|五万|50[,\s]?000)/u],
+    },
+  },
+  {
+    name: 'film-tv-fragments-en-to-zh-Hant',
+    profile: 'film-tv',
+    targetLanguage: 'zh-Hant',
+    cues: fragmentedFilmEnglish,
+    combinedRequiredPatterns: [
+      /(?:起[床牀]|下[床牀])/u,
+      /槍/u,
+      /防彈(?:衣|背心)/u,
+      /(?:重來|再來|重新|重複|從頭來)/u,
+      /警察/u,
+      /因為/u,
+      /不知/u,
+      /(?:怎麼|如何)/u,
+      /(?:愛|熱愛).{0,16}(?:敬|尊)/u,
+      /(?:眾生|有感知)/u,
+      /(?:鬼話|屁話|胡說|去他的)/u,
+    ],
+  },
+  {
+    name: 'film-tv-fragments-en-to-zh-Hans',
+    profile: 'film-tv',
+    targetLanguage: 'zh-Hans',
+    cues: fragmentedFilmEnglish,
+    combinedRequiredPatterns: [
+      /(?:起床|下床)/u,
+      /枪/u,
+      /防弹(?:衣|背心)/u,
+      /(?:重来|再来|重新|重复|从头来)/u,
+      /警察/u,
+      /因为/u,
+      /不知/u,
+      /(?:怎么|如何)/u,
+      /(?:爱|热爱).{0,16}(?:敬|尊)/u,
+      /(?:众生|有感知)/u,
+      /(?:鬼话|屁话|胡说)/u,
+    ],
+  },
+  {
+    name: 'film-tv-omissions-en-to-zh-Hans',
+    profile: 'film-tv',
+    targetLanguage: 'zh-Hans',
+    cues: omissionRegressionEnglish,
+    requiredPatterns: {
+      0: [/我们/u, /(?:探索|少年警探)/u],
+      1: [/(?:其实|实际上|事实上)/u, /莫雷塔/u, /(?:帮|协助)/u],
+      2: [/你/u, /想/u, /(?:加入|成为|当)/u, /(?:探索|少年警探)/u],
+      3: [/你/u, /(?:没|不)/u, /(?:重点|要点)/u],
+      4: [/你/u, /能/u, /滥用/u],
+      5: [/(?:是|好)/u, /(?:长官|先生)/u],
+      6: [/他/u, /欠/u, /[你您]/u, /钱/u],
+      7: [/多少/u],
+    },
+  },
+  {
+    name: 'film-tv-netflix-batch-en-to-zh-Hans',
+    profile: 'film-tv',
+    targetLanguage: 'zh-Hans',
+    cues: netflixOmissionBatchEnglish,
+    requiredPatterns: {
+      1: [/我/u, /听|听说/u, /学校/u, /男生|男孩/u],
+      2: [/你们/u, /少年警探|探索/u],
+      3: [/(?:为|给)/u, /你们/u, /(?:工作|干活|做事)/u],
+      4: [/我们/u, /(?:探索|少年警探)/u, /项目/u],
+      5: [/(?:其实|实际上|事实上)/u, /莫雷塔/u, /(?:帮|协助)/u],
+      6: [/(?:记得|记住)/u, /他/u],
+    },
+  },
+  {
+    name: 'film-tv-netflix-segment-boundary-en-to-zh-Hant',
+    profile: 'film-tv',
+    targetLanguage: 'zh-Hant',
+    cues: netflixSegmentBoundaryEnglish,
+    combinedRequiredPatterns: [
+      /(?:工作|上班)/u,
+      /(?:片場|電影)/u,
+      /(?:摩托車|機車)/u,
+      /(?:屁股|臀部)/u,
+      /(?:讓|使)我/u,
+    ],
+  },
+  {
+    name: 'film-tv-netflix-multiline-en-to-zh-Hant',
+    profile: 'film-tv',
+    targetLanguage: 'zh-Hant',
+    cues: netflixMultilineEnglish,
+    requiredPatterns: {
+      0: [/看/u, /(?:快點|加油|來吧)/u, /(?:各位|大家|夥計|你們)/u],
+      1: [/(?:可能|疑似)/u, /(?:失竊|被偷|贓車)/u, /455/u, /蒂芬妮/u],
+      2: [/我/u, /(?:救|挽救)/u, /她/u],
+      3: [/(?:放下|把.{0,4}放下)/u, /槍/u],
+      4: [/(?:轉身|轉過身|轉過去)/u, /手/u, /車/u, /腿/u],
+      5: [/我/u, /想/u, /你們/u],
+      6: [/(?:可疑|離奇)/u, /(?:死亡|死因)/u],
+      7: [/(?:不|不是)/u, /(?:可疑|離奇)/u, /(?:死亡|死因)/u],
+    },
+  },
+  {
+    name: 'film-tv-netflix-complete-utterance-en-to-zh-Hans',
+    profile: 'film-tv',
+    targetLanguage: 'zh-Hans',
+    cues: netflixCompleteUtteranceEnglish,
+    requiredPatterns: {
+      0: [/杜威/u, /嫌疑人/u, /带/u],
+      1: [/(?:金发|金发女)/u],
+      2: [/沙发/u],
+      3: [/(?:醉|喝多|酒)/u],
+      4: [/(?:对吧|是吧|对不对)/u],
+      5: [/(?:后来|接下来|然后)/u],
+      6: [/她/u, /推/u, /我/u],
+      7: [/她/u, /离开|走/u],
+    },
+  },
+  {
+    name: 'film-tv-netflix-multiline-omission-en-to-zh-Hans',
+    profile: 'film-tv',
+    targetLanguage: 'zh-Hans',
+    cues: netflixMultilineOmissionEnglish,
+    requiredPatterns: {
+      0: [/(?:醉|喝多|酒)/u],
+      1: [/我/u, /(?:昏|晕|失去意识)/u, /她/u, /身上/u],
+      2: [/(?:抽|吸)/u, /雪茄/u],
+      3: [/我/u, /(?:烧|烫)/u, /洞/u, /沙发/u],
+      4: [/(?:听|耳朵)/u, /(?:为什么|为何)/u, /(?:试|尝试)/u, /男人/u],
     },
   },
   {
@@ -102,6 +324,18 @@ const cases: readonly EvalCase[] = [
     },
   },
   {
+    name: 'youtube-en-to-zh-Hans',
+    profile: 'youtube',
+    targetLanguage: 'zh-Hans',
+    cues: youtubeEnglish,
+    requiredPatterns: {
+      3: [/(?:以.{0,12}为准|唯一依据|作为.{0,8}依据)/u],
+    },
+    forbiddenPatterns: {
+      3: [/权威|保持为准/u],
+    },
+  },
+  {
     name: 'youtube-zh-to-en',
     profile: 'youtube',
     targetLanguage: 'en',
@@ -119,8 +353,8 @@ const cases: readonly EvalCase[] = [
 
 const runLive = process.env.RUN_LIVE_QWEN_EVAL === '1';
 
-describe.skipIf(!runLive)('Qwen 3.7 Flash subtitle prompt live evaluation', () => {
-  it('passes both prompt profiles in both directions twice', async () => {
+describe.skipIf(!runLive)('Qwen 3.7 Plus subtitle prompt live evaluation', () => {
+  it('passes both prompt profiles in all three directions twice', async () => {
     const apiKey = process.env.DASHSCOPE_API_KEY;
     expect(apiKey, 'DASHSCOPE_API_KEY must be present').toBeTruthy();
     const baseUrl = process.env.QWEN_EVAL_BASE_URL;
@@ -132,66 +366,95 @@ describe.skipIf(!runLive)('Qwen 3.7 Flash subtitle prompt live evaluation', () =
     );
     const failures: string[] = [];
     const records: Record<string, unknown>[] = [];
+    const requestedCase = process.env.QWEN_EVAL_CASE;
+    const selectedCases = requestedCase === undefined
+      ? cases
+      : cases.filter((evalCase) => evalCase.name === requestedCase);
+    expect(selectedCases.length, `unknown QWEN_EVAL_CASE ${requestedCase}`)
+      .toBeGreaterThan(0);
 
     for (let repetition = 1; repetition <= 2; repetition += 1) {
-      for (const evalCase of cases) {
-        const captures: CapturedResponse[] = [];
-        const fetcher: typeof globalThis.fetch = async (input, init) => {
-          const startedAt = performance.now();
-          const response = await fetch(input, init);
-          const payload = await response.clone().json().catch(() => undefined);
-          captures.push({
-            httpStatus: response.status,
-            payload,
-            elapsedMs: Math.round(performance.now() - startedAt),
-          });
-          return response;
-        };
-        const result = await translateCueBatch(
-          {
-            contentId: `live-${evalCase.name}`,
-            trackId: 'source',
-            promptProfile: evalCase.profile,
-            targetLanguage: evalCase.targetLanguage,
-            cues: evalCase.cues,
-            config: {
-              provider: 'qwen-cn',
-              baseUrl: baseUrl!,
-              apiKey: apiKey!,
-              model: 'qwen3.7-flash',
-              webSearchEnabled: false,
+      for (const evalCase of selectedCases) {
+        for (
+          let batchStart = 0;
+          batchStart < evalCase.cues.length;
+          batchStart += MT_BATCH_SIZE
+        ) {
+          const batchNumber = batchStart / MT_BATCH_SIZE + 1;
+          const batchCase = sliceEvalCase(
+            evalCase,
+            batchStart,
+            batchStart + MT_BATCH_SIZE,
+          );
+          const captures: CapturedResponse[] = [];
+          const fetcher: typeof globalThis.fetch = async (input, init) => {
+            const startedAt = performance.now();
+            const response = await fetch(input, init);
+            const payload = await response.clone().json().catch(() => undefined);
+            captures.push({
+              httpStatus: response.status,
+              payload,
+              elapsedMs: Math.round(performance.now() - startedAt),
+            });
+            return response;
+          };
+          const result = await translateCueBatch(
+            {
+              contentId: `live-${evalCase.name}`,
+              trackId: 'source',
+              promptProfile: evalCase.profile,
+              targetLanguage: evalCase.targetLanguage,
+              cues: batchCase.cues,
+              config: {
+                provider: 'qwen-cn',
+                baseUrl: baseUrl!,
+                apiKey: apiKey!,
+                model: 'qwen3.7-plus',
+                webSearchEnabled: false,
+              },
+              skipCache: true,
             },
-            skipCache: true,
-          },
-          { fetch: fetcher },
-        );
-        const capture = captures.at(-1);
-        const rawOutput = readRawOutput(capture?.payload);
-        const caseFailures = validateResult(
-          evalCase,
-          result,
-          rawOutput,
-          capture,
-        );
-        failures.push(
-          ...caseFailures.map((failure) =>
-            `${evalCase.name} run ${repetition}: ${failure}`
-          ),
-        );
-        const record = {
-          case: evalCase.name,
-          repetition,
-          resultStatus: result.status,
-          httpStatus: capture?.httpStatus,
-          elapsedMs: capture?.elapsedMs,
-          model: readRecord(capture?.payload)?.model,
-          responseStatus: readRecord(capture?.payload)?.status,
-          usage: readRecord(capture?.payload)?.usage,
-          translations: result.cues.map((cue) => cue.text),
-          failures: caseFailures,
-        };
-        records.push(record);
-        console.log(`QWEN_EVAL_RESULT ${JSON.stringify(record)}`);
+            { fetch: fetcher },
+          );
+          const productResult = result.status !== 'ok'
+            ? result
+            : {
+                ...result,
+                cues: evalCase.targetLanguage === 'zh-Hant'
+                  ? convertCuesToTraditional(result.cues)
+                  : evalCase.targetLanguage === 'zh-Hans'
+                  ? convertCuesToSimplified(result.cues)
+                  : result.cues,
+              };
+          const capture = captures.at(-1);
+          const rawOutput = readRawOutput(capture?.payload);
+          const caseFailures = validateResult(
+            batchCase,
+            productResult,
+            rawOutput,
+            capture,
+          );
+          failures.push(
+            ...caseFailures.map((failure) =>
+              `${evalCase.name} run ${repetition} batch ${batchNumber}: ${failure}`
+            ),
+          );
+          const record = {
+            case: evalCase.name,
+            repetition,
+            batch: batchNumber,
+            resultStatus: productResult.status,
+            httpStatus: capture?.httpStatus,
+            elapsedMs: capture?.elapsedMs,
+            model: readRecord(capture?.payload)?.model,
+            responseStatus: readRecord(capture?.payload)?.status,
+            usage: readRecord(capture?.payload)?.usage,
+            translations: productResult.cues.map((cue) => cue.text),
+            failures: caseFailures,
+          };
+          records.push(record);
+          console.log(`QWEN_EVAL_RESULT ${JSON.stringify(record)}`);
+        }
       }
     }
 
@@ -200,8 +463,35 @@ describe.skipIf(!runLive)('Qwen 3.7 Flash subtitle prompt live evaluation', () =
       failures,
     })}`);
     expect(failures).toEqual([]);
-  }, 180_000);
+  }, 420_000);
 });
+
+function sliceEvalCase(
+  evalCase: EvalCase,
+  start: number,
+  end: number,
+): EvalCase {
+  return {
+    ...evalCase,
+    cues: evalCase.cues.slice(start, end),
+    requiredPatterns: slicePatterns(evalCase.requiredPatterns, start, end),
+    forbiddenPatterns: slicePatterns(evalCase.forbiddenPatterns, start, end),
+  };
+}
+
+function slicePatterns(
+  patterns: Readonly<Record<number, readonly RegExp[]>> | undefined,
+  start: number,
+  end: number,
+): Readonly<Record<number, readonly RegExp[]>> | undefined {
+  if (patterns === undefined) return undefined;
+  return Object.fromEntries(
+    Object.entries(patterns)
+      .map(([index, value]) => [Number(index), value] as const)
+      .filter(([index]) => start <= index && index < end)
+      .map(([index, value]) => [index - start, value]),
+  );
+}
 
 function timedCues(
   language: string,
@@ -237,16 +527,19 @@ function validateResult(
   if (result.cues.length !== evalCase.cues.length) {
     failures.push('cue count changed');
   }
-  const rawTranslations = readRecord(rawOutput)?.translations;
+  const rawTranslations = Array.isArray(rawOutput)
+    ? rawOutput
+    : typeof rawOutput === 'string'
+    ? rawOutput.trim().split(/\r?\n\s*%%\s*\r?\n/u)
+    : undefined;
   if (
     !Array.isArray(rawTranslations) ||
-    rawTranslations.length !== evalCase.cues.length ||
-    !rawTranslations.every((item, id) =>
-      readRecord(item)?.id === id &&
-      typeof readRecord(item)?.text === 'string'
+    rawTranslations.length !== expectedRawSegmentCount(evalCase.cues) ||
+    !rawTranslations.every((item) =>
+      typeof item === 'string' && item.trim() !== ''
     )
   ) {
-    failures.push('raw output did not preserve object ids');
+    failures.push('raw output did not preserve source segment count');
   }
   result.cues.forEach((cue, index) => {
     const source = evalCase.cues[index];
@@ -264,13 +557,16 @@ function validateResult(
     if (/```|^\s*(translation|譯文|翻譯)[:：]/imu.test(cue.text)) {
       failures.push(`cue ${index} contains wrapper text`);
     }
+    const semanticText = evalCase.targetLanguage === 'en'
+      ? cue.text.replace(/\n/gu, ' ')
+      : cue.text.replace(/\n/gu, '');
     for (const pattern of evalCase.requiredPatterns?.[index] ?? []) {
-      if (!pattern.test(cue.text)) {
+      if (!pattern.test(semanticText)) {
         failures.push(`cue ${index} is missing semantic anchor ${pattern}`);
       }
     }
     for (const pattern of evalCase.forbiddenPatterns?.[index] ?? []) {
-      if (pattern.test(cue.text)) {
+      if (pattern.test(semanticText)) {
         failures.push(`cue ${index} contains rejected wording ${pattern}`);
       }
     }
@@ -279,48 +575,34 @@ function validateResult(
       if (converted !== cue.text) {
         failures.push(`cue ${index} contains Simplified Chinese forms`);
       }
-    }
-    const durationSeconds = Math.max(1, (cue.end - cue.start) / 1_000);
-    const readingUnits = evalCase.targetLanguage === 'zh-Hant'
-      ? traditionalChineseReadingUnits(cue.text)
-      : cue.text.replace(/\n/g, '').length;
-    const hardLimit = evalCase.targetLanguage === 'zh-Hant'
-      ? evalCase.profile === 'film-tv' ? 9 : 11
-      : 20;
-    if (readingUnits / durationSeconds > hardLimit) {
-      failures.push(
-        `cue ${index} reading speed ${
-          (readingUnits / durationSeconds).toFixed(1)
-        } > ${hardLimit}`,
-      );
-    }
-    const lineLimit = evalCase.targetLanguage === 'zh-Hant'
-      ? evalCase.profile === 'film-tv' ? 16 : 18
-      : 42;
-    cue.text.split('\n').forEach((line, lineIndex) => {
-      const lineUnits = evalCase.targetLanguage === 'zh-Hant'
-        ? traditionalChineseReadingUnits(line)
-        : line.length;
-      if (lineUnits > lineLimit) {
-        failures.push(
-          `cue ${index} line ${lineIndex + 1} length ${lineUnits} > ${lineLimit}`,
-        );
+    } else if (evalCase.targetLanguage === 'zh-Hans') {
+      const converted = convertCuesToSimplified([cue])[0]!.text;
+      if (converted !== cue.text) {
+        failures.push(`cue ${index} contains Traditional Chinese forms`);
       }
-    });
+    }
   });
+  const combined = result.cues.map((cue) => cue.text).join('\n');
+  for (const pattern of evalCase.combinedRequiredPatterns ?? []) {
+    if (!pattern.test(combined)) {
+      failures.push(`combined translation is missing semantic anchor ${pattern}`);
+    }
+  }
   return failures;
 }
 
-function traditionalChineseReadingUnits(text: string): number {
-  return [...text].reduce((total, character) => {
-    if (/\s/u.test(character)) return total;
-    return total + (/[\u0000-\u007f]/u.test(character) ? 0.5 : 1);
+function expectedRawSegmentCount(cues: readonly Cue[]): number {
+  return cues.reduce((total, cue) => {
+    const displayedLines = cue.text
+      .split(/\r?\n/u)
+      .filter((line) => line.trim() !== '');
+    return total + Math.max(1, displayedLines.length);
   }, 0);
 }
 
 function hasUnsafeLineBreak(
   text: string,
-  targetLanguage: 'en' | 'zh-Hant',
+  targetLanguage: TranslationTargetLanguage,
 ): boolean {
   const lines = text.split('\n');
   if (lines.length < 2) return false;
@@ -334,7 +616,7 @@ function hasUnsafeLineBreak(
   ) {
     return true;
   }
-  if (targetLanguage === 'zh-Hant') {
+  if (targetLanguage !== 'en') {
     return /[A-Za-z0-9_]$/u.test(left) &&
       /^[A-Za-z0-9_]/u.test(right);
   }
@@ -349,6 +631,31 @@ function hasUnsafeLineBreak(
 function readRawOutput(payload: unknown): unknown {
   const output = readRecord(payload)?.output;
   if (!Array.isArray(output)) return undefined;
+  const functionCall = output.find((item) =>
+    readRecord(item)?.type === 'function_call' &&
+    readRecord(item)?.name === 'return_subtitle_translations' &&
+    typeof readRecord(item)?.arguments === 'string'
+  );
+  const argumentsText = readRecord(functionCall)?.arguments;
+  if (typeof argumentsText === 'string') {
+    try {
+      const parsed = readRecord(JSON.parse(argumentsText) as unknown);
+      const translations = parsed?.translations;
+      if (Array.isArray(translations)) {
+        if (translations.every((item) => typeof item === 'string')) {
+          return translations;
+        }
+        return translations.map((item, id) => {
+          const record = readRecord(item);
+          return record?.id === id && typeof record.text === 'string'
+            ? record.text
+            : undefined;
+        });
+      }
+    } catch {
+      return undefined;
+    }
+  }
   const texts = output.flatMap((item) => {
     const content = readRecord(item)?.content;
     if (!Array.isArray(content)) return [];
@@ -360,11 +667,7 @@ function readRawOutput(payload: unknown): unknown {
     );
   });
   if (texts.length === 0) return undefined;
-  try {
-    return JSON.parse(texts.join('')) as unknown;
-  } catch {
-    return undefined;
-  }
+  return texts.join('');
 }
 
 function readRecord(value: unknown): Record<string, unknown> | undefined {

@@ -11,20 +11,37 @@ const controllerSource = readFileSync(
 );
 
 describe('player language menu actions', () => {
-  it('offers a dedicated official subtitle reload separate from MT retry', () => {
+  it('offers official subtitle restore separately from AI bottom retranslation', () => {
     expect(toggleViewSource).toContain(
       "menuButton('重新載入官方字幕')",
     );
-    expect(toggleViewSource).toContain("menuButton('重新翻譯')");
+    expect(toggleViewSource).toContain(
+      "menuButton('用 AI 重譯下方字幕')",
+    );
     expect(toggleViewSource).not.toContain('ticket 04');
     expect(toggleViewSource).toContain(
       'callbacks.onReloadOfficialTracks()',
+    );
+    expect(toggleViewSource).toContain(
+      'callbacks.onAiRetranslateBottom()',
     );
     expect(controllerSource).toContain(
       "type: 'reload-tracks'",
     );
     expect(controllerSource).toContain(
       'this.#adapter.start()',
+    );
+    expect(controllerSource).toContain(
+      'this.#bottomRetranslationPlan',
+    );
+    expect(controllerSource).toContain(
+      'this.#acquireTopForBottomRetranslation(',
+    );
+    expect(controllerSource).toContain(
+      'this.#rememberOfficialPair()',
+    );
+    expect(controllerSource).toContain(
+      'this.#restoreOfficialPairSnapshot()',
     );
   });
 

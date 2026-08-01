@@ -1,6 +1,6 @@
 # DuetSub Privacy Policy
 
-Effective date: July 25, 2026
+Effective date: July 31, 2026
 
 DuetSub is a browser extension for displaying bilingual subtitles. The project does not operate a DuetSub server and does not sell, share, or use personal data for advertising, analytics, profiling, or creditworthiness.
 
@@ -22,21 +22,28 @@ Settings and API keys use `chrome.storage.local`, not Chrome Sync. API keys are 
 The manual Official Pair menu contains only machine-verifiable official subtitle
 languages already available to the signed-in viewer for the current title. When
 both selected official tracks resolve, their subtitle text and timing remain in
-the browser and DuetSub does not contact a translation endpoint. The saved
-top/bottom preference is local; each title is checked against its own current
-official-track catalog and fails closed when either selection is unavailable.
+the browser by default. Selecting or reloading an official pair does not contact
+a translation endpoint. The saved top/bottom preference is local; each title is
+checked against its own current official-track catalog and fails closed when
+either selection is unavailable.
 
 ## Optional machine translation
 
-DuetSub does not translate when both selected official tracks are available.
-
-When one selected language is missing, machine translation occurs only if the user has:
+Machine translation occurs only when a fallback language is missing or the user
+explicitly selects **Use AI to retranslate bottom subtitles**. It also requires
+that the user has:
 
 1. configured a translation endpoint;
 2. explicitly granted access to that endpoint through Chrome's permission prompt; and
 3. enabled DuetSub for the current player.
 
-The extension then sends the source subtitle text, requested target language, model name, and authentication required by the configured service directly from the browser to that service. For cloud services, the endpoint must use HTTPS. Plain HTTP is accepted only for `localhost`, `127.0.0.1`, or `[::1]`.
+The explicit retranslation action sends the current top subtitle text and uses
+the result only for the bottom subtitle line. **Reload official subtitles**
+restores the official pair. In either translation mode, the extension sends the
+source subtitle text, requested target language, model name, and authentication
+required by the configured service directly from the browser to that service.
+For cloud services, the endpoint must use HTTPS. Plain HTTP is accepted only for
+`localhost`, `127.0.0.1`, or `[::1]`.
 
 The configured provider processes those requests under its own terms and privacy policy. DuetSub does not proxy, receive, or retain those requests on a project-operated server.
 

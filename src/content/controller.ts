@@ -1,4 +1,15 @@
-import type { Cue, SiteAdapter, SiteId, TrackInfo } from '../core/contracts';
+import type {
+  Cue,
+  SiteAdapter,
+  SiteId,
+  TrackInfo,
+  TranslationTargetLanguage,
+} from '../core/contracts';
+import {
+  bottomRetranslationTargetLanguage,
+  createBottomRetranslationPlan,
+  type BottomRetranslationPlan,
+} from '../core/bottom-retranslation';
 import {
   resolveMaxOfficialPairCues,
 } from '../adapters/max-cue-alignment';
@@ -36,6 +47,7 @@ import {
   synchronizeCues,
   type SynchronizerState,
 } from '../core/synchronizer';
+import { mergeTranslatedCues } from '../core/translated-cue-merge';
 import {
   decideSubtitleSources,
   decideYoutubeSubtitleSources,
@@ -59,6 +71,15 @@ import { createToggleView, type ToggleView } from './toggle-view';
 const UPDATE_INTERVAL_MS = 250;
 const CONTROLS_VISIBLE_MS = 2_000;
 type LocalizedText = (language: UiLanguage) => string;
+interface OfficialPairSnapshot {
+  readonly contentIdentity: string | undefined;
+  readonly topCues: readonly Cue[];
+  readonly bottomCues: readonly Cue[];
+  readonly topLanguage: string;
+  readonly bottomLanguage: string;
+  readonly bottomRetranslationPlan: BottomRetranslationPlan;
+  readonly readyStatus: LocalizedText;
+}
 
 export function startDuetSubContent(
   siteId: SiteId,
@@ -139,9 +160,11 @@ class PlaybackController {
         readonly source: readonly Cue[];
         readonly trackId: string;
         readonly target: 'top' | 'bottom';
-        readonly targetLanguage: 'en' | 'zh-Hant';
+        readonly targetLanguage: TranslationTargetLanguage;
       }
     | undefined;
+  #bottomRetranslationPlan: BottomRetranslationPlan | undefined;
+  #officialPairSnapshot: OfficialPairSnapshot | undefined;
   #synchronizerState: SynchronizerState | undefined;
   #controlsVisible = false;
   #controlsTimer: number | undefined;
@@ -187,26 +210,7 @@ class PlaybackController {
           void this.#selectLanguagePair(preference);
         },
         onReloadOfficialTracks: () => this.#reloadOfficialTracks(),
-        onRetranslate: () => {
-          if (this.#translationPlan === undefined) {
-            this.#status = uiMessage('status.noRetranslate');
-            this.#render();
-            return;
-          }
-          this.#cancelTranslations();
-          const revision = ++this.#acquisitionRevision;
-          this.#status = uiMessage('status.retranslating');
-          this.#render();
-          void this.#translatePlan(
-            {
-              contentGeneration: this.#state.contentGeneration,
-              clockGeneration: this.#state.clockGeneration,
-              selectionGeneration: this.#state.selectionGeneration,
-            },
-            revision,
-            true,
-          );
-        },
+        onAiRetranslateBottom: () => this.#retranslateBottomWithAi(),
         onOpenSettings: openOptionsPage,
       },
       target.toggleBefore,
@@ -423,6 +427,32 @@ class PlaybackController {
     this.#receivedBottomTrackId = undefined;
     this.#synchronizerState = undefined;
     this.#translationPlan = undefined;
+    this.#bottomRetranslationPlan = undefined;
+    this.#officialPairSnapshot = undefined;
+  }
+
+  #retranslateBottomWithAi(): void {
+    const plan = this.#bottomRetranslationPlan;
+    if (plan === undefined) {
+      this.#status = uiMessage('status.noRetranslate');
+      this.#render();
+      return;
+    }
+    this.#cancelTranslations();
+    this.#translationPlan = plan;
+    const revision = ++this.#acquisitionRevision;
+    this.#status = uiMessage('status.retranslating');
+    this.#render();
+    void this.#translatePlan(
+      {
+        contentGeneration: this.#state.contentGeneration,
+        clockGeneration: this.#state.clockGeneration,
+        selectionGeneration: this.#state.selectionGeneration,
+      },
+      revision,
+      true,
+      true,
+    );
   }
 
   #openLanguagePairChooser(): void {
@@ -442,6 +472,12 @@ class PlaybackController {
   #reloadOfficialTracks(): void {
     this.#interactionRevision += 1;
     this.#acquisitionRevision += 1;
+    if (
+      this.#bottomMachineTranslated &&
+      this.#restoreOfficialPairSnapshot()
+    ) {
+      return;
+    }
     this.#state = reducePlaybackLifecycle(this.#state, {
       type: 'reload-tracks',
     });
@@ -471,6 +507,53 @@ class PlaybackController {
     );
     this.#render();
     this.#adapter.start();
+  }
+
+  #rememberOfficialPair(): void {
+    const plan = this.#bottomRetranslationPlan;
+    if (
+      plan === undefined ||
+      this.#topCues.length === 0 ||
+      this.#bottomCues.length === 0 ||
+      this.#topMachineTranslated ||
+      this.#bottomMachineTranslated
+    ) {
+      this.#officialPairSnapshot = undefined;
+      return;
+    }
+    this.#officialPairSnapshot = {
+      contentIdentity: this.#state.contentIdentity,
+      topCues: this.#topCues,
+      bottomCues: this.#bottomCues,
+      topLanguage: this.#topLanguage,
+      bottomLanguage: this.#bottomLanguage,
+      bottomRetranslationPlan: plan,
+      readyStatus: this.#readyStatus,
+    };
+  }
+
+  #restoreOfficialPairSnapshot(): boolean {
+    const snapshot = this.#officialPairSnapshot;
+    if (
+      snapshot === undefined ||
+      snapshot.contentIdentity !== this.#state.contentIdentity
+    ) {
+      return false;
+    }
+    this.#cancelTranslations();
+    this.#topCues = snapshot.topCues;
+    this.#bottomCues = snapshot.bottomCues;
+    this.#topLanguage = snapshot.topLanguage;
+    this.#bottomLanguage = snapshot.bottomLanguage;
+    this.#topMachineTranslated = false;
+    this.#bottomMachineTranslated = false;
+    this.#translationPlan = undefined;
+    this.#bottomRetranslationPlan = snapshot.bottomRetranslationPlan;
+    this.#synchronizerState = undefined;
+    this.#readyStatus = snapshot.readyStatus;
+    this.#status = snapshot.readyStatus;
+    this.#render();
+    return true;
   }
 
   async #selectLanguagePair(
@@ -579,6 +662,20 @@ class PlaybackController {
       preference: this.#languagePairPreference,
     });
     if (pair.kind !== 'ready') {
+      if (
+        pair.reason === 'bottom-missing' &&
+        pair.top !== undefined &&
+        bottomRetranslationTargetLanguage(
+            this.#languagePairPreference.bottom,
+          ) !== undefined
+      ) {
+        await this.#acquireTopForBottomRetranslation(
+          generatedTracks,
+          pair.top,
+          interactionRevision,
+        );
+        return;
+      }
       this.#state = reducePlaybackLifecycle(this.#state, {
         type: 'tracks-loading',
       });
@@ -643,6 +740,11 @@ class PlaybackController {
       this.#bottomLanguage = cues.bottom.language;
       this.#topMachineTranslated = false;
       this.#bottomMachineTranslated = false;
+      this.#bottomRetranslationPlan = createBottomRetranslationPlan({
+        topTrack: cues.top,
+        bottomLanguage: cues.bottom.language,
+        topCues: this.#topCues,
+      });
       this.#synchronizerState = undefined;
       this.#state = reducePlaybackLifecycle(this.#state, {
         type: 'tracks-ready',
@@ -657,6 +759,7 @@ class PlaybackController {
         ? pairMessage('status.pairAligned', resolvedPreference)
         : pairMessage('status.pairReady', resolvedPreference);
       this.#status = this.#readyStatus;
+      this.#rememberOfficialPair();
       this.#render();
     } catch (error) {
       if (
@@ -671,6 +774,81 @@ class PlaybackController {
         return;
       }
       console.warn('[DuetSub] Official pair acquisition failed', error);
+      this.#clearSelectedPair();
+      this.#state = reducePlaybackLifecycle(this.#state, {
+        type: 'tracks-loading',
+      });
+      this.#bindAdapterGeneration();
+      this.#status = uiMessage('status.selectedPairFailed');
+      this.#render();
+    }
+  }
+
+  async #acquireTopForBottomRetranslation(
+    generatedTracks: GenerationBound<readonly TrackInfo[]>,
+    topTrack: TrackInfo,
+    interactionRevision: number,
+  ): Promise<void> {
+    const adapter = this.#adapter;
+    if (adapter === undefined) return;
+    const acquisitionRevision = ++this.#acquisitionRevision;
+    this.#status = uiMessage('status.acquiringTopForAi');
+    this.#render();
+
+    try {
+      const fetched = await adapter.fetchTrack(topTrack);
+      const topCues = acceptPlaybackGeneration(
+        this.#state,
+        bindPlaybackGeneration(generatedTracks.generation, fetched),
+      );
+      if (
+        topCues === undefined ||
+        this.#destroyed ||
+        !this.#state.enabled ||
+        interactionRevision !== this.#interactionRevision ||
+        acquisitionRevision !== this.#acquisitionRevision
+      ) {
+        return;
+      }
+      const plan = createBottomRetranslationPlan({
+        topTrack,
+        bottomLanguage: this.#languagePairPreference.bottom,
+        topCues,
+      });
+      if (plan === undefined) {
+        throw new Error('Unsupported AI bottom retranslation target');
+      }
+
+      this.#topCues = topCues;
+      this.#bottomCues = [];
+      this.#topLanguage = topTrack.language;
+      this.#bottomLanguage = this.#languagePairPreference.bottom;
+      this.#topMachineTranslated = false;
+      this.#bottomMachineTranslated = false;
+      this.#bottomRetranslationPlan = plan;
+      this.#synchronizerState = undefined;
+      this.#state = reducePlaybackLifecycle(this.#state, {
+        type: 'tracks-ready',
+      });
+      this.#readyStatus = uiMessage('status.topReadyForAi');
+      this.#status = this.#readyStatus;
+      this.#render();
+    } catch (error) {
+      if (
+        acceptPlaybackGeneration(
+          this.#state,
+          bindPlaybackGeneration(generatedTracks.generation, true),
+        ) !== true ||
+        this.#destroyed ||
+        interactionRevision !== this.#interactionRevision ||
+        acquisitionRevision !== this.#acquisitionRevision
+      ) {
+        return;
+      }
+      console.warn(
+        '[DuetSub] AI bottom source acquisition failed',
+        error,
+      );
       this.#clearSelectedPair();
       this.#state = reducePlaybackLifecycle(this.#state, {
         type: 'tracks-loading',
@@ -748,6 +926,14 @@ class PlaybackController {
         : accepted.chinese.cues;
       this.#topCues = englishCues;
       this.#bottomCues = chineseCues;
+      this.#bottomRetranslationPlan =
+        decision.english.kind === 'official'
+          ? createBottomRetranslationPlan({
+              topTrack: decision.english.track,
+              bottomLanguage: 'zh-Hant',
+              topCues: englishCues,
+            })
+          : undefined;
       this.#topMachineTranslated = accepted.english.kind === 'mt' ||
         (accepted.english.kind === 'official' &&
           accepted.english.trackSource === 'platform-mt');
@@ -774,6 +960,7 @@ class PlaybackController {
               )
             : uiMessage('status.englishChineseReady');
         this.#status = this.#readyStatus;
+        this.#rememberOfficialPair();
       } else {
         this.#translationPlan = {
           source: mt.value.source,
@@ -1034,6 +1221,7 @@ class PlaybackController {
     generation: PlaybackGeneration,
     acquisitionRevision: number,
     skipCache = false,
+    replaceBottom = false,
   ): Promise<void> {
     const plan = this.#translationPlan;
     if (plan === undefined) return;
@@ -1096,6 +1284,14 @@ class PlaybackController {
         return;
       }
       if (response.status === 'aborted') return;
+      if (replaceBottom) {
+        this.#bottomCues = [];
+        this.#bottomLanguage = plan.targetLanguage;
+        this.#bottomMachineTranslated = true;
+        this.#readyStatus = uiMessage('status.officialMtReady');
+        this.#synchronizerState = undefined;
+        replaceBottom = false;
+      }
       hadFailure ||= response.status === 'failed';
       this.#mergeTranslatedCues(plan.target, response.cues);
       this.#status = response.status === 'ok'
@@ -1116,20 +1312,7 @@ class PlaybackController {
     const current = target === 'top'
       ? this.#topCues
       : this.#bottomCues;
-    const merged = new Map(
-      current.map((cue) => [`${cue.start}:${cue.end}:${cue.text}`, cue]),
-    );
-    for (const cue of cues) {
-      for (const [key, existing] of merged) {
-        if (existing.start === cue.start && existing.end === cue.end) {
-          merged.delete(key);
-        }
-      }
-      merged.set(`${cue.start}:${cue.end}:${cue.text}`, cue);
-    }
-    const result = [...merged.values()].sort((a, b) =>
-      a.start - b.start || a.end - b.end
-    );
+    const result = mergeTranslatedCues(current, cues);
     if (target === 'top') this.#topCues = result;
     else this.#bottomCues = result;
     this.#synchronizerState = undefined;
@@ -1231,7 +1414,7 @@ type ResolvedSubtitleSource =
       readonly cues: readonly [];
       readonly source: readonly Cue[];
       readonly trackId: string;
-      readonly targetLanguage: 'en' | 'zh-Hant';
+      readonly targetLanguage: TranslationTargetLanguage;
     };
 
 function uniqueSourceTracks(

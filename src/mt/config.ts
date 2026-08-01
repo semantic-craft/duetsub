@@ -20,8 +20,8 @@ export const DEEPSEEK_MODELS = [
   'deepseek-v4-pro',
 ] as const;
 export const QWEN_MODELS = [
-  'qwen3.7-flash',
   'qwen3.7-plus',
+  'qwen3.7-flash',
   'qwen3.7-max',
   'qwen3.6-flash',
 ] as const;

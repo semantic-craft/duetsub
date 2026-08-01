@@ -1,9 +1,10 @@
+import type { TranslationTargetLanguage } from '../core/contracts';
 import type { SubtitlePromptProfile } from './prompt';
 
 export function formatSubtitleTranslation(
   value: string,
   profile: SubtitlePromptProfile,
-  targetLanguage: 'en' | 'zh-Hant',
+  targetLanguage: TranslationTargetLanguage,
 ): string {
   const normalized = value.trim().replace(/\.{3,}/gu, '…');
   const lineLimit = targetLanguage === 'en'
@@ -21,7 +22,7 @@ export function formatSubtitleTranslation(
 
 function joinExistingLines(
   lines: readonly string[],
-  targetLanguage: 'en' | 'zh-Hant',
+  targetLanguage: TranslationTargetLanguage,
 ): string {
   if (targetLanguage === 'en') {
     return lines.join(' ').replace(/\s+/gu, ' ').trim();
@@ -38,7 +39,7 @@ function joinExistingLines(
 
 function bestSplitIndex(
   text: string,
-  targetLanguage: 'en' | 'zh-Hant',
+  targetLanguage: TranslationTargetLanguage,
   lineLimit: number,
 ): number | undefined {
   let best: { index: number; score: number } | undefined;
@@ -63,7 +64,7 @@ function bestSplitIndex(
 function boundaryStrength(
   text: string,
   index: number,
-  targetLanguage: 'en' | 'zh-Hant',
+  targetLanguage: TranslationTargetLanguage,
 ): number {
   const before = text[index - 1] ?? '';
   const after = text[index] ?? '';
@@ -73,14 +74,14 @@ function boundaryStrength(
   const nextNonSpace = right[0] ?? '';
   if ((left.match(/`/gu)?.length ?? 0) % 2 === 1) return -1;
   if (
-    targetLanguage === 'zh-Hant' &&
+    targetLanguage !== 'en' &&
     /[A-Za-z0-9_]/u.test(previousNonSpace) &&
     /[A-Za-z0-9_]/u.test(nextNonSpace)
   ) {
     return -1;
   }
   if (
-    targetLanguage === 'zh-Hant' &&
+    targetLanguage !== 'en' &&
     /(?:而非|不是|別用|别用|執行|运行)$/u.test(left) &&
     right.startsWith('`')
   ) {
@@ -115,6 +116,12 @@ function boundaryStrength(
     return -1;
   }
   if (/\d/u.test(before) && /[%％°℃元]/u.test(after)) return -1;
+  if (
+    /^(?:可能|也許|也许|應該|应该|但是|不過|不过|所以|因為|因为|如果|要是|而且|並且|并且|然後|然后|可是|卻|却|請|请|快點|快点|大家|各位|你們|你们)/u
+      .test(right)
+  ) {
+    return 90;
+  }
   if (/[但而然所其別再]/u.test(after)) return 75;
   return 20;
 }
@@ -131,7 +138,7 @@ function isEnglishNameBoundary(left: string, right: string): boolean {
 
 function readingUnits(
   text: string,
-  targetLanguage: 'en' | 'zh-Hant',
+  targetLanguage: TranslationTargetLanguage,
 ): number {
   if (targetLanguage === 'en') return text.length;
   return [...text].reduce((total, character) => {

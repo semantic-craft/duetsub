@@ -327,6 +327,27 @@ describe('resolveOfficialPair', () => {
     });
   });
 
+  it('retains the resolved top track when only the requested bottom is missing', () => {
+    const english = track('english', 'en');
+
+    expect(
+      resolveOfficialPair({
+        siteId: 'youtube',
+        tracks: [english],
+        preference: {
+          version: 1,
+          top: 'en',
+          bottom: 'zh-Hans',
+        },
+      }),
+    ).toMatchObject({
+      kind: 'unavailable',
+      reason: 'bottom-missing',
+      top: english,
+      bottom: undefined,
+    });
+  });
+
   it('matches a bare preference when the catalog has one script family', () => {
     const regionalEnglish = track('english-us', 'en-US');
 

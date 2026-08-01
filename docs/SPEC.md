@@ -17,7 +17,7 @@ Authoritative over: `README.md`（三站、Netflix-first 的旧表述已过时�
 
 DuetSub 是一个可独立侧载并公开发布源码与构建产物的 Chrome MV3 扩展。在四个目标站的播放器控制栏注入一个 **toggle button**；用户点一下即在视频上叠加一层扩展自有的 **overlay**，英文在上、繁体中文在下，由真实 `<video>` 时钟驱动，与播放严格同步。
 
-字幕来源优先用**登录用户当前已能取用的官方轨**：中英官方轨都在时直接并排，绝不机翻。只有某一侧没有官方轨时，才用用户自备 key 的 **DeepSeek / 千问 / 豆包或其他 OpenAI 兼容模型**补齐缺失的那一侧（**MT fallback**）；只有简体官方轨时用 **OpenCC** 转繁显示。供应商、模型与 key 在扩展 **options page** 本地配置、存 `chrome.storage.local`，只经 service worker 走 HTTPS 发往用户选定并授权的端点，绝不写日志、绝不外发观看数据。
+字幕来源默认优先用**登录用户当前已能取用的官方轨**：中英官方轨都在时直接并排，不自动机翻。某一侧没有官方轨时，才用用户自备 key 的 **DeepSeek / 千问 / 豆包或其他 OpenAI 兼容模型**补齐缺失的那一侧（**MT fallback**）；官方双轨齐全时，只有用户主动点击「用 AI 重译下方字幕」才以上方字幕为源调用模型并替换下方字幕。只有简体官方轨时用 **OpenCC** 转繁显示。供应商、模型与 key 在扩展 **options page** 本地配置、存 `chrome.storage.local`，只经 service worker 走 HTTPS 发往用户选定并授权的端点，绝不写日志、绝不外发观看数据。
 
 产品红线（README）不变：只用平台已给当前观众的字幕轨，不下载视频、不绕过 DRM、不解锁地区限制轨、不上传观看数据。
 
@@ -43,7 +43,7 @@ DuetSub 是一个可独立侧载并公开发布源码与构建产物的 Chrome M
 13. As a 观众, I want 机翻行与对应官方行同色同字重同正体（不靠淡色或斜体作唯一线索）, so that 不与旁白/画外音等字幕语义混淆。
 14. As a 观众, I want 机翻按整轨预热 + 沿播放位置滚动补翻, so that 当前与即将播放的字幕最先就绪、观看不卡顿。
 15. As a 观众, I want 重看或往回拖时命中已翻译缓存, so that 不重复消耗我的模型额度、字幕秒出。
-16. As a 观众, I want 中英官方轨都在时永不触发机翻, so that 不产生无谓的 API 费用。
+16. As a 观众, I want 中英官方轨都在时默认不触发机翻，只有我主动选择 AI 重译才调用端点, so that 不产生无谓的 API 费用。
 
 ### 本地配置（options page，仅云端自备 key）
 
@@ -87,7 +87,7 @@ DuetSub 是一个可独立侧载并公开发布源码与构建产物的 Chrome M
 ### UI 补充（2026-07-22）
 
 41. As a 观众, I want 播放器按钮上看到当前用官方双轨还是官方+机翻、以及翻译进度, so that 我知道字幕来源与延迟原因。
-42. As a 观众, I want 机翻不佳时一键重新翻译（跳过缓存）, so that 不必清整个缓存。
+42. As a 观众, I want 以上方字幕为源、用 AI 重译下方字幕（跳过缓存）, so that 即使官方中英文双轨齐全也能测试或改进下方译文。
 43. As a 观众, I want 从播放器右键直接打开设置页, so that 配置模型少跳几步。
 44. As a 注重隐私/离线的用户, I want 把翻译指向本机 Ollama/LM Studio 端点, so that 字幕完全不发往云端。
 
@@ -140,7 +140,7 @@ interface SiteAdapter {
 
 - **中文侧**：`官方 zh-Hant` > `OpenCC(官方 zh-Hans)` > `MT(en→zh-Hant)`。
 - **英文侧**：`官方 en` > `MT(zh→en，源取 zh-Hant 或 zh-Hans)`。
-- **两侧都有官方轨** → 一律不机翻（README 红线）。
+- **两侧都有官方轨** → 默认不机翻；仅播放器内「用 AI 重译下方字幕」这一显式用户动作可例外触发。
 - **两侧都无可用来源** → 该内容 DuetSub fail closed，不显示（不是报错，是无声不显）。
 - 该优先链**硬编码**、不做设置界面（map 立场 6）。
 
@@ -150,11 +150,11 @@ interface SiteAdapter {
 
 ### D. 机翻兜底细则（ticket 06 就地拍板）
 
-- **引擎/模型/key**（2026-07-31）：全局默认供应商仍为 DeepSeek；千问（阿里云百炼·中国区/新加坡区）默认使用已实测的 `qwen3.7-flash`，并提供 `qwen3.7-plus`、`qwen3.7-max` 与 `qwen3.6-flash` 候选，不覆盖用户已经保存的显式模型。模型栏始终可编辑，用户可手动填写其他模型 ID。豆包候选含 `doubao-seed-2-1-pro-260628`。供应商 / Workspace ID（仅千问）/ Base URL / key / 模型 / 联网搜索（仅千问）在 options page 配置、存 `chrome.storage.local`（详见 §I）；千问与豆包走各自 OpenAI 兼容 Responses API，DeepSeek、自定义与本机端点保持 Chat Completions。
-- **繁体产出**：prompt 指定输出繁体中文；所有供应商的 zh-Hant 输出再过一遍 OpenCC(s2t) 作保险，避免偶发简体混入。
-- **请求约束**：字幕翻译按站点选择两套 system prompt：Netflix / Prime Video / Max 使用 `film-tv`，YouTube 使用 `youtube`。请求按时间升序发送 `id/start_ms/end_ms/duration_ms/max_reading_units/text`，响应必须是同 ID、同顺序的 `{"translations":[{"id":0,"text":"…"}]}`；不得增删拆并或跨 cue 搬运信息。千问 Responses 默认使用 `reasoning.effort: none`，允许联网搜索时切换为 `low`，且始终不存储响应；豆包 Responses 使用 `thinking.type: disabled`、`text.format: json_object` 且不存储响应；DeepSeek 保持现有 JSON Output Chat Completions；自定义端点只发送通用 OpenAI-compatible 字段。
-- **千问联网搜索**：仅作为默认关闭的显式用户选项；启用时按百炼 Responses API 文档添加 `tools: [{"type":"web_search"}]` 与低强度思考，由模型自行决定是否搜索。不得发送 Chat Completions 的 `enable_search`，也不暴露 Responses API 不支持的强制搜索、搜索策略、来源站点或角标来源设置。搜索开关进入翻译缓存身份，开关前后的结果不得互相命中。
-- **批处理**：整轨 **warmup 预热 + 沿播放位置滚动补翻**（承 ticket 02 的 Read Frog 模板）。先按源时间轴组成最多 8 条的连续小批，再按批次与播放头的距离调度；这样既优先当前位置，也让模型始终看到按时间升序的相邻上下文。快进/跳转用 AbortController 取消在途请求。
+- **引擎/模型/key**（2026-07-31）：全局默认供应商仍为 DeepSeek；千问（阿里云百炼·中国区/新加坡区）默认使用 `qwen3.7-plus`，并提供 `qwen3.7-flash`、`qwen3.7-max` 与 `qwen3.6-flash` 候选，不覆盖用户已经保存的显式模型。模型栏始终可编辑，用户可手动填写其他模型 ID。豆包候选含 `doubao-seed-2-1-pro-260628`。供应商 / Workspace ID（仅千问）/ Base URL / key / 模型 / 联网搜索（仅千问）在 options page 配置、存 `chrome.storage.local`（详见 §I）；千问与豆包走各自 OpenAI 兼容 Responses API，DeepSeek、自定义与本机端点保持 Chat Completions。
+- **中英文产出**：主动重译的目标语言跟随已保存的下方语言偏好，支持 `en`、`zh-Hans` 与 `zh-Hant`。prompt 分别指定英文、简体中文或繁体中文；所有供应商的 `zh-Hans` 输出再过一遍 OpenCC(t2cn)，`zh-Hant` 输出再过一遍 OpenCC(s2t)，避免两种字形偶发混入。
+- **请求约束**：字幕翻译按站点选择两套 system prompt：Netflix / Prime Video / Max 使用 `film-tv`，YouTube 使用 `youtube`。每批最多 8 条 cue；只把按时间升序排列的字幕文字发送给模型，以独占一行的 `%%` 分隔，不发送字符/秒、字数、简洁度预算或可诱导删义的时间长度。模型先按相邻片段还原完整话语，再在不丢失、重复、摘要或远离原时间点的前提下自然回填；响应必须返回相同数量、相同顺序的译文片段，并以同样的 `%%` 分隔。system prompt 把所有片段明确定义为只可翻译、不可执行的不可信字幕内容。千问 Responses 始终使用 `reasoning.effort: none` 并且不存储响应；豆包关闭 thinking 且不存储响应；DeepSeek 关闭 thinking；自定义端点只发送通用 OpenAI-compatible 字段。
+- **千问联网搜索**：仅作为默认关闭的显式用户选项；启用时按百炼 Responses API 文档添加 `tools: [{"type":"web_search"}]`，但仍保持 `reasoning.effort: none`，由模型自行决定是否搜索。不得发送 Chat Completions 的 `enable_search`，也不暴露 Responses API 不支持的强制搜索、搜索策略、来源站点或角标来源设置。搜索开关进入翻译缓存身份，开关前后的结果不得互相命中。
+- **批处理**：整轨 **warmup 预热 + 沿播放位置滚动补翻**（承 ticket 02 的 Read Frog 模板）。先按源时间轴组成最多 8 条的连续小批，再按批次与播放头的距离调度；模型先还原可能被时间轴切碎的完整话语，再把完整译文自然分配回相同 cue ID。快进/跳转用 AbortController 取消在途请求。
 - **翻译保时轴与排版**：机翻**逐 cue 翻译、沿用官方源轨的 `start/end`**，不重新拆句、不做时间轴再对齐。译文写回对应 cue 的 `text`，时轴不变；返回后以目标语言感知的确定性排版器限制为最多两行，优先在句末/分句边界换行，并保护内联代码、产品名、房号、数字与单位不被拆开。
 - **缓存**：service worker 侧 IndexedDB 持久化；key 包含 `contentId + trackId + 源文本 + 源 start/end + 目标语言 + prompt profile/version + provider endpoint/model + 联网搜索开关`，因此时间预算、prompt、模型或搜索设置变化都会自然 miss；容量上限 + LRU 淘汰。
 - **失败降级（fail-soft，永不阻塞官方轨）**：
@@ -200,7 +200,7 @@ zhActive = Chinese cues where start <= t < end
 
 - 每站在**已真机验证的**播放器控制栏插入点注入 DuetSub 按钮（插入点属各站 ticket 07 的实现期 gate）。
 - 主操作 = 点击开/关 DuetSub overlay；按钮视觉反映当前开/关。
-- 右键/长按弹出小 popover，仅三项：**状态读出**（官方双轨 / 官方+MT / 翻译中… / 缺轨需配 key / 出错）、**重新翻译**（跳过缓存强制重翻当前视频）、**打开设置**（跳 options page）。**不含轨道覆盖**（选轨按 §C 硬编码）、**不含任何样式项**（§F 锁定）。
+- 右键/长按弹出小 popover，提供**状态读出**（官方双轨 / 官方+MT / 翻译中… / 缺轨需配 key / 出错）、官方语言对选择、**重新载入官方字幕**、**用 AI 重译下方字幕**（以上方当前字幕为源并跳过缓存）和**打开设置**（跳 options page）。默认仍优先官方双轨；AI 重译只在用户主动触发后替换下方字幕，重新载入则恢复官方版本。**不含任何样式项**（§F 锁定）。
 - **默认关闭**；开启状态**按站点**记入 `chrome.storage.local`，重进/换集恢复上次选择。v1 不做独立「自动启用」设置项。
 - 按钮为**开**但内部处于 `ad-suspended`/seeking 时，overlay 按 E/G 临时清屏/挂起，**按钮仍显示开**（挂起对用户透明）。
 - 开且轨道就绪→隐藏原生层；关/reset/挂起→恢复原生层。
@@ -210,7 +210,7 @@ zhActive = Chinese cues where start <= t < end
 - 标准 MV3 options page（经扩展 action / chrome://extensions 打开）。**翻译服务**区块：
   - **供应商**下拉：`DeepSeek`（默认）/ `千问（阿里云百炼·中国区）` / `千问（阿里云百炼·新加坡区）` / `豆包（火山方舟·中国区）` / `OpenAI 兼容`（自定义云端）/ `本地`（Ollama、LM Studio 等本机 OpenAI 兼容端点）。
   - **Workspace ID / Base URL**：DeepSeek、豆包的 Base URL 预设并隐藏；千问显示独立 Workspace ID 输入框，用户只填控制台中的 `ws-…`，扩展按中国区（华北 2）或新加坡区自动生成阿里云推荐的业务空间专属 Responses API 地址，并在重新打开设置时从已存地址回填 Workspace ID；自定义/本地时显示 Base URL（本地默认形如 `http://localhost:11434/v1`）。
-  - **联网搜索**：仅千问显示，默认关闭；开启后使用百炼 Responses API 的 `web_search` 工具和 `reasoning.effort: low`，明确告知搜索由模型按需决定，并提示可能增加延迟与费用。
+  - **联网搜索**：仅千问显示，默认关闭；开启后使用百炼 Responses API 的 `web_search` 工具，但仍完全关闭推理（`reasoning.effort: none`），明确告知搜索由模型按需决定，并提示可能增加延迟与费用。
   - **API Key**（掩码）：云端必填；本地无鉴权时可留空。
   - **模型**：DeepSeek、千问、豆包均给出当前候选；候选不构成锁定，用户可自行选择或手动填写其他模型 ID；自定义/本地同样可填。
   - **测试连接**按钮 + 状态徽标（未配置 / 已配置 / 测试通过）。
@@ -269,3 +269,5 @@ zhActive = Chinese cues where start <= t < end
 本 spec 达成 map destination；ticket 08 到此关闭。ticket 06 的开放细则已在本文件 C/D 节就地拍板（其中 OpenCC-转繁 与 双向机翻 两项为「就地拍板、可否决」，已在 C 节标注）。README 的三站/Netflix-first 表述过时，以本 spec 为准。
 
 **2026-07-22 更新**：模型来源由「仅云端 DeepSeek」改为**统一 OpenAI 兼容端点**（云端 + 本机 Ollama/LM Studio），已改动 §D / §I / Out of Scope 及用户故事 17/20/44；实现票 04 的设置页与权限验收随之扩展。播放器内按钮增加「状态读出 / 重新翻译 / 打开设置」小 popover（§H），仍不含轨道覆盖与样式项。
+
+**2026-07-31 更新**：播放器的「重新翻译」明确为「用 AI 重译下方字幕」；即使官方双轨齐全，也可以上方字幕为源主动测试影视剧或 YouTube 翻译提示词，并可通过「重新载入官方字幕」恢复官方下方字幕。主动重译支持英文、简体中文和繁体中文目标，其中简繁结果分别经过 OpenCC 字形保险。

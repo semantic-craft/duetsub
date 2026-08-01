@@ -62,6 +62,49 @@ Netflix's live manifest fast path and a naturally occurring YouTube one-time
 re-prime were **NOT RUN** on the final candidate and are not reported as PASS or
 WAIVED. **Environmental WAIVED: none.**
 
+## `v0.1.8` release candidate
+
+- **PASS — automated release archive:** `npm run release:build` passed 50 test
+  files / 240 tests with one opt-in live suite skipped, TypeScript checking,
+  Chrome MV3 packaging, stable-ID verification, archive-content checks, and the
+  least-privilege host boundary. SHA-256:
+  `c0fd9a39cd936fcb87fced065f600535abd4a72bcab4446732a79ccf9fabde9f`.
+- **PASS — automated store archive:** `npm run store:build` passed the same
+  behavior and type gates. The 25-file store package omits `manifest.key` and
+  retains the least-privilege host boundary. SHA-256:
+  `5fc02842dc7389439cbd3f223b4d4eade56e1af968e1f9ae5b5a6e16d043a759`.
+- **PASS — dependency and diff checks:** `npm audit --omit=dev` reported zero
+  vulnerabilities and `git diff --check` passed.
+- **PASS — live YouTube Simplified Chinese round trip:** the unpacked
+  `.output/chrome-mv3-store` build was reloaded in Chrome and the logged-in
+  video `https://www.youtube.com/watch?v=iQyg-KypKAA` was reloaded. The title
+  exposed a creator-provided English track but no official Simplified Chinese
+  track. DuetSub retained the official English top track and reported
+  `上方官方字幕已就绪 · 可用 AI 重译下方字幕`.
+- **PASS — live Qwen Workspace Responses API through the product UI:** the
+  explicit `用 AI 重译下方字幕` action used the locally configured Qwen China
+  Workspace Responses endpoint and `qwen3.7-flash`. At approximately `21:48`,
+  the overlay showed the official English top cue, an MT-marked Simplified
+  Chinese bottom cue containing Simplified forms such as `电脑`, and status
+  `官方字幕 + MT · 翻译中…`. No key or endpoint-permission error appeared.
+  Runtime source did not change after this run; the final archives above were
+  regenerated after documentation-only edits.
+- **PASS — official-subtitle restoration:** selecting
+  `重新加载官方字幕` removed the AI bottom line, cancelled the pending manual
+  translation work, preserved the official English top cue, and returned to
+  `上方官方字幕已就绪 · 可用 AI 重译下方字幕`. Because this video has no
+  official Simplified Chinese track, restoration correctly produced one
+  official top line rather than claiming an official pair.
+- **NOT RUN — full-video and cross-player feature replay:** the first
+  playback-local Qwen result was inspected, but the `45:45` video was not
+  translated to completion and the new manual action was not replayed on
+  Netflix, Prime Video, or Max. This run therefore establishes live
+  availability, Simplified-script output, MT marking, and restoration—not a
+  full-film semantic-quality or all-player gate.
+- **NOT RUN — Chrome Web Store dashboard and GitHub Release:** both verified
+  archives were built locally; no dashboard upload, tag, or public release was
+  created in this run.
+
 ## `v0.1.7` release candidate
 
 - **PASS — real Qwen Workspace Responses API:** the opt-in live suite made

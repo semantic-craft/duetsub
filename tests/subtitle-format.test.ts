@@ -13,6 +13,16 @@ describe('subtitle translation formatting', () => {
     ).toBe('雷耶斯醫生，237號房。\n十點半。別遲到。');
   });
 
+  it('keeps a Chinese modal word together when wrapping an address report', () => {
+    expect(
+      formatSubtitleTranslation(
+        '蒂芬妮圓環455號可能有一輛失竊車輛。',
+        'film-tv',
+        'zh-Hant',
+      ),
+    ).toBe('蒂芬妮圓環455號\n可能有一輛失竊車輛。');
+  });
+
   it('wraps English on whitespace without changing words', () => {
     expect(
       formatSubtitleTranslation(

@@ -34,7 +34,7 @@ describe('translation config', () => {
       baseUrl:
         'https://YOUR_WORKSPACE_ID.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
       apiKey: '',
-      model: 'qwen3.7-flash',
+      model: 'qwen3.7-plus',
       webSearchEnabled: false,
     });
     expect(translationRequestUrl(QWEN_CN_TRANSLATION_CONFIG)).toBe(
@@ -45,7 +45,7 @@ describe('translation config', () => {
       baseUrl:
         'https://YOUR_WORKSPACE_ID.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1',
       apiKey: '',
-      model: 'qwen3.7-flash',
+      model: 'qwen3.7-plus',
       webSearchEnabled: false,
     });
     expect(translationRequestUrl(QWEN_SG_TRANSLATION_CONFIG)).toBe(
