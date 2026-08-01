@@ -22,6 +22,31 @@ Run `npm run release:build`. It must pass:
 
 The command output for the release commit is the authoritative count; this document does not freeze a stale test total.
 
+## `v0.2.0` release candidate
+
+- **PASS — automated release archive:** `npm run release:build` passed 56 test
+  files / 282 tests with one opt-in live suite skipped, TypeScript checking,
+  Chrome MV3 packaging, stable-ID verification, archive-content checks, and the
+  least-privilege host boundary. The 27-file archive SHA-256 is
+  `3eb40d08bde536fa58cf6def3210879e5d8d00a598fb134df8a8c0ab809c8b7f`.
+- **PASS — automated store archive:** `npm run store:build` passed the same
+  behavior and type gates. The 27-file Store package omits `manifest.key`, uses
+  the Store-assigned identity boundary, and has SHA-256
+  `d2b90332116f165df068066b90752473c6d7ec541e217fe2d085ffc9d6db8d46`.
+- **PASS — dependency and diff checks:** `npm audit --omit=dev` reported zero
+  vulnerabilities and `git diff --check` passed.
+- **PASS — source-equivalent logged-in Disney+ gates:** the runtime source in
+  the `0.2.0` archives is unchanged from the logged-in Disney+ candidate below;
+  the subsequent changes only set the release version and update bilingual
+  release/store text. Official pairing, same-frame timing, native-layer
+  restoration, control placement, live MT output, and official restoration all
+  passed on that runtime candidate.
+- **NOT RUN — exact `0.2.0` archive playback replay:** the version-only packaged
+  candidate was not reloaded for a redundant playback replay; it is not counted
+  as an exact-archive human gate.
+- **PENDING — GitHub Release and Chrome Web Store:** the verified archives are
+  ready for the `v0.2.0` tag and the existing Store item's update submission.
+
 ## Disney+ integration candidate
 
 - **PASS — native control placement:** on the logged-in Disney+ player, the

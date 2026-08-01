@@ -52,7 +52,7 @@ The settings interface is available in English, Simplified Chinese, and Traditio
 
 ## Install from GitHub
 
-1. Download `duetsub-0.1.8-chrome.zip` from the [latest release](https://github.com/semantic-craft/duetsub/releases/latest).
+1. Download `duetsub-0.2.0-chrome.zip` from the [latest release](https://github.com/semantic-craft/duetsub/releases/latest).
 2. Unzip it to a permanent folder.
 3. Open `chrome://extensions`, enable **Developer mode**, and choose **Load unpacked**.
 4. Select the unzipped folder.
@@ -69,7 +69,7 @@ The Chrome Web Store package is built separately without `manifest.key`, because
 
 Automated tests cover parsing, track ownership, lifecycle generations, seeking, native-subtitle restoration, translation batching and caching, and release-package invariants.
 
-The Official Language Pair runtime candidate `fa0989e` passed logged-in playback gates on Prime Video, Netflix, Max, and YouTube from one byte-identical unpacked build. The integrated `main` build separately passed the full automated release and Store-package gates.
+The `0.2.0` candidate passed logged-in Disney+ playback gates for official bilingual subtitles, explicit Qwen-backed machine retranslation, seeking, native-subtitle restoration, and in-player control placement. The earlier official-language-pair candidate passed the corresponding logged-in gates on Prime Video, Netflix, Max, and YouTube. The integrated build separately passed the full automated release and Store-package gates.
 
 See [docs/VERIFICATION.md](docs/VERIFICATION.md) for the evidence ledger.
 

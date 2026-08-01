@@ -117,6 +117,41 @@ DuetSub 可以：
 
 DuetSub 只使用目前登入帳號原本就能存取的字幕軌。它不會下載影片、繞過 DRM、解鎖地區限制字幕、執行遠端程式碼或收集行為分析資料。
 
+## Version 0.2.0 update notes / 版本 0.2.0 更新说明
+
+### English
+
+- Adds Disney+ official bilingual subtitles from the complete subtitle catalog available to the signed-in viewer.
+- Places the DuetSub controls inside the Disney+ player, immediately before mute.
+- Keeps one subtitle renderer visible: DuetSub hides Disney's native captions only while enabled and restores them when disabled.
+- Uses Disney's whole-program clock and a continuous timeline across HLS discontinuities and subtitle PTS resets.
+- Supports the explicit **Use AI to retranslate bottom subtitles** action on Disney+, including an MT marker and **Reload official subtitles** restoration.
+- Includes the subtitle-aware Qwen translation upgrade for film/TV scene context, complete meaning, character voice, and up to eight adjacent cues.
+- Defaults new Qwen configurations to `qwen3.7-plus`, preserves existing saved model choices, and keeps reasoning disabled.
+- Official subtitles remain the default; AI translation runs only after an explicit user action or when an authorized fallback is required.
+
+### 简体中文
+
+- 新增 Disney+ 官方双语字幕，使用当前登录账号可访问的完整官方字幕目录。
+- DuetSub 控件嵌入 Disney+ 播放器右侧功能组，并位于音量按钮之前。
+- 同一时间只显示一套字幕：开启 DuetSub 时隐藏 Disney+ 原生字幕，关闭后恢复。
+- 使用 Disney+ 整部节目的播放时钟，并跨 HLS discontinuity 与字幕 PTS 重置保持连续时间轴。
+- Disney+ 支持主动点击 **“用 AI 重译下方字幕”**，显示 MT 标记，并可通过 **“重新加载官方字幕”** 恢复。
+- 包含面向字幕场景的千问翻译提升：理解影视场景、保留完整语义和人物语气，并结合最多 8 条相邻 cue。
+- 新建千问配置默认使用 `qwen3.7-plus`，保留已有模型选择，并完全关闭推理。
+- 默认仍优先官方字幕；只有用户主动操作或授权的补位确有需要时才会调用 AI。
+
+### 繁體中文
+
+- 新增 Disney+ 官方雙語字幕，使用目前登入帳號可存取的完整官方字幕目錄。
+- DuetSub 控件嵌入 Disney+ 播放器右側功能組，並位於音量按鈕之前。
+- 同一時間只顯示一套字幕：開啟 DuetSub 時隱藏 Disney+ 原生字幕，關閉後恢復。
+- 使用 Disney+ 整部節目的播放時鐘，並跨 HLS discontinuity 與字幕 PTS 重置維持連續時間軸。
+- Disney+ 支援主動點擊 **「用 AI 重譯下方字幕」**，顯示 MT 標記，並可透過 **「重新載入官方字幕」** 恢復。
+- 包含面向字幕場景的千問翻譯提升：理解影視場景、保留完整語意和人物語氣，並結合最多 8 條相鄰 cue。
+- 新建千問設定預設使用 `qwen3.7-plus`，保留已有模型選擇，並完全關閉推理。
+- 預設仍優先官方字幕；只有使用者主動操作或授權的補位確有需要時才會呼叫 AI。
+
 ## Version 0.1.8 update notes / 版本 0.1.8 更新说明
 
 ### English
