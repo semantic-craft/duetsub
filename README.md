@@ -2,13 +2,15 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-### Two subtitles. One screen. Keep the original in view.
+### Keep watching. Keep the original. Understand every scene.
 
 DuetSub is a free and open-source Chrome extension that places two synchronized subtitle languages together on Netflix, Prime Video, Max, Disney+, and YouTube.
 
 It uses official subtitles by default whenever they are available. Choose any two official languages verified for the current title, keep the original beside the language you understand, and switch without leaving the player. AI translation remains optional: it can fill a missing English or Traditional Chinese line, or retranslate the bottom line into English, Simplified Chinese, or Traditional Chinese from the current top subtitles only when you explicitly request it.
 
-[Download the latest release](https://github.com/semantic-craft/duetsub/releases/latest) · [Privacy](PRIVACY.md) · [Verification](docs/VERIFICATION.md)
+[Install from the Chrome Web Store](https://chromewebstore.google.com/detail/gacjhmmjoinbahljhhnbimhdmpafhdkg) · [Download the latest release](https://github.com/semantic-craft/duetsub/releases/latest) · [Privacy](PRIVACY.md) · [Verification](docs/VERIFICATION.md)
+
+If DuetSub makes a show easier to understand, [star the project on GitHub](https://github.com/semantic-craft/duetsub) and help more bilingual viewers discover it.
 
 ## Why DuetSub
 

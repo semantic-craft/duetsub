@@ -8,24 +8,25 @@ DuetSub – Bilingual Subtitles
 
 ### Summary
 
-Official-first bilingual subtitles for Netflix, Prime Video, Max, Disney+, and YouTube.
+Two synchronized subtitle languages, official first, on Netflix, Prime Video, Max, Disney+, and YouTube.
 
 ### Detailed description
 
-Watch in two languages without losing the original.
+Keep watching. Keep the original. Understand every scene.
 
-DuetSub is a free and open-source Chrome extension that places two synchronized subtitle languages on one screen. It uses official subtitles whenever possible and lets you choose any two official languages verified for the current title.
+DuetSub is a free, open-source Chrome extension that places two synchronized subtitle languages on one screen. Choose any two official languages actually available for the current title, then switch, swap, or restore them without leaving the player.
 
-Why DuetSub:
+Why viewers choose DuetSub:
 
-- Choose the top and bottom official subtitle languages inside the player.
-- Swap the two lines or reload official subtitle tracks without leaving the video.
-- Stay synchronized through seeking and in-player episode or video changes.
-- Restore the platform's native subtitle layer when DuetSub is disabled.
-- Use optional AI for a missing English or Traditional Chinese line, or explicitly retranslate the bottom subtitles into English, Simplified Chinese, or Traditional Chinese from the current top subtitles.
-- Keep control of the translation endpoint and API key.
+- **Two official tracks, one screen.** Keep the original beside the language you understand instead of replacing it.
+- **Controls where you need them.** Choose the top and bottom languages, swap their positions, or reload official tracks inside the player.
+- **Built for real playback.** Subtitles stay aligned through seeking and in-player episode or video changes; disabling DuetSub restores the platform's native captions.
+- **AI only when you ask.** Official subtitles remain the default. Use AI only to fill an authorized missing line or explicitly retranslate the bottom line into English, Simplified Chinese, or Traditional Chinese.
+- **Translation that follows the scene.** The Qwen subtitle prompt uses film/TV context, complete dialogue meaning, character voice, and adjacent cues instead of translating isolated fragments.
+- **Your provider, your key.** Choose DeepSeek, Qwen through Alibaba Cloud Model Studio, Doubao through Volcengine Ark, another OpenAI-compatible HTTPS service, or local Ollama / LM Studio.
+- **Private by design.** No DuetSub cloud, subscription, analytics, video download, DRM bypass, or remote code execution.
 
-Optional AI translation supports DeepSeek, Qwen through Alibaba Cloud Model Studio, Doubao through Volcengine Ark, other OpenAI-compatible HTTPS services, and local Ollama or LM Studio endpoints. Two available official tracks do not contact a translation service by default; only the explicit **Use AI to retranslate bottom subtitles** action overrides the official bottom line. The saved bottom-language preference selects English, Simplified Chinese, or Traditional Chinese. **Reload official subtitles** restores the official subtitles.
+Two available official tracks do not contact a translation service. Only the explicit **Use AI to retranslate bottom subtitles** action replaces the bottom official line; **Reload official subtitles** restores it.
 
 Supported players:
 
@@ -39,6 +40,13 @@ The interface is available in English, Simplified Chinese, and Traditional Chine
 
 DuetSub uses only subtitle tracks available to the signed-in viewer. It does not download video, bypass DRM, unlock region-restricted tracks, execute remote code, or collect analytics.
 
+DuetSub is open source. Read the code, follow releases, or report an issue:
+https://github.com/semantic-craft/duetsub
+
+If DuetSub makes a show easier to understand, star the project on GitHub and help more bilingual viewers discover it.
+
+DuetSub is an independent project and is not affiliated with or endorsed by the supported streaming services.
+
 ## 简体中文
 
 ### 产品名称
@@ -47,24 +55,25 @@ DuetSub · 双语同幕
 
 ### 简短说明
 
-官方字幕优先的双语字幕工具，支持 Netflix、Prime Video、Max、Disney+ 和 YouTube。
+两种同步字幕，官方优先；支持 Netflix、Prime Video、Max、Disney+ 和 YouTube。
 
 ### 详细说明
 
-两种字幕，同一画面；理解内容，也保留原文。
+继续看，也保留原文；看懂剧情，不错过语气。
 
-DuetSub 是一款免费、开源的 Chrome 扩展，可在同一画面同步显示两种字幕。有官方字幕时永远优先使用官方字幕，并允许你从当前节目真实提供的语言中任选两种。
+DuetSub 是一款免费、开源的 Chrome 扩展，可在同一画面同步显示两种字幕。你可以从当前节目真实提供的官方字幕中任选两种，并直接在播放器内切换、交换或恢复。
 
-DuetSub 可以：
+为什么选择 DuetSub：
 
-- 直接在播放器内选择上方和下方的官方字幕语言；
-- 一键交换上下位置或重新载入官方字幕；
-- 在拖动进度和站内换集、换视频后继续保持同步；
-- 关闭时恢复平台原生字幕；
-- 在英文或繁体中文字幕缺失时使用可选 AI 补位，也可主动以上方字幕为源，把下方字幕重译为英文、简体中文或繁体中文；
-- 由用户自己控制翻译端点和 API key。
+- **两条官方字幕，同一画面。** 原文和熟悉的语言并排出现，不必为了看懂而放弃原文。
+- **控件就在播放器里。** 选择上下字幕、一键交换位置或重新加载官方字幕，无须离开视频。
+- **为真实播放而设计。** 拖动进度、站内换集或换视频后继续保持同步；关闭 DuetSub 即恢复平台原生字幕。
+- **只有你主动要求，才使用 AI。** 默认始终优先官方字幕；仅在授权补位确有需要，或你主动重译下方字幕时调用 AI。
+- **翻译理解上下文。** 千问字幕提示词结合影视场景、完整台词语义、人物语气和相邻字幕，避免逐条孤立硬译。
+- **服务和密钥都由你掌控。** 支持 DeepSeek、阿里云百炼千问、火山方舟豆包、其他 OpenAI 兼容 HTTPS 服务，以及本机 Ollama / LM Studio。
+- **隐私边界清楚。** 没有 DuetSub 云服务、订阅收费、行为分析、视频下载、DRM 绕过或远程代码执行。
 
-可选 AI 翻译支持 DeepSeek、阿里云百炼千问、火山方舟豆包、其他 OpenAI 兼容 HTTPS 服务，以及本机 Ollama / LM Studio。两条官方字幕可用时默认不会连接翻译服务；只有主动点击“用 AI 重译下方字幕”才会替换官方下方字幕，并按已保存的下方语言偏好生成英文、简体中文或繁体中文。点击“重新加载官方字幕”即可恢复官方字幕。
+两条官方字幕都可用时，DuetSub 不会连接翻译服务。只有主动点击 **“用 AI 重译下方字幕”** 才会替换官方下方字幕；点击 **“重新加载官方字幕”** 即可恢复。
 
 支持：
 
@@ -78,6 +87,13 @@ DuetSub 可以：
 
 DuetSub 只使用当前登录账号本来就能访问的字幕轨。它不会下载视频、绕过 DRM、解锁地区限制字幕、执行远程代码或收集行为分析数据。
 
+DuetSub 完全开源。查看源码、关注更新或反馈问题：
+https://github.com/semantic-craft/duetsub
+
+如果 DuetSub 让你更轻松地看懂一部作品，欢迎在 GitHub 为项目加星，让更多需要双语字幕的人找到它。
+
+DuetSub 是独立项目，与上述流媒体平台不存在隶属或官方合作关系。
+
 ## 繁體中文
 
 ### 產品名稱
@@ -86,24 +102,25 @@ DuetSub · 雙語同幕
 
 ### 簡短說明
 
-官方字幕優先的雙語字幕工具，支援 Netflix、Prime Video、Max、Disney+ 和 YouTube。
+兩種同步字幕，官方優先；支援 Netflix、Prime Video、Max、Disney+ 和 YouTube。
 
 ### 詳細說明
 
-兩種字幕，同一畫面；理解內容，也保留原文。
+繼續看，也保留原文；看懂劇情，不錯過語氣。
 
-DuetSub 是一款免費、開源的 Chrome 擴充功能，可在同一畫面同步顯示兩種字幕。有官方字幕時永遠優先使用官方字幕，並允許你從目前節目實際提供的語言中任選兩種。
+DuetSub 是一款免費、開源的 Chrome 擴充功能，可在同一畫面同步顯示兩種字幕。你可以從目前節目實際提供的官方字幕中任選兩種，並直接在播放器內切換、交換或恢復。
 
-DuetSub 可以：
+為什麼選擇 DuetSub：
 
-- 直接在播放器內選擇上方和下方的官方字幕語言；
-- 一鍵交換上下位置或重新載入官方字幕；
-- 在拖曳進度和站內換集、換影片後繼續保持同步；
-- 關閉時恢復平台原生字幕；
-- 在英文或繁體中文字幕缺少時使用可選 AI 補位，也可主動以上方字幕為來源，把下方字幕重譯為英文、簡體中文或繁體中文；
-- 由使用者自行控制翻譯端點和 API key。
+- **兩條官方字幕，同一畫面。** 原文和熟悉的語言並排出現，不必為了看懂而放棄原文。
+- **控件就在播放器裡。** 選擇上下字幕、一鍵交換位置或重新載入官方字幕，無須離開影片。
+- **為真實播放而設計。** 拖曳進度、站內換集或換影片後繼續維持同步；關閉 DuetSub 即恢復平台原生字幕。
+- **只有你主動要求，才使用 AI。** 預設始終優先官方字幕；僅在授權補位確有需要，或你主動重譯下方字幕時呼叫 AI。
+- **翻譯理解上下文。** 千問字幕提示詞結合影視場景、完整台詞語意、人物語氣和相鄰字幕，避免逐條孤立硬譯。
+- **服務和金鑰都由你掌控。** 支援 DeepSeek、阿里雲百煉千問、火山方舟豆包、其他 OpenAI 相容 HTTPS 服務，以及本機 Ollama / LM Studio。
+- **隱私邊界清楚。** 沒有 DuetSub 雲端服務、訂閱收費、行為分析、影片下載、DRM 繞過或遠端程式碼執行。
 
-可選 AI 翻譯支援 DeepSeek、阿里雲百煉千問、火山方舟豆包、其他 OpenAI 相容 HTTPS 服務，以及本機 Ollama / LM Studio。兩條官方字幕可用時預設不會連接翻譯服務；只有主動點擊「用 AI 重譯下方字幕」才會替換官方下方字幕，並依已儲存的下方語言偏好產生英文、簡體中文或繁體中文。點擊「重新載入官方字幕」即可恢復官方字幕。
+兩條官方字幕都可用時，DuetSub 不會連接翻譯服務。只有主動點擊 **「用 AI 重譯下方字幕」** 才會替換官方下方字幕；點擊 **「重新載入官方字幕」** 即可恢復。
 
 支援：
 
@@ -116,6 +133,13 @@ DuetSub 可以：
 介面支援簡體中文、繁體中文和英文。
 
 DuetSub 只使用目前登入帳號原本就能存取的字幕軌。它不會下載影片、繞過 DRM、解鎖地區限制字幕、執行遠端程式碼或收集行為分析資料。
+
+DuetSub 完全開源。查看原始碼、關注更新或回報問題：
+https://github.com/semantic-craft/duetsub
+
+如果 DuetSub 讓你更輕鬆地看懂一部作品，歡迎在 GitHub 為專案加星，讓更多需要雙語字幕的人找到它。
+
+DuetSub 是獨立專案，與上述串流平台不存在隸屬或官方合作關係。
 
 ## Version 0.2.0 update notes / 版本 0.2.0 更新说明
 
