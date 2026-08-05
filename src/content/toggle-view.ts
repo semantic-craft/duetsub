@@ -92,9 +92,9 @@ export function createToggleView(
   const languageButton = document.createElement('button');
   languageButton.className = 'language-menu-trigger';
   languageButton.type = 'button';
-  languageButton.title = '選擇字幕語言';
-  languageButton.textContent = '語言';
-  languageButton.setAttribute('aria-label', '選擇 DuetSub 字幕語言');
+  languageButton.title = '字幕選項';
+  languageButton.textContent = '選項';
+  languageButton.setAttribute('aria-label', '打開 DuetSub 字幕選項');
   languageButton.setAttribute('aria-haspopup', 'menu');
   languageButton.setAttribute('aria-controls', popover.id);
   languageButton.setAttribute('aria-expanded', 'false');

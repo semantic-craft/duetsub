@@ -35,6 +35,9 @@ describe('interface language', () => {
 
   it('translates settings, player controls, and runtime feedback in all three languages', () => {
     expect(translate('zh-Hans', 'options.interfaceLanguage')).toBe('界面语言');
+    expect(translate('zh-Hans', 'toggle.language')).toBe('选项');
+    expect(translate('zh-Hant', 'toggle.language')).toBe('選項');
+    expect(translate('en', 'toggle.language')).toBe('Options');
     expect(translate('zh-Hant', 'toggle.openSettings')).toBe('打開設定');
     expect(translate('en', 'status.waitingContent', { site: 'Netflix' }))
       .toBe('On · waiting for a verified Netflix title');
