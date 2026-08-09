@@ -16,11 +16,14 @@ Files ending in `-raw` and files containing `debug`, `before`, or `after-build-l
 
 Chrome Web Store upload set (all exactly 1280 × 800):
 
-1. `store-ready/01-settings-language-pair-1280x800.png`
-2. `store-ready/02-activate-and-ready-100-1280x800.png`
-3. `store-ready/03-prime-video-dual-subtitles-1280x800.png`
-4. `store-ready/04-netflix-max-dual-subtitles-1280x800.png`
-5. `store-ready/05-youtube-dual-subtitles-1280x800.png`
+1. `store-ready/00-setup-and-ready-1280x800.png` — settings first, then
+   player activation and the verified 100% chooser state.
+2. `store-ready/03-prime-video-dual-subtitles-1280x800.png`
+3. `store-ready/04-netflix-max-dual-subtitles-1280x800.png`
+4. `store-ready/05-youtube-dual-subtitles-1280x800.png`
+5. `store-assets/screenshot-player-1280x800.png` — retained from the existing
+   public listing.
 
-The Netflix and Max proof is combined into one listing image so the five-image
-Store limit can also show both setup steps and the Prime Video-first result.
+The setup and activation states share one image, and Netflix and Max share one
+image, so the five-image Store limit can preserve the existing illustration
+while leading with the real workflow and Prime Video-first result.

@@ -48,19 +48,27 @@ The command output for the release commit is the authoritative count; this docum
   fade, or clip their contents. The final portal build was rechecked in
   logged-in YouTube playback at the 100% chooser state.
 - **PASS — public screenshot set:** the checked-in evidence records the setup
-  page, activation/100% workflow, and real bilingual rendering on Prime Video,
-  Netflix, Max, and YouTube. All five Store upload images are exactly
-  1280 x 800. Diagnostic, before-fix, and raw captures are excluded from the
-  upload set.
+  page and activation/100% workflow in one composite, followed by real
+  bilingual rendering on Prime Video, Netflix/Max, and YouTube. The fifth slot
+  retains the existing illustrated bilingual-player image. All five uploaded
+  Store images are exactly 1280 x 800. Diagnostic, before-fix, and raw captures
+  are excluded from the upload set.
 - **NOT RUN — fresh Disney+ screenshot:** the current network redirected the
   site to `/welcome/unavailable`; no new Disney+ success image is claimed.
   Disney+ support remains covered by the `0.2.0` integration evidence below.
 - **NOT RUN — exact `0.2.1` archive playback replay:** the version-only packaged
   candidate was not reloaded for a redundant playback replay; this is not
   counted as an exact-archive human gate.
-- **NOT RUN — GitHub Release and Chrome Web Store submission:** the verified
-  archives were prepared locally; tag creation, GitHub Release creation,
-  dashboard upload, and review submission remain subsequent publication gates.
+- **PENDING — Chrome Web Store review:** the exact verified Store archive was
+  uploaded to item `gacjhmmjoinbahljhhnbimhdmpafhdkg` as draft version
+  `0.2.1`. The five global screenshots were saved in the order documented in
+  the evidence README, and the English, Simplified Chinese, and Traditional
+  Chinese descriptions were updated with the `0.2.1` notes. The dashboard
+  accepted the submission on August 9, 2026 and reports **Pending review**, with
+  automatic publication selected after approval. The currently published
+  version remains `0.2.0` until the review passes.
+- **NOT RUN — GitHub Release:** tag `v0.2.1` and its GitHub Release remain the
+  final publication gate.
 
 ## `v0.2.0` release candidate
 
