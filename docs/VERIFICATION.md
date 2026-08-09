@@ -67,8 +67,14 @@ The command output for the release commit is the authoritative count; this docum
   accepted the submission on August 9, 2026 and reports **Pending review**, with
   automatic publication selected after approval. The currently published
   version remains `0.2.0` until the review passes.
-- **NOT RUN — GitHub Release:** tag `v0.2.1` and its GitHub Release remain the
-  final publication gate.
+- **PASS — GitHub Release:** annotated tag `v0.2.1` points to commit
+  `fc4996b53c7db47a2016cd11f234e0d455f89f82`. Release workflow run
+  `31321987150` repeated the automated gate successfully and published the
+  non-draft, non-prerelease GitHub Release. The downloadable
+  `duetsub-0.2.1-chrome.zip` has GitHub digest
+  `45573f7783b579822ef8e285f400e0afd3e0b4b836e534a930c2b742c745b54f`;
+  its extracted file tree is byte-identical to the locally verified standalone
+  archive (the ZIP container digest differs because the workflow rebuilt it).
 
 ## `v0.2.0` release candidate
 
