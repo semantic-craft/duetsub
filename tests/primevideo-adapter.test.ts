@@ -53,7 +53,7 @@ describe('Prime official subtitle metadata', () => {
         }
         if (
           selector ===
-          'div[id^="dv-web-player"].dv-player-fullscreen button[aria-label="Subtitles and Audio Menu"]'
+          '#atvwebplayersdk-captions-toggle-button'
         ) {
           return button;
         }
@@ -90,7 +90,7 @@ describe('Prime official subtitle metadata', () => {
         }
         if (
           selector ===
-          'div[id^="dv-web-player"].dv-player-fullscreen button[aria-label="Subtitles and Audio Menu"]'
+          '#atvwebplayersdk-captions-toggle-button'
         ) {
           return button;
         }
@@ -144,7 +144,7 @@ describe('Prime official subtitle metadata', () => {
         }
         if (
           selector ===
-          'div[id^="dv-web-player"].dv-player-fullscreen button[aria-label="Subtitles and Audio Menu"]'
+          '#atvwebplayersdk-captions-toggle-button'
         ) {
           return button;
         }
@@ -190,7 +190,7 @@ describe('Prime official subtitle metadata', () => {
         }
         if (
           selector ===
-          'div[id^="dv-web-player"].dv-player-fullscreen button[aria-label="Subtitles and Audio Menu"]'
+          '#atvwebplayersdk-captions-toggle-button'
         ) {
           return button;
         }
@@ -248,7 +248,7 @@ describe('Prime official subtitle metadata', () => {
         }
         if (
           selector ===
-          'div[id^="dv-web-player"].dv-player-fullscreen button[aria-label="Subtitles and Audio Menu"]'
+          '#atvwebplayersdk-captions-toggle-button'
         ) {
           return button;
         }

@@ -7,7 +7,7 @@ afterEach(() => {
 });
 
 describe('Prime Video site UI', () => {
-  it('anchors the toggle at the left edge before subtitles and audio', () => {
+  it('anchors beside the localized captions control instead of the bottom-right fallback', () => {
     const player = element();
     const controls = element(player);
     const subtitleWrapper = element(controls);
@@ -15,10 +15,7 @@ describe('Prime Video site UI', () => {
     const video = element(player) as HTMLVideoElement;
 
     player.querySelector = vi.fn((selector: string) => {
-      if (
-        selector ===
-        'button[aria-label="Subtitles and Audio Menu"]'
-      ) {
+      if (selector === '#atvwebplayersdk-captions-toggle-button') {
         return subtitle;
       }
       return null;

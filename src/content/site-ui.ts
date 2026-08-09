@@ -1,6 +1,7 @@
 import type { SiteId } from '../core/contracts';
 import {
   PRIME_PLAYER_SELECTOR,
+  PRIME_SUBTITLE_MENU_BUTTON_SELECTOR,
   PRIME_VIDEO_SELECTOR,
 } from '../core/primevideo-dom';
 import { readNetflixWatchIdentity } from '../adapters/netflix-location';
@@ -212,7 +213,7 @@ function findPrimeVideoControls(player: HTMLElement): {
   readonly toggleBefore?: HTMLElement;
 } {
   const subtitle = player.querySelector<HTMLElement>(
-    'button[aria-label="Subtitles and Audio Menu"]',
+    PRIME_SUBTITLE_MENU_BUTTON_SELECTOR,
   );
   const toggleBefore = subtitle?.parentElement ?? undefined;
   const controls = toggleBefore?.parentElement ?? undefined;
