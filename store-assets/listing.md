@@ -141,6 +141,32 @@ https://github.com/semantic-craft/duetsub
 
 DuetSub 是獨立專案，與上述串流平台不存在隸屬或官方合作關係。
 
+## Version 0.2.1 update notes / 版本 0.2.1 更新说明
+
+### English
+
+- Repairs Prime Video's current settings/subtitle-menu discovery and official-track selection.
+- Prevents Prime Video native captions from overlapping DuetSub: enabling DuetSub leaves one bilingual renderer visible, and disabling it restores the native captions.
+- Keeps the in-player DuetSub options menu visible and clickable when a host player auto-hides, fades, or clips its controls.
+- Preserves the official-first flow: activate DuetSub, wait for the verified track read to reach 100%, then choose English above and Traditional Chinese below.
+- Adds real playback screenshots for setup, Prime Video, Netflix, Max, and YouTube.
+
+### 简体中文
+
+- 修复 Prime Video 当前设置／字幕选单的识别和官方轨道选择。
+- 防止 Prime Video 原生字幕与 DuetSub 重叠：开启时只保留一套双语渲染，关闭后恢复原生字幕。
+- 宿主播放器自动隐藏、淡出或裁切控件时，播放器内 DuetSub 选项菜单仍保持可见并可点击。
+- 保持官方字幕优先流程：激活 DuetSub，等待经验证的轨道读取达到 100%，再选择英文在上、繁体中文在下。
+- 增加设置流程、Prime Video、Netflix、Max 与 YouTube 的真实播放截图。
+
+### 繁體中文
+
+- 修復 Prime Video 目前設定／字幕選單的識別和官方軌道選擇。
+- 防止 Prime Video 原生字幕與 DuetSub 重疊：開啟時只保留一套雙語渲染，關閉後恢復原生字幕。
+- 宿主播放器自動隱藏、淡出或裁切控件時，播放器內 DuetSub 選項選單仍保持可見並可點擊。
+- 保持官方字幕優先流程：啟用 DuetSub，等待經驗證的軌道讀取達到 100%，再選擇英文在上、繁體中文在下。
+- 增加設定流程、Prime Video、Netflix、Max 與 YouTube 的真實播放截圖。
+
 ## Version 0.2.0 update notes / 版本 0.2.0 更新说明
 
 ### English

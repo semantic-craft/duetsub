@@ -13,6 +13,7 @@ import {
   requestFakeData,
   requestPrimeCachedTtml,
   requestPrimeTimelineOffset,
+  selectPrimeTrack,
   youtubeCaptionsMessage,
   youtubePlayerCommand,
   youtubePlayerCommandResult,
@@ -115,6 +116,34 @@ describe('Prime MAIN to ISOLATED messages', () => {
       isDuetSubMessage({
         ...request,
         generation: { ...generation, contentGeneration: -1 },
+      }),
+    ).toBe(false);
+  });
+
+  it('validates Prime MAIN-world track selection ownership', () => {
+    const generation = {
+      contentGeneration: 4,
+      clockGeneration: 7,
+      selectionGeneration: 2,
+    };
+    const request = selectPrimeTrack(
+      'select-track',
+      'zh-hant_Subtitle_Dialog',
+      {
+        requestId: 'observe-track',
+        trackId: 'zh-hant_Subtitle_Dialog',
+        generation,
+      },
+    );
+
+    expect(isDuetSubMessage(request)).toBe(true);
+    expect(
+      isDuetSubMessage({
+        ...request,
+        observation: {
+          ...request.observation,
+          trackId: 'en-us_Caption_Dialog',
+        },
       }),
     ).toBe(false);
   });

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { choosePopoverPlacement } from '../src/content/toggle-view';
+import {
+  choosePopoverPlacement,
+  positionPopoverPortal,
+} from '../src/content/toggle-view';
 
 describe('DuetSub language popover placement', () => {
   it('opens downward when a player control is near the top viewport edge', () => {
@@ -37,5 +40,25 @@ describe('DuetSub language popover placement', () => {
         gap: 8,
       }),
     ).toBe('below');
+  });
+
+  it('positions a portaled menu in viewport coordinates above auto-hiding controls', () => {
+    expect(
+      positionPopoverPortal({
+        triggerTop: 700,
+        triggerBottom: 740,
+        triggerRight: 1_314,
+        popoverWidth: 384,
+        popoverHeight: 485,
+        viewportWidth: 1_322,
+        viewportHeight: 768,
+        gap: 8,
+        viewportPadding: 8,
+      }),
+    ).toEqual({
+      placement: 'above',
+      left: 930,
+      top: 207,
+    });
   });
 });

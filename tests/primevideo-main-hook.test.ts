@@ -54,7 +54,13 @@ describe('Prime MAIN-world response observation', () => {
     let messageListener:
       | ((event: MessageEvent<unknown>) => void)
       | undefined;
-    let clickListener: ((event: MouseEvent) => void) | undefined;
+    const selectTrack = vi.fn();
+    const radio = {
+      value: 'en-us_Caption_Dialog',
+      __reactEventHandlers$test: {
+        onClick: selectTrack,
+      },
+    };
 
     vi.stubGlobal('window', {
       fetch: originalFetch,
@@ -71,20 +77,9 @@ describe('Prime MAIN-world response observation', () => {
       },
     });
     vi.stubGlobal('XMLHttpRequest', FakeXmlHttpRequest);
-    vi.stubGlobal('HTMLInputElement', class {
-      static [Symbol.hasInstance](value: unknown): boolean {
-        return typeof (value as { matches?: unknown })?.matches === 'function';
-      }
-    });
     vi.stubGlobal('SourceBuffer', FakeSourceBuffer);
     vi.stubGlobal('MediaSource', FakeMediaSource);
     vi.stubGlobal('document', {
-      addEventListener(
-        type: string,
-        listener: (event: MouseEvent) => void,
-      ) {
-        if (type === 'click') clickListener = listener;
-      },
       querySelector(selector: string) {
         if (
           selector !==
@@ -96,6 +91,12 @@ describe('Prime MAIN-world response observation', () => {
           currentSrc: activeVideoSource,
           src: activeVideoSource,
         };
+      },
+      querySelectorAll(selector: string) {
+        return selector ===
+            'div[id^="dv-web-player"].dv-player-fullscreen input[type="radio"][name="subtitle"]'
+          ? [radio]
+          : [];
       },
     });
     vi.spyOn(URL, 'createObjectURL')
@@ -145,19 +146,24 @@ describe('Prime MAIN-world response observation', () => {
       clockGeneration: 7,
       selectionGeneration: 2,
     };
-    clickListener?.({
-      target: {
-        id: 'en-us_Caption_Dialog',
-        matches: (selector: string) =>
-          selector === 'input[type="radio"][name="subtitle"]',
-        getAttribute: (name: string) =>
-          name === 'data-duetsub-observation-request'
-            ? 'english-observation'
-            : name === 'data-duetsub-observation-generation'
-            ? '4:7:2'
-            : null,
+    messageListener?.({
+      source: window,
+      data: {
+        channel: 'duetsub',
+        version: 1,
+        direction: 'isolated-to-main',
+        type: 'prime-track-selection',
+        siteId: 'primevideo',
+        requestId: 'english-selection',
+        trackId: 'en-us_Caption_Dialog',
+        observation: {
+          requestId: 'english-observation',
+          trackId: 'en-us_Caption_Dialog',
+          generation: observationGeneration,
+        },
       },
-    } as unknown as MouseEvent);
+    } as unknown as MessageEvent<unknown>);
+    expect(selectTrack).toHaveBeenCalledOnce();
 
     await window.fetch(
       new Request(OFF_CAMPUS_TEXT_URL, {

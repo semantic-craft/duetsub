@@ -76,6 +76,14 @@ export interface PrimeCachedTtmlRequestMessage extends MessageEnvelope {
   readonly generation: PlaybackGeneration;
 }
 
+export interface PrimeTrackSelectionMessage extends MessageEnvelope {
+  readonly direction: 'isolated-to-main';
+  readonly type: 'prime-track-selection';
+  readonly siteId: 'primevideo';
+  readonly trackId: string;
+  readonly observation?: PrimeTtmlObservationOwnership;
+}
+
 export interface PrimeTimelineOffsetMessage extends MessageEnvelope {
   readonly direction: 'main-to-isolated';
   readonly type: 'prime-timeline-offset';
@@ -245,6 +253,7 @@ export type IsolatedToMainMessage =
   | RequestFakeDataMessage
   | NetflixTrackRequestMessage
   | PrimeCachedTtmlRequestMessage
+  | PrimeTrackSelectionMessage
   | PrimeTimelineOffsetRequestMessage
   | YoutubePlayerCommandMessage;
 export type DuetSubMessage = MainToIsolatedMessage | IsolatedToMainMessage;
@@ -344,6 +353,23 @@ export function requestPrimeCachedTtml(
     requestId,
     trackId,
     generation,
+  };
+}
+
+export function selectPrimeTrack(
+  requestId: string,
+  trackId: string,
+  observation?: PrimeTtmlObservationOwnership,
+): PrimeTrackSelectionMessage {
+  return {
+    channel: CHANNEL,
+    version: VERSION,
+    direction: 'isolated-to-main',
+    type: 'prime-track-selection',
+    siteId: 'primevideo',
+    requestId,
+    trackId,
+    ...(observation === undefined ? {} : { observation }),
   };
 }
 
@@ -703,6 +729,15 @@ export function isDuetSubMessage(value: unknown): value is DuetSubMessage {
         candidate.siteId === 'primevideo' &&
         isTrackId(candidate.trackId) &&
         isPlaybackGeneration(candidate.generation)
+      );
+    }
+    if (candidate.type === 'prime-track-selection') {
+      return (
+        candidate.siteId === 'primevideo' &&
+        isTrackId(candidate.trackId) &&
+        (candidate.observation === undefined ||
+          (isPrimeTtmlObservationOwnership(candidate.observation) &&
+            candidate.observation.trackId === candidate.trackId))
       );
     }
     if (candidate.type === 'youtube-player-command') {

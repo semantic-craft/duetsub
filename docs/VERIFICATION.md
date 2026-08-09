@@ -1,6 +1,6 @@
 # Verification ledger
 
-Last updated: August 1, 2026
+Last updated: August 9, 2026
 
 Gate labels are strict:
 
@@ -21,6 +21,46 @@ Run `npm run release:build`. It must pass:
 - archive checks excluding source maps, environment files, and private keys.
 
 The command output for the release commit is the authoritative count; this document does not freeze a stale test total.
+
+## `v0.2.1` release candidate
+
+- **PASS — automated release archive:** on the authority checkout,
+  `npm run release:build` passed 56 test files / 284 tests with one opt-in live
+  suite skipped, TypeScript checking, Chrome MV3 packaging, stable-ID
+  verification, archive-content checks, and the least-privilege host boundary.
+  The 27-file archive SHA-256 is
+  `af9b259f03d4011ea94d19eeb41a70f1fd4bb792d6e259ca7473d1e78f05089a`.
+- **PASS — automated store archive:** `npm run store:build` passed the same
+  behavior and type gates. The 27-file Store package omits `manifest.key`, uses
+  the Store-assigned identity boundary, and has SHA-256
+  `54bfd65aa63a8dd9e25542553a579fc32d65790d352e9233b509d3a746cdc11c`.
+- **PASS — dependency and diff checks:** `npm audit --omit=dev` reported zero
+  vulnerabilities and `git diff --check` passed on the authority checkout.
+- **PASS — source-equivalent logged-in Prime Video gates:** the runtime source
+  in the `0.2.1` archives is unchanged from the final logged-in Prime Video
+  candidate apart from the release version. Current settings/subtitle-menu
+  discovery, official-track selection, the 100% chooser state, English /
+  Traditional Chinese rendering, native-caption suppression, and native-layer
+  restoration passed. The overlap failure was reproduced before the fix and
+  absent after loading the final runtime build.
+- **PASS — in-player menu placement:** the options menu is portaled outside the
+  host control subtree and remains visible when native controls auto-hide,
+  fade, or clip their contents. The final portal build was rechecked in
+  logged-in YouTube playback at the 100% chooser state.
+- **PASS — public screenshot set:** the checked-in evidence records the setup
+  page, activation/100% workflow, and real bilingual rendering on Prime Video,
+  Netflix, Max, and YouTube. All five Store upload images are exactly
+  1280 x 800. Diagnostic, before-fix, and raw captures are excluded from the
+  upload set.
+- **NOT RUN — fresh Disney+ screenshot:** the current network redirected the
+  site to `/welcome/unavailable`; no new Disney+ success image is claimed.
+  Disney+ support remains covered by the `0.2.0` integration evidence below.
+- **NOT RUN — exact `0.2.1` archive playback replay:** the version-only packaged
+  candidate was not reloaded for a redundant playback replay; this is not
+  counted as an exact-archive human gate.
+- **NOT RUN — GitHub Release and Chrome Web Store submission:** the verified
+  archives were prepared locally; tag creation, GitHub Release creation,
+  dashboard upload, and review submission remain subsequent publication gates.
 
 ## `v0.2.0` release candidate
 

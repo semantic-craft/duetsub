@@ -26,181 +26,157 @@ function cues(text: string, language: string): Cue[] {
 }
 
 describe('Prime official subtitle metadata', () => {
-  it('reuses a hidden subtitle group without opening the Prime menu', async () => {
+  it('reuses an already-open current subtitle panel', async () => {
+    const label = {
+      innerText: '中文（繁體）',
+      textContent: '中文（繁體）',
+      getClientRects: () => [{}],
+    };
     const radio = {
       checked: true,
-      id: 'zh-hant_Subtitle_Dialog',
+      value: 'zh-hant_Subtitle_Dialog',
+      closest: () => label,
     };
-    const group = {
-      getClientRects: () => [],
+    const player = {
       querySelectorAll: () => [radio],
     };
-    const button = {
+    const settingsButton = {
       click: vi.fn(),
     };
 
     vi.stubGlobal('getComputedStyle', () => ({
-      display: 'none',
+      display: 'flex',
       visibility: 'visible',
     }));
     vi.stubGlobal('document', {
       querySelector: (selector: string) => {
         if (
           selector ===
-          'div[id^="dv-web-player"].dv-player-fullscreen .atvwebplayersdk-subtitle-radio-group'
+          'div[id^="dv-web-player"].dv-player-fullscreen'
         ) {
-          return group;
+          return player;
         }
-        if (
-          selector ===
-          '#atvwebplayersdk-captions-toggle-button'
-        ) {
-          return button;
+        if (selector === '#atvwebplayersdk-settings-button') {
+          return settingsButton;
         }
         return null;
       },
     });
 
-    await expect(getPrimeSubtitleGroupForSwitch()).resolves.toBe(group);
-    expect(button.click).not.toHaveBeenCalled();
+    await expect(getPrimeSubtitleGroupForSwitch()).resolves.toBe(player);
+    expect(settingsButton.click).not.toHaveBeenCalled();
   });
 
-  it('opens a hidden subtitle group before switching the next track', async () => {
-    let open = false;
-    const group = {
-      getClientRects: () => (open ? [{}] : []),
+  it('opens settings and then the current Prime subtitle panel', async () => {
+    let settingsOpen = false;
+    let subtitlesOpen = false;
+    const label = {
+      innerText: 'English\nCC',
+      textContent: 'EnglishCC',
+      getClientRects: () => (subtitlesOpen ? [{}] : []),
     };
-    const button = {
+    const radio = {
+      checked: true,
+      value: 'en-us_Caption_Dialog',
+      closest: () => label,
+    };
+    const player = {
+      querySelectorAll: () => [radio],
+    };
+    const settingsButton = {
       click: vi.fn(() => {
-        open = true;
+        settingsOpen = true;
+      }),
+    };
+    const subtitlesButton = {
+      click: vi.fn(() => {
+        subtitlesOpen = true;
       }),
     };
 
     vi.stubGlobal('getComputedStyle', () => ({
-      display: open ? 'block' : 'none',
+      display: subtitlesOpen ? 'flex' : 'none',
       visibility: 'visible',
     }));
     vi.stubGlobal('document', {
       querySelector: (selector: string) => {
         if (
           selector ===
-          'div[id^="dv-web-player"].dv-player-fullscreen .atvwebplayersdk-subtitle-radio-group'
+          'div[id^="dv-web-player"].dv-player-fullscreen'
         ) {
-          return group;
+          return player;
         }
-        if (
-          selector ===
-          '#atvwebplayersdk-captions-toggle-button'
-        ) {
-          return button;
+        if (selector === '#atvwebplayersdk-settings-button') {
+          return settingsButton;
+        }
+        if (selector === '#atvwebplayersdk-subtitles-button') {
+          return settingsOpen ? subtitlesButton : null;
         }
         return null;
       },
     });
 
-    await expect(ensurePrimeSubtitleMenuOpen()).resolves.toBe(group);
-    expect(button.click).toHaveBeenCalledOnce();
+    await expect(ensurePrimeSubtitleMenuOpen()).resolves.toBe(player);
+    expect(settingsButton.click).toHaveBeenCalledOnce();
+    expect(subtitlesButton.click).toHaveBeenCalledOnce();
   });
 
-  it('verifies restoration against the replacement radio rendered by Prime', async () => {
-    vi.useFakeTimers();
+  it('restores the selected value through the Prime MAIN-world command', async () => {
     let open = true;
-    let currentRadio = {
-      checked: false,
-      id: 'zh-hant_Subtitle_Dialog',
-      click: () => {
-        currentRadio = {
-          checked: true,
-          id: 'zh-hant_Subtitle_Dialog',
-          click: currentRadio.click,
-        };
-        open = false;
-      },
-    };
-    const group = {
+    let selected = 'en-us_Caption_Dialog';
+    const label = {
+      innerText: '中文（繁體）',
+      textContent: '中文（繁體）',
       getClientRects: () => (open ? [{}] : []),
-      querySelectorAll: () => [currentRadio],
     };
-    const button = {
+    const player = {
+      querySelectorAll: () => open
+        ? [{
+            checked: selected === 'zh-hant_Subtitle_Dialog',
+            value: 'zh-hant_Subtitle_Dialog',
+            closest: () => label,
+          }]
+        : [],
+    };
+    const settingsButton = {
       click: vi.fn(() => {
-        open = !open;
+        open = false;
       }),
     };
 
     vi.stubGlobal('window', {
       setTimeout,
-    });
-    vi.stubGlobal('getComputedStyle', () => ({
-      display: open ? 'block' : 'none',
-      visibility: 'visible',
-    }));
-    vi.stubGlobal('document', {
-      querySelector: (selector: string) => {
-        if (
-          selector ===
-          'div[id^="dv-web-player"].dv-player-fullscreen .atvwebplayersdk-subtitle-radio-group'
-        ) {
-          return group;
+      location: { origin: 'https://www.primevideo.com' },
+      postMessage: (message: { type?: string; trackId?: string }) => {
+        if (message.type === 'prime-track-selection') {
+          selected = message.trackId ?? selected;
         }
-        if (
-          selector ===
-          '#atvwebplayersdk-captions-toggle-button'
-        ) {
-          return button;
-        }
-        return null;
       },
     });
-
-    const restored = restorePrimeSubtitleState(
-      currentRadio.id,
-      false,
-    );
-    await vi.advanceTimersByTimeAsync(8_100);
-
-    await expect(restored).resolves.toBe(true);
-  });
-
-  it('accepts a restored final state after a transient menu action fails', async () => {
-    const radio = {
-      checked: true,
-      id: 'zh-hant_Subtitle_Dialog',
-    };
-    const group = {
-      getClientRects: () => [],
-      querySelectorAll: () => [radio],
-    };
-    const button = {
-      click: vi.fn(() => {
-        throw new Error('stale Prime menu action');
-      }),
-    };
-
     vi.stubGlobal('getComputedStyle', () => ({
-      display: 'none',
+      display: open ? 'flex' : 'none',
       visibility: 'visible',
     }));
     vi.stubGlobal('document', {
       querySelector: (selector: string) => {
         if (
           selector ===
-          'div[id^="dv-web-player"].dv-player-fullscreen .atvwebplayersdk-subtitle-radio-group'
+          'div[id^="dv-web-player"].dv-player-fullscreen'
         ) {
-          return group;
+          return player;
         }
-        if (
-          selector ===
-          '#atvwebplayersdk-captions-toggle-button'
-        ) {
-          return button;
+        if (selector === '#atvwebplayersdk-settings-button') {
+          return settingsButton;
         }
         return null;
       },
     });
 
     await expect(
-      restorePrimeSubtitleState(radio.id, false),
+      restorePrimeSubtitleState('zh-hant_Subtitle_Dialog', false),
     ).resolves.toBe(true);
+    expect(selected).toBe('zh-hant_Subtitle_Dialog');
+    expect(settingsButton.click).toHaveBeenCalledOnce();
   });
 
   it('enumerates the visible fullscreen player when Prime keeps a stale hidden player', async () => {
@@ -213,16 +189,21 @@ describe('Prime official subtitle metadata', () => {
       readyState: 0,
       getClientRects: () => [],
     };
-    const button = {
+    const settingsButton = {
+      click: vi.fn(),
+      getClientRects: () => [{}],
+    };
+    const label = {
+      innerText: 'English\nCC',
+      textContent: 'EnglishCC',
       getClientRects: () => [{}],
     };
     const radio = {
       checked: true,
-      id: 'en-us_Caption_Dialog',
-      getAttribute: (name: string) =>
-        name === 'aria-label' ? 'English [CC]' : null,
+      value: 'en-us_Caption_Dialog',
+      closest: () => label,
     };
-    const group = {
+    const player = {
       getClientRects: () => [{}],
       querySelectorAll: (selector: string) =>
         selector === 'input[type="radio"][name="subtitle"]' ? [radio] : [],
@@ -248,15 +229,12 @@ describe('Prime official subtitle metadata', () => {
         }
         if (
           selector ===
-          '#atvwebplayersdk-captions-toggle-button'
+          'div[id^="dv-web-player"].dv-player-fullscreen'
         ) {
-          return button;
+          return player;
         }
-        if (
-          selector ===
-          'div[id^="dv-web-player"].dv-player-fullscreen .atvwebplayersdk-subtitle-radio-group'
-        ) {
-          return group;
+        if (selector === '#atvwebplayersdk-settings-button') {
+          return settingsButton;
         }
         return null;
       },
@@ -275,7 +253,107 @@ describe('Prime official subtitle metadata', () => {
         id: 'en-us_Caption_Dialog',
         language: 'en-US',
         source: 'official',
-        label: 'English [CC]',
+        label: 'English CC',
+        kind: 'closed-captions',
+      },
+    ]);
+  });
+
+  it('opens the current Prime settings subtitle panel and reads value-label radios', async () => {
+    vi.useFakeTimers();
+    let settingsOpen = false;
+    let subtitlesOpen = false;
+    const activeVideo = {
+      readyState: 4,
+      getClientRects: () => [{}],
+    };
+    const settingsButton = {
+      click: vi.fn(() => {
+        if (subtitlesOpen) {
+          subtitlesOpen = false;
+          settingsOpen = false;
+        } else {
+          settingsOpen = true;
+        }
+      }),
+      getClientRects: () => [{}],
+    };
+    const subtitlesButton = {
+      click: vi.fn(() => {
+        subtitlesOpen = true;
+      }),
+      getClientRects: () => [{}],
+    };
+    const radio = {
+      checked: true,
+      id: '',
+      value: 'en-us_Caption_Dialog',
+      getAttribute: () => null,
+      closest: (selector: string) =>
+        selector === 'label'
+          ? {
+              innerText: 'English\nCC',
+              textContent: 'EnglishCC',
+              getClientRects: () => (subtitlesOpen ? [{}] : []),
+            }
+          : null,
+    };
+    const player = {
+      getClientRects: () => [{}],
+      querySelectorAll: (selector: string) =>
+        subtitlesOpen && selector === 'input[type="radio"][name="subtitle"]'
+          ? [radio]
+          : [],
+    };
+
+    vi.stubGlobal('window', {
+      addEventListener: vi.fn(),
+      setTimeout,
+      clearTimeout,
+    });
+    vi.stubGlobal('getComputedStyle', () => ({
+      display: 'block',
+      visibility: 'visible',
+    }));
+    vi.stubGlobal('document', {
+      querySelector: (selector: string) => {
+        if (
+          selector ===
+          'div[id^="dv-web-player"].dv-player-fullscreen video'
+        ) {
+          return activeVideo;
+        }
+        if (
+          selector === 'div[id^="dv-web-player"].dv-player-fullscreen'
+        ) {
+          return player;
+        }
+        if (selector === '#atvwebplayersdk-settings-button') {
+          return settingsButton;
+        }
+        if (selector === '#atvwebplayersdk-subtitles-button') {
+          return settingsOpen ? subtitlesButton : null;
+        }
+        return null;
+      },
+    });
+
+    const adapter = createPrimeVideoAdapter();
+    let observedTracks: TrackInfo[] | undefined;
+    adapter.onTracks((tracks) => {
+      observedTracks = tracks;
+    });
+    adapter.start();
+    await vi.advanceTimersByTimeAsync(9_000);
+
+    expect(settingsButton.click).toHaveBeenCalledTimes(2);
+    expect(subtitlesButton.click).toHaveBeenCalledOnce();
+    expect(observedTracks).toEqual([
+      {
+        id: 'en-us_Caption_Dialog',
+        language: 'en-US',
+        source: 'official',
+        label: 'English CC',
         kind: 'closed-captions',
       },
     ]);

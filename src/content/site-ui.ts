@@ -1,7 +1,7 @@
 import type { SiteId } from '../core/contracts';
 import {
+  PRIME_CAPTIONS_TOGGLE_BUTTON_SELECTOR,
   PRIME_PLAYER_SELECTOR,
-  PRIME_SUBTITLE_MENU_BUTTON_SELECTOR,
   PRIME_VIDEO_SELECTOR,
 } from '../core/primevideo-dom';
 import { readNetflixWatchIdentity } from '../adapters/netflix-location';
@@ -29,7 +29,7 @@ const SITE_UI: Record<SiteId, SiteUiBinding> = {
     videoSelector: PRIME_VIDEO_SELECTOR,
     playerSelector: PRIME_PLAYER_SELECTOR,
     nativeCaptionSelector:
-      '.atvwebplayersdk-captions-overlay, [data-duetsub-native-captions="primevideo"]',
+      '.atvwebplayersdk-captions-overlay, .atvwebplayersdk-captions-text, [data-duetsub-native-captions="primevideo"]',
   },
   max: {
     videoSelector: '[data-testid="VideoElement"]',
@@ -213,7 +213,7 @@ function findPrimeVideoControls(player: HTMLElement): {
   readonly toggleBefore?: HTMLElement;
 } {
   const subtitle = player.querySelector<HTMLElement>(
-    PRIME_SUBTITLE_MENU_BUTTON_SELECTOR,
+    PRIME_CAPTIONS_TOGGLE_BUTTON_SELECTOR,
   );
   const toggleBefore = subtitle?.parentElement ?? undefined;
   const controls = toggleBefore?.parentElement ?? undefined;

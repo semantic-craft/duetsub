@@ -54,7 +54,7 @@ DuetSub 只使用当前登录账号本来就能访问的字幕轨，不会解锁
 
 ## 从 GitHub 安装
 
-1. 从 [最新版本](https://github.com/semantic-craft/duetsub/releases/latest) 下载 `duetsub-0.2.0-chrome.zip`。
+1. 从 [最新版本](https://github.com/semantic-craft/duetsub/releases/latest) 下载 `duetsub-0.2.1-chrome.zip`。
 2. 解压到一个长期保留的文件夹。
 3. 打开 `chrome://extensions`，启用 **开发者模式**，点击 **加载已解压的扩展程序**。
 4. 选择刚才解压的文件夹。
@@ -71,7 +71,7 @@ Chrome 应用商店版本单独构建且不包含 `manifest.key`，商店会分�
 
 自动化测试覆盖字幕解析、轨道归属、播放生命周期、拖动进度、原生字幕恢复、翻译批处理与缓存，以及发布包边界。
 
-`0.2.0` 候选版本已在登录态 Disney+ 播放器验证官方双语字幕、主动 Qwen 机器重译、拖动进度、原生字幕恢复和播放器内控件位置。此前的官方语言自由配对候选版本已在 Prime Video、Netflix、Max 和 YouTube 完成对应登录播放验证。集成构建另行通过了完整自动化发布与商店打包检查。
+`0.2.1` 候选版本修复了 Prime Video 当前字幕选单读取、官方轨道选择和原生字幕隐藏，并确保宿主播放器自动隐藏或裁切控件时，播放器内选项菜单仍可操作。本轮重新核对了 Prime Video 与 YouTube 的登录态播放，并在 Netflix、Max 截取了对应双语渲染；集成构建另行通过完整自动化发布与商店打包检查。Disney+ 支持沿用 `0.2.0` 候选版本的验证，但本轮当前网络被重定向到地区不可用页面，因此没有把新的 Disney+ 截图计为通过。
 
 详细证据见 [docs/VERIFICATION.md](docs/VERIFICATION.md)。
 

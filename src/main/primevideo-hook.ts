@@ -6,7 +6,11 @@ import {
   primeTtmlResponseMessage,
   type PrimeTtmlObservationOwnership,
 } from '../core/messages';
-import { PRIME_VIDEO_SELECTOR } from '../core/primevideo-dom';
+import {
+  PRIME_SUBTITLE_RADIO_SELECTOR,
+  PRIME_VIDEO_SELECTOR,
+  readPrimeSubtitleTrackId,
+} from '../core/primevideo-dom';
 
 const xhrUrls = new WeakMap<XMLHttpRequest, string>();
 const completeFragmentedTextPayloads = new Map<string, Promise<string>>();
@@ -17,11 +21,6 @@ const cachedPayloadsByMediaSource = new Map<
 const PRIME_ZERO_OFFSET_STABILITY_MS = 2_000;
 const MAX_CACHED_MEDIA_SOURCES = 4;
 const MAX_CACHED_PAYLOADS_PER_SOURCE = 8;
-const PRIME_SUBTITLE_RADIO_SELECTOR =
-  'input[type="radio"][name="subtitle"]';
-const OBSERVATION_REQUEST_ATTRIBUTE = 'data-duetsub-observation-request';
-const OBSERVATION_GENERATION_ATTRIBUTE =
-  'data-duetsub-observation-generation';
 let readPrimeTimelineOffsetMs: () => number | undefined = () => undefined;
 let activePrimeTtmlObservation: PrimeTtmlObservationOwnership | undefined;
 
@@ -31,7 +30,6 @@ export function startPrimeVideoMainHook(): void {
   cachedPayloadsByMediaSource.clear();
   readPrimeTimelineOffsetMs = observePrimePlaybackTimeline();
   window.addEventListener('message', respondToPrimeRequest);
-  document.addEventListener('click', observePrimeSubtitleClick, true);
   const originalFetch = patchFetch();
   patchXmlHttpRequest(originalFetch);
 }
@@ -39,6 +37,13 @@ export function startPrimeVideoMainHook(): void {
 function respondToPrimeRequest(event: MessageEvent<unknown>): void {
   if (event.source !== window || !isDuetSubMessage(event.data)) return;
   const message = event.data;
+  if (
+    message.direction === 'isolated-to-main' &&
+    message.type === 'prime-track-selection'
+  ) {
+    selectPrimeTrackInMainWorld(message.trackId, message.observation);
+    return;
+  }
   if (
     message.direction === 'isolated-to-main' &&
     message.type === 'request-prime-cached-ttml'
@@ -62,6 +67,49 @@ function respondToPrimeRequest(event: MessageEvent<unknown>): void {
       primeTimelineOffsetMessage(message.requestId, timelineOffsetMs),
     );
   });
+}
+
+function selectPrimeTrackInMainWorld(
+  trackId: string,
+  observation?: PrimeTtmlObservationOwnership,
+): void {
+  const radio = [...document.querySelectorAll<HTMLInputElement>(
+    PRIME_SUBTITLE_RADIO_SELECTOR,
+  )].find((candidate) => readPrimeSubtitleTrackId(candidate) === trackId);
+  const onClick = radio === undefined
+    ? undefined
+    : readPrimeRadioClickHandler(radio);
+  if (onClick === undefined) return;
+
+  activePrimeTtmlObservation = observation;
+  try {
+    onClick();
+  } catch {
+    if (activePrimeTtmlObservation === observation) {
+      activePrimeTtmlObservation = undefined;
+    }
+    return;
+  }
+  if (observation !== undefined) {
+    setTimeout(() => {
+      if (activePrimeTtmlObservation === observation) {
+        activePrimeTtmlObservation = undefined;
+      }
+    }, 0);
+  }
+}
+
+function readPrimeRadioClickHandler(
+  radio: HTMLInputElement,
+): (() => void) | undefined {
+  const properties = radio as unknown as Record<string, unknown>;
+  for (const name of Object.getOwnPropertyNames(radio)) {
+    const candidate = properties[name];
+    if (typeof candidate !== 'object' || candidate === null) continue;
+    const onClick = (candidate as { readonly onClick?: unknown }).onClick;
+    if (typeof onClick === 'function') return () => onClick();
+  }
+  return undefined;
 }
 
 async function readStablePrimeTimelineOffsetMs(): Promise<
@@ -426,48 +474,6 @@ function takePrimeTtmlObservation(): PrimeTtmlObservationOwnership | undefined {
   const observation = activePrimeTtmlObservation;
   activePrimeTtmlObservation = undefined;
   return observation;
-}
-
-function observePrimeSubtitleClick(event: MouseEvent): void {
-  const radio = event.target;
-  if (
-    !(radio instanceof HTMLInputElement) ||
-    radio.id === '' ||
-    !radio.matches(PRIME_SUBTITLE_RADIO_SELECTOR)
-  ) {
-    return;
-  }
-  const requestId = radio.getAttribute(OBSERVATION_REQUEST_ATTRIBUTE);
-  const generation = parseObservationGeneration(
-    radio.getAttribute(OBSERVATION_GENERATION_ATTRIBUTE),
-  );
-  if (requestId === null || requestId === '' || generation === undefined) return;
-  const observation = {
-    requestId,
-    trackId: radio.id,
-    generation,
-  };
-  activePrimeTtmlObservation = observation;
-  setTimeout(() => {
-    if (activePrimeTtmlObservation === observation) {
-      activePrimeTtmlObservation = undefined;
-    }
-  }, 0);
-}
-
-function parseObservationGeneration(
-  value: string | null,
-): PrimeTtmlObservationOwnership['generation'] | undefined {
-  const match = value?.match(/^(\d+):(\d+):(\d+)$/);
-  if (match === undefined || match === null) return undefined;
-  const generation = match.slice(1).map(Number);
-  return generation.every((part) => Number.isSafeInteger(part))
-    ? {
-        contentGeneration: generation[0],
-        clockGeneration: generation[1],
-        selectionGeneration: generation[2],
-      }
-    : undefined;
 }
 
 function isFragmentedTextUrl(value: string): boolean {

@@ -54,7 +54,7 @@ The settings interface is available in English, Simplified Chinese, and Traditio
 
 ## Install from GitHub
 
-1. Download `duetsub-0.2.0-chrome.zip` from the [latest release](https://github.com/semantic-craft/duetsub/releases/latest).
+1. Download `duetsub-0.2.1-chrome.zip` from the [latest release](https://github.com/semantic-craft/duetsub/releases/latest).
 2. Unzip it to a permanent folder.
 3. Open `chrome://extensions`, enable **Developer mode**, and choose **Load unpacked**.
 4. Select the unzipped folder.
@@ -71,7 +71,7 @@ The Chrome Web Store package is built separately without `manifest.key`, because
 
 Automated tests cover parsing, track ownership, lifecycle generations, seeking, native-subtitle restoration, translation batching and caching, and release-package invariants.
 
-The `0.2.0` candidate passed logged-in Disney+ playback gates for official bilingual subtitles, explicit Qwen-backed machine retranslation, seeking, native-subtitle restoration, and in-player control placement. The earlier official-language-pair candidate passed the corresponding logged-in gates on Prime Video, Netflix, Max, and YouTube. The integrated build separately passed the full automated release and Store-package gates.
+The `0.2.1` candidate repairs current Prime Video subtitle-menu discovery, official-track selection, and native-caption suppression, and keeps the in-player options menu usable when a host player auto-hides or clips its controls. Logged-in playback was rechecked on Prime Video and YouTube; the corresponding bilingual rendering was also captured on Netflix and Max. The integrated build separately passed the full automated release and Store-package gates. Disney+ remains supported from the `0.2.0` candidate, but a fresh screenshot was not counted in this run because the current network was redirected to Disney+'s regional-unavailable page.
 
 See [docs/VERIFICATION.md](docs/VERIFICATION.md) for the evidence ledger.
 

@@ -4,16 +4,21 @@ import {
   type PlaybackGeneration,
 } from '../core/lifecycle';
 import {
-  PRIME_SUBTITLE_GROUP_SELECTOR,
-  PRIME_SUBTITLE_MENU_BUTTON_SELECTOR,
+  PRIME_PLAYER_SELECTOR,
+  PRIME_SETTINGS_BUTTON_SELECTOR,
+  PRIME_SUBTITLES_BUTTON_SELECTOR,
   PRIME_VIDEO_SELECTOR,
+  readPrimeSubtitleTrackId,
+  readPrimeSubtitleTrackLabel,
 } from '../core/primevideo-dom';
 import {
   isDuetSubMessage,
   postDuetSubMessage,
   requestPrimeCachedTtml,
   requestPrimeTimelineOffset,
+  selectPrimeTrack,
   type PrimeTtmlResponseMessage,
+  type PrimeTtmlObservationOwnership,
 } from '../core/messages';
 import {
   alignPrimeChineseCuesToEnglish,
@@ -25,9 +30,6 @@ import {
 } from './primevideo-responses';
 
 const SUBTITLE_RADIO_SELECTOR = 'input[type="radio"][name="subtitle"]';
-const OBSERVATION_REQUEST_ATTRIBUTE = 'data-duetsub-observation-request';
-const OBSERVATION_GENERATION_ATTRIBUTE =
-  'data-duetsub-observation-generation';
 const DOM_TIMEOUT_MS = 8_000;
 const RESPONSE_TIMEOUT_MS = 15_000;
 
@@ -176,15 +178,23 @@ class PrimeVideoAdapter implements SiteAdapter {
 
   async #enumerateTracks(): Promise<TrackInfo[]> {
     await waitForPrimePlayerReady();
-    await waitForMenuButton();
+    await waitForSettingsButton();
     const menuWasOpen = isSubtitleMenuOpen();
-    const group = await getSubtitleGroup();
-    await waitForStableSubtitleSelection(group);
-    const tracks = readOfficialTracks(group);
-    if (tracks.length === 0) throw new Error('No Prime subtitle tracks');
-    if (isSubtitleMenuOpen() !== menuWasOpen) {
-      throw new Error('Prime subtitle menu changed during enumeration');
+    let tracks: TrackInfo[] = [];
+    let operationError: unknown;
+
+    try {
+      const scope = await ensurePrimeSubtitleMenuOpen();
+      await waitForStableSubtitleSelection(scope);
+      tracks = readOfficialTracks(scope);
+      if (tracks.length === 0) throw new Error('No Prime subtitle tracks');
+    } catch (error) {
+      operationError = error;
     }
+    if (!(await restoreMenuState(menuWasOpen))) {
+      throw new Error('Could not restore Prime subtitle menu state');
+    }
+    if (operationError !== undefined) throw asError(operationError);
     return tracks;
   }
 
@@ -218,7 +228,7 @@ class PrimeVideoAdapter implements SiteAdapter {
       return;
     }
 
-    const menuAvailable = await waitForMenuButton().catch(() => undefined);
+    const menuAvailable = await waitForSettingsButton().catch(() => undefined);
     if (menuAvailable === undefined) {
       rejectRequests(requests, new Error('Prime subtitle menu unavailable'));
       return;
@@ -230,18 +240,20 @@ class PrimeVideoAdapter implements SiteAdapter {
 
     try {
       await waitForPrimePlayerReady();
-      const group = await getSubtitleGroup();
-      await waitForStableSubtitleSelection(group);
-      const radios = readSubtitleRadios(group);
+      const scope = await ensurePrimeSubtitleMenuOpen();
+      await waitForStableSubtitleSelection(scope);
+      const radios = readSubtitleRadios(scope);
       const original = radios.find((radio) => radio.checked);
-      if (original === undefined || original.id === '') {
+      if (original === undefined || readPrimeSubtitleTrackId(original) === '') {
         throw new Error('Prime original subtitle option is unknown');
       }
-      originalId = original.id;
+      originalId = readPrimeSubtitleTrackId(original);
 
       const requestedTracks = uniqueRequestedTracks(requests);
       for (const track of requestedTracks) {
-        const radio = radios.find((candidate) => candidate.id === track.id);
+        const radio = radios.find(
+          (candidate) => readPrimeSubtitleTrackId(candidate) === track.id,
+        );
         const visibleTrack = radio === undefined ? undefined : trackFromRadio(radio);
         if (
           radio === undefined ||
@@ -301,9 +313,9 @@ class PrimeVideoAdapter implements SiteAdapter {
       if (off === undefined) {
         throw new Error('Prime cannot re-request the currently selected track');
       }
-      clickRadio(off);
+      selectPrimeSubtitleTrack(readPrimeSubtitleTrackId(off));
       await waitUntil(
-        () => isPrimeSubtitleTrackChecked(off.id),
+        () => isPrimeSubtitleTrackChecked(readPrimeSubtitleTrackId(off)),
         DOM_TIMEOUT_MS,
       );
       group = await getPrimeSubtitleGroupForSwitch();
@@ -319,13 +331,13 @@ class PrimeVideoAdapter implements SiteAdapter {
       observationRequestId,
     );
     try {
-      clickRadioForObservation(
-        radio,
-        observationRequestId,
+      selectPrimeSubtitleTrack(track.id, {
+        requestId: observationRequestId,
+        trackId: track.id,
         generation,
-      );
+      });
       await waitUntil(
-        () => isPrimeSubtitleTrackChecked(radio.id),
+        () => isPrimeSubtitleTrackChecked(track.id),
         DOM_TIMEOUT_MS,
       );
       return await response;
@@ -626,8 +638,8 @@ function readSubtitleRadios(group: HTMLElement): HTMLInputElement[] {
 
 function trackFromRadio(radio: HTMLInputElement): TrackInfo | undefined {
   return parsePrimeVideoSubtitleTrack({
-    id: radio.id,
-    label: radio.getAttribute('aria-label') ?? '',
+    id: readPrimeSubtitleTrackId(radio),
+    label: readPrimeSubtitleTrackLabel(radio),
   });
 }
 
@@ -661,25 +673,17 @@ export async function restorePrimeSubtitleState(
     const original = findRadio(group, originalId);
     if (original === undefined) return false;
     if (!original.checked) {
-      clickRadio(original);
+      selectPrimeSubtitleTrack(originalId);
       await waitUntil(
         () => isPrimeSubtitleTrackChecked(originalId),
         DOM_TIMEOUT_MS,
       );
     }
-    await restoreMenuState(menuWasOpen);
-  } catch {
-    // Prime can replace its menu DOM while the click is still settling.
-  }
-
-  try {
-    await waitUntil(
-      () =>
-        isPrimeSubtitleTrackChecked(originalId) &&
-        isSubtitleMenuOpen() === menuWasOpen,
-      DOM_TIMEOUT_MS,
-    );
-    return true;
+    if (!isPrimeSubtitleTrackChecked(originalId)) return false;
+    if (!(await restoreMenuState(menuWasOpen))) return false;
+    return menuWasOpen
+      ? isPrimeSubtitleTrackChecked(originalId)
+      : !isSubtitleMenuOpen();
   } catch {
     return false;
   }
@@ -692,7 +696,7 @@ async function restoreMenuState(
     if (menuWasOpen) {
       await ensurePrimeSubtitleMenuOpen();
     } else if (isSubtitleMenuOpen()) {
-      const button = await waitForMenuButton();
+      const button = await waitForSettingsButton();
       button.click();
       await waitUntil(() => !isSubtitleMenuOpen(), DOM_TIMEOUT_MS);
     }
@@ -703,47 +707,47 @@ async function restoreMenuState(
 }
 
 export async function ensurePrimeSubtitleMenuOpen(): Promise<HTMLElement> {
-  const current = document.querySelector<HTMLElement>(
-    PRIME_SUBTITLE_GROUP_SELECTOR,
+  let player = document.querySelector<HTMLElement>(PRIME_PLAYER_SELECTOR);
+  if (player !== null && isSubtitleMenuOpen()) return player;
+
+  let subtitlesButton = document.querySelector<HTMLButtonElement>(
+    PRIME_SUBTITLES_BUTTON_SELECTOR,
   );
-  if (current !== null && isVisible(current)) return current;
-  const button = await waitForMenuButton();
-  button.click();
+  if (subtitlesButton === null) {
+    const settingsButton = await waitForSettingsButton();
+    settingsButton.click();
+    await waitUntil(
+      () => document.querySelector(PRIME_SUBTITLES_BUTTON_SELECTOR) !== null,
+      DOM_TIMEOUT_MS,
+    );
+    subtitlesButton = document.querySelector<HTMLButtonElement>(
+      PRIME_SUBTITLES_BUTTON_SELECTOR,
+    );
+  }
+  if (subtitlesButton === null) {
+    throw new Error('Prime subtitles settings button unavailable');
+  }
+  subtitlesButton.click();
   await waitUntil(() => isSubtitleMenuOpen(), DOM_TIMEOUT_MS);
-  const group = document.querySelector<HTMLElement>(
-    PRIME_SUBTITLE_GROUP_SELECTOR,
-  );
-  if (group === null) throw new Error('Prime subtitle menu did not open');
-  return group;
+  player = document.querySelector<HTMLElement>(PRIME_PLAYER_SELECTOR);
+  if (player === null) throw new Error('Prime player DOM unavailable');
+  return player;
 }
 
 export async function getPrimeSubtitleGroupForSwitch(): Promise<HTMLElement> {
-  const current = document.querySelector<HTMLElement>(
-    PRIME_SUBTITLE_GROUP_SELECTOR,
-  );
-  if (current !== null && readSubtitleRadios(current).length > 0) {
+  const current = document.querySelector<HTMLElement>(PRIME_PLAYER_SELECTOR);
+  if (current !== null && isSubtitleMenuOpen()) {
     return current;
   }
   return ensurePrimeSubtitleMenuOpen();
 }
 
-async function getSubtitleGroup(): Promise<HTMLElement> {
-  await waitUntil(
-    () => document.querySelector(PRIME_SUBTITLE_GROUP_SELECTOR) !== null,
-    DOM_TIMEOUT_MS,
-  );
-  const group = document.querySelector<HTMLElement>(
-    PRIME_SUBTITLE_GROUP_SELECTOR,
-  );
-  if (group === null) throw new Error('Prime subtitle menu DOM unavailable');
-  return group;
-}
-
 function isSubtitleMenuOpen(): boolean {
-  const group = document.querySelector<HTMLElement>(
-    PRIME_SUBTITLE_GROUP_SELECTOR,
-  );
-  return group !== null && isVisible(group);
+  const player = document.querySelector<HTMLElement>(PRIME_PLAYER_SELECTOR);
+  return player !== null && readSubtitleRadios(player).some((radio) => {
+    const label = radio.closest('label');
+    return label !== null && isVisible(label);
+  });
 }
 
 function isVisible(element: HTMLElement): boolean {
@@ -772,7 +776,9 @@ async function waitForStableSubtitleSelection(
 
   while (performance.now() - startedAt < DOM_TIMEOUT_MS) {
     const checked = readSubtitleRadios(group).find((radio) => radio.checked);
-    const currentId = checked?.id ?? '';
+    const currentId = checked === undefined
+      ? ''
+      : readPrimeSubtitleTrackId(checked);
     if (currentId !== '' && currentId === stableId) {
       const requiredStableMs = currentId === 'off' ? 3_000 : 1_000;
       if (performance.now() - stableSince >= requiredStableMs) return;
@@ -786,16 +792,16 @@ async function waitForStableSubtitleSelection(
   throw new Error('Prime subtitle selection did not stabilize');
 }
 
-async function waitForMenuButton(): Promise<HTMLButtonElement> {
+async function waitForSettingsButton(): Promise<HTMLButtonElement> {
   await waitUntil(
     () =>
-      document.querySelector(PRIME_SUBTITLE_MENU_BUTTON_SELECTOR) !== null,
+      document.querySelector(PRIME_SETTINGS_BUTTON_SELECTOR) !== null,
     DOM_TIMEOUT_MS,
   );
   const button = document.querySelector<HTMLButtonElement>(
-    PRIME_SUBTITLE_MENU_BUTTON_SELECTOR,
+    PRIME_SETTINGS_BUTTON_SELECTOR,
   );
-  if (button === null) throw new Error('Prime subtitle menu button unavailable');
+  if (button === null) throw new Error('Prime settings button unavailable');
   return button;
 }
 
@@ -803,40 +809,23 @@ function findRadio(
   group: HTMLElement,
   id: string,
 ): HTMLInputElement | undefined {
-  return readSubtitleRadios(group).find((radio) => radio.id === id);
+  return readSubtitleRadios(group).find(
+    (radio) => readPrimeSubtitleTrackId(radio) === id,
+  );
 }
 
 function isPrimeSubtitleTrackChecked(id: string): boolean {
-  const group = document.querySelector<HTMLElement>(
-    PRIME_SUBTITLE_GROUP_SELECTOR,
-  );
+  const group = document.querySelector<HTMLElement>(PRIME_PLAYER_SELECTOR);
   return group !== null && findRadio(group, id)?.checked === true;
 }
 
-function clickRadio(radio: HTMLInputElement): void {
-  radio.click();
-}
-
-function clickRadioForObservation(
-  radio: HTMLInputElement,
-  requestId: string,
-  generation: PlaybackGeneration,
+function selectPrimeSubtitleTrack(
+  trackId: string,
+  observation?: PrimeTtmlObservationOwnership,
 ): void {
-  radio.setAttribute(OBSERVATION_REQUEST_ATTRIBUTE, requestId);
-  radio.setAttribute(
-    OBSERVATION_GENERATION_ATTRIBUTE,
-    [
-      generation.contentGeneration,
-      generation.clockGeneration,
-      generation.selectionGeneration ?? 0,
-    ].join(':'),
+  postDuetSubMessage(
+    selectPrimeTrack(crypto.randomUUID(), trackId, observation),
   );
-  try {
-    clickRadio(radio);
-  } finally {
-    radio.removeAttribute(OBSERVATION_REQUEST_ATTRIBUTE);
-    radio.removeAttribute(OBSERVATION_GENERATION_ATTRIBUTE);
-  }
 }
 
 function waitUntil(predicate: () => boolean, timeoutMs: number): Promise<void> {

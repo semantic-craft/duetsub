@@ -47,7 +47,7 @@ describe('Prime Video site UI', () => {
     expect(target?.controls).toBe(controls);
     expect(target?.toggleBefore).toBe(subtitleWrapper);
     expect(target?.nativeCaptionSelector).toBe(
-      '.atvwebplayersdk-captions-overlay, [data-duetsub-native-captions="primevideo"]',
+      '.atvwebplayersdk-captions-overlay, .atvwebplayersdk-captions-text, [data-duetsub-native-captions="primevideo"]',
     );
   });
 

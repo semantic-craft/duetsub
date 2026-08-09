@@ -43,6 +43,19 @@ export interface PopoverPlacementInput {
 
 export type PopoverPlacement = 'above' | 'below';
 
+export interface PopoverPortalPositionInput extends PopoverPlacementInput {
+  readonly triggerRight: number;
+  readonly popoverWidth: number;
+  readonly viewportWidth: number;
+  readonly viewportPadding: number;
+}
+
+export interface PopoverPortalPosition {
+  readonly placement: PopoverPlacement;
+  readonly left: number;
+  readonly top: number;
+}
+
 export function choosePopoverPlacement(
   input: PopoverPlacementInput,
 ): PopoverPlacement {
@@ -54,6 +67,35 @@ export function choosePopoverPlacement(
   if (roomAbove >= input.popoverHeight) return 'above';
   if (roomBelow >= input.popoverHeight) return 'below';
   return roomBelow >= roomAbove ? 'below' : 'above';
+}
+
+export function positionPopoverPortal(
+  input: PopoverPortalPositionInput,
+): PopoverPortalPosition {
+  const placement = choosePopoverPlacement(input);
+  const maximumLeft = Math.max(
+    input.viewportPadding,
+    input.viewportWidth - input.viewportPadding - input.popoverWidth,
+  );
+  const maximumTop = Math.max(
+    input.viewportPadding,
+    input.viewportHeight - input.viewportPadding - input.popoverHeight,
+  );
+  const unclampedTop = placement === 'above'
+    ? input.triggerTop - input.gap - input.popoverHeight
+    : input.triggerBottom + input.gap;
+
+  return {
+    placement,
+    left: Math.min(
+      Math.max(input.viewportPadding, input.triggerRight - input.popoverWidth),
+      maximumLeft,
+    ),
+    top: Math.min(
+      Math.max(input.viewportPadding, unclampedTop),
+      maximumTop,
+    ),
+  };
 }
 
 export function createToggleView(
@@ -71,6 +113,13 @@ export function createToggleView(
   const shadow = host.attachShadow({ mode: 'open' });
   const style = document.createElement('style');
   style.textContent = TOGGLE_CSS;
+
+  const popoverHost = document.createElement('div');
+  popoverHost.dataset.duetsubPopover = '';
+  popoverHost.dataset.site = siteId;
+  const popoverShadow = popoverHost.attachShadow({ mode: 'open' });
+  const popoverStyle = document.createElement('style');
+  popoverStyle.textContent = TOGGLE_CSS;
 
   const button = document.createElement('button');
   button.className = 'toggle';
@@ -121,8 +170,10 @@ export function createToggleView(
     retranslate,
     settings,
   );
-  shadow.append(style, button, languageButton, popover);
+  shadow.append(style, button, languageButton);
+  popoverShadow.append(popoverStyle, popover);
   anchor.insertBefore(host, before ?? null);
+  document.documentElement.append(popoverHost);
 
   let longPressTimer: number | undefined;
   let suppressClick = false;
@@ -130,18 +181,28 @@ export function createToggleView(
   let chooserSignature = '';
   let renderedLanguage: UiLanguage | undefined;
 
-  const showPopover = () => {
-    callbacks.onOpenLanguagePair();
-    popover.dataset.placement = 'below';
-    popover.hidden = false;
+  const layoutPopover = () => {
     const triggerRect = host.getBoundingClientRect();
-    popover.dataset.placement = choosePopoverPlacement({
+    const popoverRect = popover.getBoundingClientRect();
+    const position = positionPopoverPortal({
       triggerTop: triggerRect.top,
       triggerBottom: triggerRect.bottom,
-      popoverHeight: popover.getBoundingClientRect().height,
+      triggerRight: triggerRect.right,
+      popoverWidth: popoverRect.width,
+      popoverHeight: popoverRect.height,
+      viewportWidth: window.innerWidth,
       viewportHeight: window.innerHeight,
       gap: 8,
+      viewportPadding: 8,
     });
+    popover.dataset.placement = position.placement;
+    popover.style.left = `${position.left}px`;
+    popover.style.top = `${position.top}px`;
+  };
+  const showPopover = () => {
+    callbacks.onOpenLanguagePair();
+    popover.hidden = false;
+    layoutPopover();
     languageButton.setAttribute('aria-expanded', 'true');
   };
   const hidePopover = () => {
@@ -161,7 +222,16 @@ export function createToggleView(
     }, 550);
   };
   const onDocumentPointerDown = (event: PointerEvent) => {
-    if (event.target instanceof Node && !host.contains(event.target)) hidePopover();
+    if (
+      event.target instanceof Node &&
+      !host.contains(event.target) &&
+      !popoverHost.contains(event.target)
+    ) {
+      hidePopover();
+    }
+  };
+  const onWindowResize = () => {
+    if (!popover.hidden) layoutPopover();
   };
   const selectPair = () => {
     synchronizeDisabledOptions(
@@ -229,6 +299,7 @@ export function createToggleView(
     hidePopover();
   });
   document.addEventListener('pointerdown', onDocumentPointerDown);
+  window.addEventListener('resize', onWindowResize);
 
   return {
     render(enabled, statusText, language, nextCatalog, preference) {
@@ -302,7 +373,9 @@ export function createToggleView(
     destroy() {
       cancelLongPress();
       document.removeEventListener('pointerdown', onDocumentPointerDown);
+      window.removeEventListener('resize', onWindowResize);
       host.remove();
+      popoverHost.remove();
     },
   };
 }
@@ -407,11 +480,21 @@ function synchronizeDisabledOptions(
 }
 
 const TOGGLE_CSS = `
-  :host {
+  :host([data-duetsub-toggle]) {
     position: relative;
     display: flex;
     align-items: center;
     margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+
+  :host([data-duetsub-popover]) {
+    position: fixed;
+    z-index: 2147483647;
+    inset: 0;
+    display: block;
+    overflow: visible;
+    pointer-events: none;
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   }
 
@@ -425,17 +508,17 @@ const TOGGLE_CSS = `
     right: calc(1.5% + 10rem);
   }
 
-  :host([data-site="max"]:not([data-fallback-anchor])) {
+  :host([data-duetsub-toggle][data-site="max"]:not([data-fallback-anchor])) {
     align-self: flex-start;
     height: 48px;
     margin-top: 4px;
   }
 
-  :host([data-site="netflix"]:not([data-fallback-anchor])) {
+  :host([data-duetsub-toggle][data-site="netflix"]:not([data-fallback-anchor])) {
     order: -1;
   }
 
-  :host([data-site="netflix"]:not([data-fallback-anchor])) .icon {
+  :host([data-duetsub-toggle][data-site="netflix"]:not([data-fallback-anchor])) .icon {
     transform: translateY(-9px) scale(1.3);
   }
 
@@ -514,8 +597,7 @@ const TOGGLE_CSS = `
   }
 
   .popover {
-    position: absolute;
-    right: 0;
+    position: fixed;
     width: min(384px, calc(100vw - 16px));
     max-height: calc(100vh - 16px);
     overflow-x: hidden;
@@ -525,16 +607,7 @@ const TOGGLE_CSS = `
     background: rgb(24 28 36 / 96%);
     box-shadow: 0 8px 28px rgb(0 0 0 / 45%);
     color: #fff;
-  }
-
-  .popover[data-placement="above"] {
-    top: auto;
-    bottom: calc(100% + 8px);
-  }
-
-  .popover[data-placement="below"] {
-    top: calc(100% + 8px);
-    bottom: auto;
+    pointer-events: auto;
   }
 
   :host([data-site="netflix"]) .popover {
