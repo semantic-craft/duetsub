@@ -21,9 +21,7 @@ Why viewers choose DuetSub:
 - **Two official tracks, one screen.** Keep the original beside the language you understand instead of replacing it.
 - **Controls where you need them.** Choose the top and bottom languages, swap their positions, or reload official tracks inside the player.
 - **Built for real playback.** Subtitles stay aligned through seeking and in-player episode or video changes; disabling DuetSub restores the platform's native captions.
-- **AI only when you ask.** Official subtitles remain the default. Use AI only to fill an authorized missing line or explicitly retranslate the bottom line into English, Simplified Chinese, or Traditional Chinese.
-- **Translation that follows the scene.** The Qwen subtitle prompt uses film/TV context, complete dialogue meaning, character voice, and adjacent cues instead of translating isolated fragments.
-- **Your provider, your key.** Choose DeepSeek, Qwen through Alibaba Cloud Model Studio, Doubao through Volcengine Ark, another OpenAI-compatible HTTPS service, or local Ollama / LM Studio.
+- **AI only when you ask.** DuetSub contacts a compatible translation service you configure—such as DeepSeek, Qwen, or OpenAI—or a local model only when you explicitly retranslate the bottom subtitles. Translation uses scene and adjacent-cue context. Official subtitles remain the default, and DuetSub does not operate its own translation service.
 - **Private by design.** No DuetSub cloud, subscription, analytics, video download, DRM bypass, or remote code execution.
 
 Two available official tracks do not contact a translation service. Only the explicit **Use AI to retranslate bottom subtitles** action replaces the bottom official line; **Reload official subtitles** restores it.
@@ -68,9 +66,7 @@ DuetSub 是一款免费、开源的 Chrome 扩展，可在同一画面同步显�
 - **两条官方字幕，同一画面。** 原文和熟悉的语言并排出现，不必为了看懂而放弃原文。
 - **控件就在播放器里。** 选择上下字幕、一键交换位置或重新加载官方字幕，无须离开视频。
 - **为真实播放而设计。** 拖动进度、站内换集或换视频后继续保持同步；关闭 DuetSub 即恢复平台原生字幕。
-- **只有你主动要求，才使用 AI。** 默认始终优先官方字幕；仅在授权补位确有需要，或你主动重译下方字幕时调用 AI。
-- **翻译理解上下文。** 千问字幕提示词结合影视场景、完整台词语义、人物语气和相邻字幕，避免逐条孤立硬译。
-- **服务和密钥都由你掌控。** 支持 DeepSeek、阿里云百炼千问、火山方舟豆包、其他 OpenAI 兼容 HTTPS 服务，以及本机 Ollama / LM Studio。
+- **只有你主动要求，才使用 AI。** 只有在你主动重译下方字幕时，DuetSub 才会调用你自行配置的兼容翻译服务（例如 DeepSeek、Qwen 或 OpenAI）或本地模型，并结合场景和相邻字幕进行翻译。官方字幕始终优先，DuetSub 不提供自有翻译云服务。
 - **隐私边界清楚。** 没有 DuetSub 云服务、订阅收费、行为分析、视频下载、DRM 绕过或远程代码执行。
 
 两条官方字幕都可用时，DuetSub 不会连接翻译服务。只有主动点击 **“用 AI 重译下方字幕”** 才会替换官方下方字幕；点击 **“重新加载官方字幕”** 即可恢复。
@@ -115,9 +111,7 @@ DuetSub 是一款免費、開源的 Chrome 擴充功能，可在同一畫面同�
 - **兩條官方字幕，同一畫面。** 原文和熟悉的語言並排出現，不必為了看懂而放棄原文。
 - **控件就在播放器裡。** 選擇上下字幕、一鍵交換位置或重新載入官方字幕，無須離開影片。
 - **為真實播放而設計。** 拖曳進度、站內換集或換影片後繼續維持同步；關閉 DuetSub 即恢復平台原生字幕。
-- **只有你主動要求，才使用 AI。** 預設始終優先官方字幕；僅在授權補位確有需要，或你主動重譯下方字幕時呼叫 AI。
-- **翻譯理解上下文。** 千問字幕提示詞結合影視場景、完整台詞語意、人物語氣和相鄰字幕，避免逐條孤立硬譯。
-- **服務和金鑰都由你掌控。** 支援 DeepSeek、阿里雲百煉千問、火山方舟豆包、其他 OpenAI 相容 HTTPS 服務，以及本機 Ollama / LM Studio。
+- **只有你主動要求，才使用 AI。** 只有在你主動重譯下方字幕時，DuetSub 才會呼叫你自行設定的相容翻譯服務（例如 DeepSeek、Qwen 或 OpenAI）或本機模型，並結合場景和相鄰字幕進行翻譯。官方字幕始終優先，DuetSub 不提供自有翻譯雲端服務。
 - **隱私邊界清楚。** 沒有 DuetSub 雲端服務、訂閱收費、行為分析、影片下載、DRM 繞過或遠端程式碼執行。
 
 兩條官方字幕都可用時，DuetSub 不會連接翻譯服務。只有主動點擊 **「用 AI 重譯下方字幕」** 才會替換官方下方字幕；點擊 **「重新載入官方字幕」** 即可恢復。

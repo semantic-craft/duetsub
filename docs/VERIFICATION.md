@@ -63,10 +63,16 @@ The command output for the release commit is the authoritative count; this docum
   uploaded to item `gacjhmmjoinbahljhhnbimhdmpafhdkg` as draft version
   `0.2.1`. The five global screenshots were saved in the order documented in
   the evidence README, and the English, Simplified Chinese, and Traditional
-  Chinese descriptions were updated with the `0.2.1` notes. The dashboard
-  accepted the submission on August 9, 2026 and reports **Pending review**, with
-  automatic publication selected after approval. The currently published
-  version remains `0.2.0` until the review passes.
+  Chinese descriptions were updated with the `0.2.1` notes. Google rejected
+  the August 9 submission on August 10, 2026 under Keyword Spam (`Yellow
+  Argon`), citing the provider-brand enumeration in the English description.
+  The cited sentence and corresponding three-language lists were removed; AI
+  support is now described as a user-configured compatible service or local
+  model, with DeepSeek, Qwen, and OpenAI used only as contextual examples. The
+  same `0.2.1` draft and five screenshots were saved and resubmitted on August
+  10 with automatic publication selected after approval. The dashboard
+  accepted the resubmission and now reports **Pending review**. The currently
+  published version remains `0.2.0` until the review passes.
 - **PASS — GitHub Release:** annotated tag `v0.2.1` points to commit
   `fc4996b53c7db47a2016cd11f234e0d455f89f82`. Release workflow run
   `31321987150` repeated the automated gate successfully and published the
