@@ -58,10 +58,13 @@ The command output for the release commit is the authoritative count; this docum
   packaged candidate was not reloaded for a redundant playback replay.
 - **NOT RUN — commercial advertisement playback:** no commercial ad was
   encountered during the Max acceptance run.
-- **READY — Chrome Web Store update:** the live dashboard reports version
-  `0.2.1` as **Published - public**. The verified `0.2.2` Store candidate is
-  ready for upload to item `gacjhmmjoinbahljhhnbimhdmpafhdkg`; no submission
-  status is claimed before the dashboard accepts it.
+- **PENDING — Chrome Web Store review:** the exact verified `0.2.2` Store
+  archive was uploaded to item `gacjhmmjoinbahljhhnbimhdmpafhdkg`; the Package
+  page reports draft version `0.2.2` while published version `0.2.1` remains
+  public. English, Simplified Chinese, and Traditional Chinese `0.2.2` update
+  notes were saved and verified individually, the existing five global
+  screenshots were preserved, and automatic publication after approval was
+  selected. The dashboard reports **Pending review**.
 
 ## `v0.2.1` release candidate
 
