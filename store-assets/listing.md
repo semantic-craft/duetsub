@@ -135,6 +135,29 @@ https://github.com/semantic-craft/duetsub
 
 DuetSub 是獨立專案，與上述串流平台不存在隸屬或官方合作關係。
 
+## Version 0.2.2 update notes / 版本 0.2.2 更新说明
+
+### English
+
+- Fixes Max official subtitle loading on current single-ID watch URLs and during early player startup.
+- Resolves duplicate Max subtitle-track ownership through the player's native selection flow; ambiguous mappings fail closed instead of guessing a subtitle URL.
+- Rebinds Max subtitles after in-site navigation or video replacement, while preserving native-caption restoration when DuetSub is disabled or cannot become ready.
+- Keeps Disney+ controls clickable when the player's gesture layer would otherwise cover them.
+
+### 简体中文
+
+- 修复 Max 当前单一内容 ID 播放网址和播放器早期启动阶段无法加载官方字幕的问题。
+- 通过播放器原生选择流程确认 Max 重复字幕轨的所有权；映射不明确时安全停止，不猜测字幕网址。
+- Max 站内导航或视频元素替换后重新绑定字幕；关闭 DuetSub 或双轨未就绪时完整恢复原生字幕。
+- 修复 Disney+ 播放器手势层遮挡控件的问题，确保 DuetSub 控件可点击。
+
+### 繁體中文
+
+- 修復 Max 目前單一內容 ID 播放網址和播放器早期啟動階段無法載入官方字幕的問題。
+- 透過播放器原生選擇流程確認 Max 重複字幕軌的所有權；映射不明確時安全停止，不猜測字幕網址。
+- Max 站內導覽或影片元素替換後重新綁定字幕；關閉 DuetSub 或雙軌未就緒時完整恢復原生字幕。
+- 修復 Disney+ 播放器手勢層遮擋控制項的問題，確保 DuetSub 控制項可點擊。
+
 ## Version 0.2.1 update notes / 版本 0.2.1 更新说明
 
 ### English

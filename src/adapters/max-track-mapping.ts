@@ -52,22 +52,36 @@ export interface MaxTrackMappingInput {
   readonly playbackInfoRaw: string;
   readonly manifestUrl: string;
   readonly manifestRaw: string;
+  readonly observedVttUrls?: readonly string[];
   readonly parser?: XmlParser;
+}
+
+export interface MaxTrackMappingResult {
+  readonly metadataComplete: boolean;
+  readonly resources: MaxTrackResourceMap;
 }
 
 export function mapMaxTrackResources(
   input: MaxTrackMappingInput,
 ): MaxTrackResourceMap {
+  return mapMaxTrackResourceSelection(input).resources;
+}
+
+export function mapMaxTrackResourceSelection(
+  input: MaxTrackMappingInput,
+): MaxTrackMappingResult {
   const playback = parsePlaybackInfo(input.playbackInfoRaw);
   if (
     playback === undefined ||
     !sameMaxManifestUrl(playback.manifestUrl, input.manifestUrl)
   ) {
-    return {};
+    return { metadataComplete: false, resources: {} };
   }
 
   const document = parseDashManifest(input.manifestRaw, input.parser);
-  if (document === undefined) return {};
+  if (document === undefined) {
+    return { metadataComplete: false, resources: {} };
+  }
   const adaptations = readTextAdaptations(document, input.manifestUrl);
   const result: Record<string, MaxTrackResource> = {};
 
@@ -85,12 +99,15 @@ export function mapMaxTrackResources(
         adaptation.language === declared[0].language &&
         adaptation.role === roleForType(declared[0].type),
     );
-    const segments = mergePeriodAdaptations(matches);
+    const segments = mergePeriodAdaptations(
+      matches,
+      input.observedVttUrls ?? [],
+    );
     if (segments === undefined) continue;
     result[track.id] = { track, segments };
   }
 
-  return result;
+  return { metadataComplete: true, resources: result };
 }
 
 interface PlaybackTextTrack {
@@ -365,9 +382,32 @@ function expandSegments(
 
 function mergePeriodAdaptations(
   adaptations: readonly TextAdaptation[],
+  observedVttUrls: readonly string[],
 ): readonly MaxTrackSegment[] | undefined {
   if (adaptations.length === 0) return undefined;
-  const ordered = [...adaptations].sort(
+  const byPeriodStart = new Map<number, TextAdaptation[]>();
+  for (const adaptation of adaptations) {
+    const candidates = byPeriodStart.get(adaptation.periodStartMs) ?? [];
+    candidates.push(adaptation);
+    byPeriodStart.set(adaptation.periodStartMs, candidates);
+  }
+  const ordered: TextAdaptation[] = [];
+  for (const candidates of byPeriodStart.values()) {
+    if (candidates.length === 1) {
+      ordered.push(candidates[0]);
+      continue;
+    }
+    const observed = candidates.filter((candidate) =>
+      candidate.segments.some((segment) =>
+        observedVttUrls.some((url) =>
+          sameMaxManifestUrl(segment.url, url)
+        )
+      )
+    );
+    if (observed.length !== 1) return undefined;
+    ordered.push(observed[0]);
+  }
+  ordered.sort(
     (left, right) => left.periodStartMs - right.periodStartMs,
   );
 

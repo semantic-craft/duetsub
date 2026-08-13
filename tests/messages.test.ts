@@ -4,6 +4,7 @@ import {
   disneyManifestMessage,
   disneyTimelineMessage,
   isDuetSubMessage,
+  maxObserverReadyMessage,
   maxSubtitleResponseMessage,
   netflixManifestMessage,
   netflixTrackRequest,
@@ -26,7 +27,7 @@ const PRIME_FRAGMENTED_TEXT_URL =
   'https://a124vod-dash-pv-ta-amazon.akamaized.net/ww_nrt/sanitized/' +
   'english_text_1.mp4?token=SIGNED_PLACEHOLDER';
 const MAX_CONTENT_IDENTITY =
-  '/video/watch/41c7eddd-2eea-4ed3-a299-474d693063f4/35a8260d-3bc6-4b91-b370-a5f3c72ad6d5';
+  '/video/watch/41c7eddd-2eea-4ed3-a299-474d693063f4';
 const DISNEY_CONTENT_IDENTITY =
   '/play/12345678-1234-1234-1234-123456789abc';
 
@@ -193,6 +194,18 @@ describe('Prime MAIN to ISOLATED messages', () => {
 });
 
 describe('Max MAIN to ISOLATED messages', () => {
+  it('validates the isolated observer-ready handshake for the current title', () => {
+    const message = maxObserverReadyMessage(MAX_CONTENT_IDENTITY);
+
+    expect(isDuetSubMessage(message)).toBe(true);
+    expect(
+      isDuetSubMessage({
+        ...message,
+        contentIdentity: '/video/watch/one/two',
+      }),
+    ).toBe(false);
+  });
+
   it('binds raw subtitle candidates to the requesting Max content identity', () => {
     const message = maxSubtitleResponseMessage(
       'response-1',
@@ -200,6 +213,7 @@ describe('Max MAIN to ISOLATED messages', () => {
       'https://media.max.com/title/dash.mpd',
       '<MPD/>',
       MAX_CONTENT_IDENTITY,
+      123,
     );
 
     expect(isDuetSubMessage(message)).toBe(true);
@@ -210,6 +224,9 @@ describe('Max MAIN to ISOLATED messages', () => {
           '/video/watch/other-title/other-episode/forged-suffix',
       }),
     ).toBe(false);
+    expect(
+      isDuetSubMessage({ ...message, requestStartedAtMs: -1 }),
+    ).toBe(false);
   });
 
   it('accepts the current Max h264 CDN and rejects lookalike hosts', () => {
@@ -219,6 +236,7 @@ describe('Max MAIN to ISOLATED messages', () => {
       'https://edge.cf.prd.media.h264.io/gcs/title/dash.mpd',
       '<MPD/>',
       MAX_CONTENT_IDENTITY,
+      123,
     );
 
     expect(isDuetSubMessage(valid)).toBe(true);

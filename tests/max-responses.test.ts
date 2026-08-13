@@ -21,9 +21,9 @@ const CURRENT_GENERATION = {
   clockGeneration: 1,
 };
 const EPISODE_ONE =
-  '/video/watch/b8a64f23-c654-4be6-829a-1cb5fb0b7c8e/c6728d9b-86a7-45cd-97a9-4ac7380aa4c6';
+  '/video/watch/b8a64f23-c654-4be6-829a-1cb5fb0b7c8e';
 const EPISODE_TWO =
-  '/video/watch/41c7eddd-2eea-4ed3-a299-474d693063f4/35a8260d-3bc6-4b91-b370-a5f3c72ad6d5';
+  '/video/watch/41c7eddd-2eea-4ed3-a299-474d693063f4';
 const SYNTHETIC_PLAYBACK_INFO = JSON.stringify({
   manifest: { url: 'https://media.example.invalid/title/dash.mpd' },
   videos: [
@@ -55,6 +55,7 @@ describe('Max response inbox', () => {
   it('fails closed when the only evidence is a single VTT response', () => {
     const inbox = recordMaxResponse(EMPTY_MAX_RESPONSE_INBOX, {
       responseId: 'single-vtt',
+      requestStartedAtMs: 1,
       kind: 'vtt',
       url: 'https://media.example.invalid/title/t/en/1.vtt',
       raw: 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nOne cue',
@@ -71,9 +72,85 @@ describe('Max response inbox', () => {
     ).toEqual({});
   });
 
+  it('uses only probe-scoped VTT evidence to resolve duplicate adaptations', () => {
+    const duplicateManifest = `<MPD xmlns="urn:mpeg:dash:schema:mpd:2011">
+  <Period start="PT0S" duration="PT30M">
+    <AdaptationSet lang="en-US" contentType="text">
+      <Role schemeIdUri="urn:mpeg:dash:role:2011" value="subtitle"/>
+      <SegmentTemplate timescale="1000" startNumber="1" media="t/en-0/$Number$.vtt">
+        <SegmentTimeline><S t="0" d="1000"/></SegmentTimeline>
+      </SegmentTemplate>
+      <Representation mimeType="text/vtt" id="en-0"/>
+    </AdaptationSet>
+    <AdaptationSet lang="en-US" contentType="text">
+      <Role schemeIdUri="urn:mpeg:dash:role:2011" value="subtitle"/>
+      <SegmentTemplate timescale="1000" startNumber="1" media="t/en-1/$Number$.vtt">
+        <SegmentTimeline><S t="0" d="1000"/></SegmentTimeline>
+      </SegmentTemplate>
+      <Representation mimeType="text/vtt" id="en-1"/>
+    </AdaptationSet>
+  </Period>
+</MPD>`;
+    const inbox = [
+      {
+        responseId: 'playback',
+        requestStartedAtMs: 1,
+        kind: 'playback-info' as const,
+        url: 'https://api.example.invalid/playbackInfo',
+        raw: SYNTHETIC_PLAYBACK_INFO,
+        generation: CURRENT_GENERATION,
+        contentIdentity: EPISODE_ONE,
+      },
+      {
+        responseId: 'manifest',
+        requestStartedAtMs: 1,
+        kind: 'manifest' as const,
+        url: 'https://media.example.invalid/title/dash.mpd',
+        raw: duplicateManifest,
+        generation: CURRENT_GENERATION,
+        contentIdentity: EPISODE_ONE,
+      },
+      {
+        responseId: 'observed-vtt',
+        requestStartedAtMs: 1,
+        kind: 'vtt' as const,
+        url: 'https://media.example.invalid/title/t/en-1/1.vtt',
+        raw: 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nSynthetic',
+        generation: CURRENT_GENERATION,
+        contentIdentity: EPISODE_ONE,
+      },
+    ];
+
+    expect(
+      resolveMaxTrackResources(
+        inbox,
+        [ENGLISH],
+        CURRENT_GENERATION,
+        { parser: new DOMParser() },
+      ),
+    ).toEqual({});
+    expect(
+      resolveMaxTrackResources(
+        inbox,
+        [ENGLISH],
+        CURRENT_GENERATION,
+        {
+          parser: new DOMParser(),
+          observedVttUrls: [
+            'https://media.example.invalid/title/t/en-1/1.vtt',
+          ],
+        },
+      ),
+    ).toHaveProperty(
+      'en-US-subtitles.segments.0.url',
+      'https://media.example.invalid/title/t/en-1/1.vtt',
+    );
+  });
+
   it('keeps a previous generation complete mapping invisible after reset', () => {
     const withPlayback = recordMaxResponse(EMPTY_MAX_RESPONSE_INBOX, {
       responseId: 'episode-one-playback',
+      requestStartedAtMs: 1,
       kind: 'playback-info',
       url: 'https://api.example.invalid/playbackInfo',
       raw: SYNTHETIC_PLAYBACK_INFO,
@@ -82,6 +159,7 @@ describe('Max response inbox', () => {
     });
     const episodeOne = recordMaxResponse(withPlayback, {
       responseId: 'episode-one-mpd',
+      requestStartedAtMs: 1,
       kind: 'manifest',
       url: 'https://media.example.invalid/title/dash.mpd',
       raw: SYNTHETIC_MPD,
@@ -94,7 +172,7 @@ describe('Max response inbox', () => {
           episodeOne,
           [ENGLISH],
           CURRENT_GENERATION,
-          new DOMParser(),
+          { parser: new DOMParser() },
         ),
       ),
     ).toEqual([ENGLISH.id]);
@@ -115,7 +193,7 @@ describe('Max response inbox', () => {
         episodeTwo,
         [ENGLISH],
         episodeTwoGeneration,
-        new DOMParser(),
+        { parser: new DOMParser() },
       ),
     ).toEqual({});
   });
@@ -127,6 +205,7 @@ describe('Max response inbox', () => {
     );
     const withOldPlayback = recordMaxResponse(EMPTY_MAX_RESPONSE_INBOX, {
       responseId: 'episode-one-playback',
+      requestStartedAtMs: 1,
       kind: 'playback-info',
       url: 'https://api.example.invalid/playbackInfo',
       raw: SYNTHETIC_PLAYBACK_INFO,
@@ -135,6 +214,7 @@ describe('Max response inbox', () => {
     });
     const withNewPlayback = recordMaxResponse(withOldPlayback, {
       responseId: 'episode-two-playback',
+      requestStartedAtMs: 1,
       kind: 'playback-info',
       url: 'https://api.example.invalid/playbackInfo',
       raw: episodeTwoPlaybackInfo,
@@ -143,6 +223,7 @@ describe('Max response inbox', () => {
     });
     const raced = recordMaxResponse(withNewPlayback, {
       responseId: 'episode-two-mpd',
+      requestStartedAtMs: 1,
       kind: 'manifest',
       url: 'https://media.example.invalid/title-two/dash.mpd',
       raw: SYNTHETIC_MPD,
@@ -184,7 +265,7 @@ describe('Max response inbox', () => {
           retained,
           [ENGLISH],
           episodeTwoGeneration,
-          new DOMParser(),
+          { parser: new DOMParser() },
         ),
       ),
     ).toEqual([ENGLISH.id]);
@@ -197,6 +278,7 @@ describe('Max response inbox', () => {
     );
     const activePlayback = recordMaxResponse(EMPTY_MAX_RESPONSE_INBOX, {
       responseId: 'active-playback',
+      requestStartedAtMs: 1,
       kind: 'playback-info',
       url: 'https://api.example.invalid/playbackInfo',
       raw: SYNTHETIC_PLAYBACK_INFO,
@@ -205,6 +287,7 @@ describe('Max response inbox', () => {
     });
     const activeManifest = recordMaxResponse(activePlayback, {
       responseId: 'active-manifest',
+      requestStartedAtMs: 1,
       kind: 'manifest',
       url: 'https://media.example.invalid/title/dash.mpd',
       raw: SYNTHETIC_MPD,
@@ -213,6 +296,7 @@ describe('Max response inbox', () => {
     });
     const prefetched = recordMaxResponse(activeManifest, {
       responseId: 'prefetched-next-playback',
+      requestStartedAtMs: 1,
       kind: 'playback-info',
       url: 'https://api.example.invalid/playbackInfo',
       raw: nextPlaybackInfo,
@@ -243,6 +327,7 @@ describe('Max response inbox', () => {
 
     const withNextManifest = recordMaxResponse(retained, {
       responseId: 'episode-two-manifest',
+      requestStartedAtMs: 1,
       kind: 'manifest',
       url: 'https://media.example.invalid/title-two/dash.mpd',
       raw: SYNTHETIC_MPD,
@@ -255,7 +340,7 @@ describe('Max response inbox', () => {
           withNextManifest,
           [ENGLISH],
           episodeTwoGeneration,
-          new DOMParser(),
+          { parser: new DOMParser() },
         ),
       ),
     ).toEqual([ENGLISH.id]);
@@ -264,6 +349,7 @@ describe('Max response inbox', () => {
   it('rebinds same-content mapping metadata across a clock reset but drops old VTT', () => {
     const withPlayback = recordMaxResponse(EMPTY_MAX_RESPONSE_INBOX, {
       responseId: 'same-content-playback',
+      requestStartedAtMs: 1,
       kind: 'playback-info',
       url: 'https://api.example.invalid/playbackInfo',
       raw: SYNTHETIC_PLAYBACK_INFO,
@@ -272,6 +358,7 @@ describe('Max response inbox', () => {
     });
     const withManifest = recordMaxResponse(withPlayback, {
       responseId: 'same-content-mpd',
+      requestStartedAtMs: 1,
       kind: 'manifest',
       url: 'https://media.example.invalid/title/dash.mpd',
       raw: SYNTHETIC_MPD,
@@ -280,6 +367,7 @@ describe('Max response inbox', () => {
     });
     const withVtt = recordMaxResponse(withManifest, {
       responseId: 'old-clock-vtt',
+      requestStartedAtMs: 1,
       kind: 'vtt',
       url: 'https://media.example.invalid/title/t/en/1.vtt',
       raw: 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nOld clock',
@@ -310,7 +398,7 @@ describe('Max response inbox', () => {
           retained,
           [ENGLISH],
           nextClock,
-          new DOMParser(),
+          { parser: new DOMParser() },
         ),
       ),
     ).toEqual([ENGLISH.id]);
@@ -324,6 +412,7 @@ describe('Max response inbox', () => {
     };
     const withPlayback = recordMaxResponse(EMPTY_MAX_RESPONSE_INBOX, {
       responseId: 'selection-playback',
+      requestStartedAtMs: 1,
       kind: 'playback-info',
       url: 'https://api.example.invalid/playbackInfo',
       raw: SYNTHETIC_PLAYBACK_INFO,
@@ -332,6 +421,7 @@ describe('Max response inbox', () => {
     });
     const withManifest = recordMaxResponse(withPlayback, {
       responseId: 'selection-mpd',
+      requestStartedAtMs: 1,
       kind: 'manifest',
       url: 'https://media.example.invalid/title/dash.mpd',
       raw: SYNTHETIC_MPD,
@@ -340,6 +430,7 @@ describe('Max response inbox', () => {
     });
     const withVtt = recordMaxResponse(withManifest, {
       responseId: 'old-selection-vtt',
+      requestStartedAtMs: 1,
       kind: 'vtt',
       url: 'https://media.example.invalid/title/t/en/1.vtt',
       raw: 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nOld pair',
@@ -370,7 +461,7 @@ describe('Max response inbox', () => {
           retained,
           [ENGLISH],
           nextSelection,
-          new DOMParser(),
+          { parser: new DOMParser() },
         ),
       ),
     ).toEqual([ENGLISH.id]);
@@ -379,7 +470,7 @@ describe('Max response inbox', () => {
         retained,
         [ENGLISH],
         currentSelection,
-        new DOMParser(),
+        { parser: new DOMParser() },
       ),
     ).toEqual({});
   });

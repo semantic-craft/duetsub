@@ -321,6 +321,95 @@ describe('mapMaxTrackResources', () => {
     ).toEqual({});
   });
 
+  it('uses an observed native VTT request to disambiguate duplicate adaptations', () => {
+    const duplicateEnglishMpd = `<?xml version="1.0"?>
+<MPD xmlns="urn:mpeg:dash:schema:mpd:2011">
+  <Period start="PT0S" duration="PT30M">
+    <AdaptationSet lang="en-US" contentType="text">
+      <Role schemeIdUri="urn:mpeg:dash:role:2011" value="subtitle"/>
+      <SegmentTemplate timescale="1000" startNumber="1" media="t/en-0/$Number$.vtt">
+        <SegmentTimeline><S t="0" d="1000"/></SegmentTimeline>
+      </SegmentTemplate>
+      <Representation mimeType="text/vtt" id="en-0"/>
+    </AdaptationSet>
+    <AdaptationSet lang="en-US" contentType="text">
+      <Role schemeIdUri="urn:mpeg:dash:role:2011" value="subtitle"/>
+      <SegmentTemplate timescale="1000" startNumber="1" media="t/en-1/$Number$.vtt">
+        <SegmentTimeline><S t="0" d="1000"/></SegmentTimeline>
+      </SegmentTemplate>
+      <Representation mimeType="text/vtt" id="en-1"/>
+    </AdaptationSet>
+  </Period>
+</MPD>`;
+    const input = {
+      tracks: [ENGLISH],
+      playbackInfoRaw: SYNTHETIC_PLAYBACK_INFO,
+      manifestUrl: 'https://media.example.invalid/title/dash.mpd',
+      manifestRaw: duplicateEnglishMpd,
+      parser: new DOMParser(),
+    };
+
+    expect(mapMaxTrackResources(input)).toEqual({});
+    expect(
+      mapMaxTrackResources({
+        ...input,
+        observedVttUrls: [
+          'https://media.example.invalid/title/t/en-1/1.vtt?observed=1',
+        ],
+      }),
+    ).toHaveProperty(
+      'en-US-subtitles.segments.0.url',
+      'https://media.example.invalid/title/t/en-1/1.vtt',
+    );
+    expect(
+      mapMaxTrackResources({
+        ...input,
+        observedVttUrls: [
+          'https://media.example.invalid/title/t/en-0/1.vtt',
+          'https://media.example.invalid/title/t/en-1/1.vtt',
+        ],
+      }),
+    ).toEqual({});
+  });
+
+  it('treats byte-identical playbackInfo declarations as one native track', () => {
+    const duplicatedPlaybackInfo = JSON.stringify({
+      manifest: {
+        url: 'https://media.example.invalid/title/dash.mpd?synthetic=1',
+      },
+      videos: [{
+        textTracks: [
+          {
+            type: 'subtitles',
+            language: 'en-US',
+            displayName: 'English',
+            format: 'webvtt',
+          },
+          {
+            type: 'subtitles',
+            language: 'en-US',
+            displayName: 'English',
+            format: 'webvtt',
+          },
+        ],
+      }],
+    });
+
+    expect(
+      mapMaxTrackResources({
+        tracks: [ENGLISH],
+        playbackInfoRaw: duplicatedPlaybackInfo,
+        manifestUrl:
+          'https://media.example.invalid/title/dash.mpd?synthetic=1',
+        manifestRaw: SYNTHETIC_MPD,
+        parser: new DOMParser(),
+      }),
+    ).toHaveProperty(
+      'en-US-subtitles.segments.0.url',
+      'https://media.example.invalid/title/t/en/1.vtt',
+    );
+  });
+
   it.each([
     'https://captions.example.com/title/dash.mpd',
     'https://akm.asia.prd.media.max.com/other/dash.mpd',

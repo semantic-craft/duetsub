@@ -102,10 +102,19 @@ export interface MaxSubtitleResponseMessage
   readonly type: 'max-subtitle-response';
   readonly siteId: 'max';
   readonly responseId: string;
+  readonly requestStartedAtMs: number;
   readonly kind: MaxSubtitleResponseKind;
   readonly contentIdentity: string;
   readonly url: string;
   readonly raw: string;
+}
+
+export interface MaxObserverReadyMessage
+  extends UncorrelatedMessageEnvelope {
+  readonly direction: 'isolated-to-main';
+  readonly type: 'max-observer-ready';
+  readonly siteId: 'max';
+  readonly contentIdentity: string;
 }
 
 export interface DisneyManifestMessage
@@ -251,6 +260,7 @@ export type MainToIsolatedMessage =
   | YoutubePlayerCommandResultMessage;
 export type IsolatedToMainMessage =
   | RequestFakeDataMessage
+  | MaxObserverReadyMessage
   | NetflixTrackRequestMessage
   | PrimeCachedTtmlRequestMessage
   | PrimeTrackSelectionMessage
@@ -394,6 +404,7 @@ export function maxSubtitleResponseMessage(
   url: string,
   raw: string,
   contentIdentity: string,
+  requestStartedAtMs: number,
 ): MaxSubtitleResponseMessage {
   return {
     channel: CHANNEL,
@@ -402,10 +413,24 @@ export function maxSubtitleResponseMessage(
     type: 'max-subtitle-response',
     siteId: 'max',
     responseId,
+    requestStartedAtMs,
     kind,
     contentIdentity,
     url,
     raw,
+  };
+}
+
+export function maxObserverReadyMessage(
+  contentIdentity: string,
+): MaxObserverReadyMessage {
+  return {
+    channel: CHANNEL,
+    version: VERSION,
+    direction: 'isolated-to-main',
+    type: 'max-observer-ready',
+    siteId: 'max',
+    contentIdentity,
   };
 }
 
@@ -630,6 +655,9 @@ export function isDuetSubMessage(value: unknown): value is DuetSubMessage {
       typeof candidate.responseId === 'string' &&
       candidate.responseId.length > 0 &&
       candidate.responseId.length <= 128 &&
+      typeof candidate.requestStartedAtMs === 'number' &&
+      Number.isFinite(candidate.requestStartedAtMs) &&
+      candidate.requestStartedAtMs >= 0 &&
       isMaxSubtitleResponseKind(candidate.kind) &&
       isMaxContentIdentity(candidate.contentIdentity) &&
       typeof candidate.url === 'string' &&
@@ -637,6 +665,13 @@ export function isDuetSubMessage(value: unknown): value is DuetSubMessage {
       typeof candidate.raw === 'string' &&
       candidate.raw.length > 0 &&
       candidate.raw.length <= 5_000_000
+    );
+  }
+  if (candidate.type === 'max-observer-ready') {
+    return (
+      candidate.direction === 'isolated-to-main' &&
+      candidate.siteId === 'max' &&
+      isMaxContentIdentity(candidate.contentIdentity)
     );
   }
   if (candidate.type === 'disney-manifest') {
@@ -1013,7 +1048,7 @@ function isMaxSubtitleResponseKind(
 
 function isMaxContentIdentity(value: unknown): value is string {
   return typeof value === 'string' &&
-    /^\/video\/watch\/[A-Za-z0-9-]{1,128}\/[A-Za-z0-9-]{1,128}$/.test(value);
+    /^\/video\/watch\/[A-Za-z0-9-]{1,128}$/.test(value);
 }
 
 function isMaxHost(hostname: string): boolean {

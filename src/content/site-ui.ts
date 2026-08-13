@@ -155,9 +155,12 @@ function findDisneyControls(disneyUi?: HTMLElement): {
   readonly controls?: HTMLElement;
   readonly toggleBefore?: HTMLElement;
 } {
-  const root = disneyUi
-    ?.querySelector<HTMLElement>('main-app-controls-overlay')
-    ?.shadowRoot;
+  const controlsLayer = disneyUi
+    ?.querySelector<HTMLElement>('main-app-controls-overlay');
+  if (controlsLayer !== undefined && controlsLayer !== null) {
+    raiseDisneyControlsAboveGestureLayer(controlsLayer);
+  }
+  const root = controlsLayer?.shadowRoot;
   if (root === undefined || root === null) return {};
 
   const candidates = root.querySelectorAll<HTMLElement>(
@@ -173,6 +176,32 @@ function findDisneyControls(disneyUi?: HTMLElement): {
     if (toggleBefore !== undefined) return { controls, toggleBefore };
   }
   return {};
+}
+
+function raiseDisneyControlsAboveGestureLayer(
+  controlsLayer: HTMLElement,
+): void {
+  const gestureLayer = document.querySelector<HTMLElement>('pointer-actions');
+  if (gestureLayer === null) return;
+
+  const gestureZIndex = Number.parseInt(
+    getComputedStyle(gestureLayer).zIndex,
+    10,
+  );
+  if (!Number.isFinite(gestureZIndex)) return;
+
+  const controlsZIndex = Number.parseInt(
+    getComputedStyle(controlsLayer).zIndex,
+    10,
+  );
+  if (
+    Number.isFinite(controlsZIndex) &&
+    controlsZIndex > gestureZIndex
+  ) {
+    return;
+  }
+
+  controlsLayer.style.zIndex = String(gestureZIndex + 1);
 }
 
 function findDisneyVideo(selector: string): HTMLVideoElement | undefined {

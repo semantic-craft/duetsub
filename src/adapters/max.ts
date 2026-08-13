@@ -3,7 +3,11 @@ import {
   samePlaybackGeneration,
   type PlaybackGeneration,
 } from '../core/lifecycle';
-import { isDuetSubMessage } from '../core/messages';
+import {
+  isDuetSubMessage,
+  maxObserverReadyMessage,
+  postDuetSubMessage,
+} from '../core/messages';
 import { parseWebVtt } from '../core/webvtt';
 import {
   EMPTY_MAX_RESPONSE_INBOX,
@@ -11,6 +15,7 @@ import {
   resolveMaxTrackResourceSelection,
   retainMaxResponsesForGeneration,
   type MaxResponseInbox,
+  type MaxTrackResourceResolution,
 } from './max-responses';
 import {
   type MaxTrackResource,
@@ -30,6 +35,7 @@ const TRACK_BUTTON_SELECTOR =
 const TRACK_CHECK_PREFIX = 'player-ux-text-track-check-';
 const DOM_TIMEOUT_MS = 8_000;
 const MAPPING_TIMEOUT_MS = 15_000;
+const OWNERSHIP_PROBE_TIMEOUT_MS = 3_000;
 const MAX_VTT_LENGTH = 2_000_000;
 
 interface AdBreak {
@@ -54,6 +60,7 @@ class MaxAdapter implements SiteAdapter {
   > = [];
   readonly #mappingWaiters = new Set<() => void>();
   readonly #fetchControllers = new Set<AbortController>();
+  #ownershipProbeQueue: Promise<void> = Promise.resolve();
 
   #enumerating = false;
   #enumerateAgain = false;
@@ -74,6 +81,10 @@ class MaxAdapter implements SiteAdapter {
   constructor() {
     window.addEventListener('message', this.#onMessage);
     window.setInterval(() => this.#updateAdState(), 250);
+    const contentIdentity = readMaxContentIdentity(window.location.href);
+    if (contentIdentity !== undefined) {
+      postDuetSubMessage(maxObserverReadyMessage(contentIdentity));
+    }
   }
 
   start(): void {
@@ -204,6 +215,7 @@ class MaxAdapter implements SiteAdapter {
 
     this.#inbox = recordMaxResponse(this.#inbox, {
       responseId: message.responseId,
+      requestStartedAtMs: message.requestStartedAtMs,
       kind: message.kind,
       contentIdentity: message.contentIdentity,
       url: message.url,
@@ -237,6 +249,7 @@ class MaxAdapter implements SiteAdapter {
     generation: PlaybackGeneration,
   ): Promise<MaxTrackResource> {
     const startedAt = performance.now();
+    let ownershipProbed = false;
 
     while (performance.now() - startedAt < MAPPING_TIMEOUT_MS) {
       if (!sameGeneration(this.#generation, generation)) {
@@ -252,12 +265,120 @@ class MaxAdapter implements SiteAdapter {
         this.#activeManifestUrl = resolution.manifestUrl;
         return resource;
       }
+      if (resolution !== undefined && !ownershipProbed) {
+        ownershipProbed = true;
+        const probed = await this.#probeTrackResource(track, generation);
+        if (probed !== undefined) {
+          this.#activeManifestUrl = probed.manifestUrl;
+          return probed.resources[track.id];
+        }
+      }
       await this.#waitForMappingChange();
     }
 
     throw new Error(
       `Max complete playbackInfo/manifest mapping unavailable: ${track.id}`,
     );
+  }
+
+  async #probeTrackResource(
+    track: TrackInfo,
+    generation: PlaybackGeneration,
+  ): Promise<MaxTrackResourceResolution | undefined> {
+    const previousProbe = this.#ownershipProbeQueue;
+    let releaseProbe: () => void = () => undefined;
+    this.#ownershipProbeQueue = new Promise<void>((resolve) => {
+      releaseProbe = resolve;
+    });
+    await previousProbe;
+
+    try {
+      if (!sameGeneration(this.#generation, generation)) return undefined;
+      const player = await waitForMaxPlayerReady();
+      const contentIdentity = readMaxContentIdentity(window.location.href);
+      if (contentIdentity === undefined) return undefined;
+      const menuWasOpen = isTrackMenuOpen(player);
+      let originalTrackId: string | undefined;
+      let resolution: MaxTrackResourceResolution | undefined;
+      let operationError: unknown;
+
+      try {
+        if (!menuWasOpen) await openTrackMenu(player);
+        originalTrackId = selectedTrackId(player);
+        if (originalTrackId === undefined) {
+          throw new Error('Max selected native track is ambiguous');
+        }
+        if (
+          originalTrackId === track.id &&
+          !(await selectTrack(player, 'off'))
+        ) {
+          throw new Error('Could not refresh the selected Max track');
+        }
+        const responseIdsBeforeSelection = new Set(
+          this.#inbox.map(({ responseId }) => responseId),
+        );
+        const selectionStartedAtMs =
+          performance.timeOrigin + performance.now();
+        if (!(await selectTrack(player, track.id))) {
+          throw new Error(`Could not probe Max track ownership: ${track.id}`);
+        }
+
+        const startedAt = performance.now();
+        while (
+          performance.now() - startedAt < OWNERSHIP_PROBE_TIMEOUT_MS
+        ) {
+          if (!sameGeneration(this.#generation, generation)) break;
+          const observedVttUrls = this.#inbox
+            .filter(
+              (response) =>
+                response.kind === 'vtt' &&
+                sameGeneration(response.generation, generation) &&
+                !responseIdsBeforeSelection.has(response.responseId) &&
+                response.requestStartedAtMs > selectionStartedAtMs,
+            )
+            .map(({ url }) => url);
+          const candidate = resolveMaxTrackResourceSelection(
+            this.#inbox,
+            this.#tracks,
+            generation,
+            { observedVttUrls },
+          );
+          if (candidate?.resources[track.id] !== undefined) {
+            resolution = candidate;
+            break;
+          }
+          await this.#waitForMappingChange();
+        }
+      } catch (error) {
+        operationError = error;
+      }
+
+      let restorationPlayer: HTMLElement | undefined;
+      try {
+        if (readMaxContentIdentity(window.location.href) !== contentIdentity) {
+          throw new Error('Max content changed during ownership probe');
+        }
+        restorationPlayer = player.isConnected
+          ? player
+          : await waitForMaxPlayerReady();
+        if (
+          originalTrackId !== undefined &&
+          selectedTrackId(restorationPlayer) !== originalTrackId &&
+          !(await selectTrack(restorationPlayer, originalTrackId))
+        ) {
+          throw new Error('Could not restore Max native track');
+        }
+        if (!(await restoreTrackMenuState(restorationPlayer, menuWasOpen))) {
+          throw new Error('Could not restore Max subtitle menu state');
+        }
+      } catch (error) {
+        operationError = error;
+      }
+      if (operationError !== undefined) throw asError(operationError);
+      return resolution;
+    } finally {
+      releaseProbe();
+    }
   }
 
   #waitForMappingChange(): Promise<void> {
@@ -413,24 +534,8 @@ function readOfficialTracks(player: HTMLElement): TrackInfo[] {
 
 function trackFromButton(button: HTMLButtonElement): TrackInfo | undefined {
   const label = button.getAttribute('aria-label')?.trim() ?? '';
-  const checks = Array.from(
-    button.querySelectorAll<HTMLElement>(
-      `[data-testid^="${TRACK_CHECK_PREFIX}"]`,
-    ),
-  );
-  const testId = checks.length === 1
-    ? checks[0].getAttribute('data-testid')
-    : null;
-  if (
-    label === '' ||
-    testId === null ||
-    !testId.startsWith(TRACK_CHECK_PREFIX)
-  ) {
-    return undefined;
-  }
-
-  const id = testId.slice(TRACK_CHECK_PREFIX.length);
-  if (id === 'off') return undefined;
+  const id = trackIdFromButton(button);
+  if (label === '' || id === undefined || id === 'off') return undefined;
   const language = languageFromTrackId(id);
   return language === undefined
     ? undefined
@@ -443,6 +548,24 @@ function trackFromButton(button: HTMLButtonElement): TrackInfo | undefined {
           ? 'closed-captions'
           : 'subtitles',
       };
+}
+
+function trackIdFromButton(
+  button: HTMLButtonElement,
+): string | undefined {
+  const checks = Array.from(
+    button.querySelectorAll<HTMLElement>(
+      `[data-testid^="${TRACK_CHECK_PREFIX}"]`,
+    ),
+  );
+  const testId = checks.length === 1
+    ? checks[0].getAttribute('data-testid')
+    : null;
+  if (testId === null || !testId.startsWith(TRACK_CHECK_PREFIX)) {
+    return undefined;
+  }
+  const id = testId.slice(TRACK_CHECK_PREFIX.length);
+  return id.length > 0 ? id : undefined;
 }
 
 function languageFromTrackId(id: string): string | undefined {
@@ -511,11 +634,65 @@ async function closeTrackMenu(player: HTMLElement): Promise<boolean> {
   }
 }
 
+async function restoreTrackMenuState(
+  player: HTMLElement,
+  wasOpen: boolean,
+): Promise<boolean> {
+  if (wasOpen) {
+    if (isTrackMenuOpen(player)) return true;
+    try {
+      await openTrackMenu(player);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return closeTrackMenu(player);
+}
+
 function isTrackMenuOpen(player: HTMLElement): boolean {
   return visibleElements<HTMLElement>(
     MENU_DISMISS_SELECTOR,
     player,
   ).length > 0;
+}
+
+function selectedTrackId(player: HTMLElement): string | undefined {
+  const selected = new Set(
+    visibleElements<HTMLButtonElement>(TRACK_BUTTON_SELECTOR, player)
+      .filter((button) => button.getAttribute('aria-checked') === 'true')
+      .map(trackIdFromButton)
+      .filter((id): id is string => id !== undefined),
+  );
+  return selected.size === 1 ? [...selected][0] : undefined;
+}
+
+async function selectTrack(
+  player: HTMLElement,
+  trackId: string,
+): Promise<boolean> {
+  if (!isTrackMenuOpen(player)) {
+    try {
+      await openTrackMenu(player);
+    } catch {
+      return false;
+    }
+  }
+  const button = visibleElements<HTMLButtonElement>(
+    TRACK_BUTTON_SELECTOR,
+    player,
+  ).find((candidate) => trackIdFromButton(candidate) === trackId);
+  if (button === undefined) return false;
+  button.click();
+  try {
+    await waitUntil(
+      () => player.isConnected && selectedTrackId(player) === trackId,
+      DOM_TIMEOUT_MS,
+    );
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function currentMaxPlayer():

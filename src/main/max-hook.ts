@@ -2,6 +2,7 @@ import {
   isMaxSubtitleObservationUrl,
   maxSubtitleResponseMessage,
   postDuetSubMessage,
+  type MaxSubtitleResponseMessage,
   type MaxSubtitleResponseKind,
 } from '../core/messages';
 import { readMaxContentIdentity } from '../adapters/max-location';
@@ -11,26 +12,84 @@ interface MaxObservationTarget {
   readonly url: string;
 }
 
-const xhrTargets = new WeakMap<XMLHttpRequest, MaxObservationTarget>();
-
-export function startMaxMainHook(): void {
-  patchFetch();
-  patchXmlHttpRequest();
+interface MaxObservation extends MaxObservationTarget {
+  readonly requestStartedAtMs: number;
 }
 
-function patchFetch(): void {
+const xhrTargets = new WeakMap<XMLHttpRequest, MaxObservationTarget>();
+const MAX_REPLAYABLE_METADATA = 4;
+
+export function startMaxMainHook(): void {
+  const replayableMetadata = new Map<string, MaxSubtitleResponseMessage>();
+  const forward = (target: MaxObservation, raw: string) => {
+    const message = observedResponseMessage(target, raw);
+    if (message === undefined) return;
+    if (message.kind !== 'vtt') {
+      const key = `${message.contentIdentity}\u0000${message.kind}`;
+      replayableMetadata.delete(key);
+      replayableMetadata.set(key, message);
+      while (replayableMetadata.size > MAX_REPLAYABLE_METADATA) {
+        const oldestKey = replayableMetadata.keys().next().value;
+        if (oldestKey === undefined) break;
+        replayableMetadata.delete(oldestKey);
+      }
+    }
+    postDuetSubMessage(message);
+  };
+
+  patchFetch(forward);
+  patchXmlHttpRequest(forward);
+  window.addEventListener('message', (event: MessageEvent<unknown>) => {
+    if (
+      event.source !== window ||
+      !isMaxObserverReadyMessage(event.data)
+    ) {
+      return;
+    }
+    for (const message of replayableMetadata.values()) {
+      if (message.contentIdentity === event.data.contentIdentity) {
+        postDuetSubMessage(message);
+      }
+    }
+  });
+}
+
+function isMaxObserverReadyMessage(
+  value: unknown,
+): value is {
+  readonly contentIdentity: string;
+} {
+  if (typeof value !== 'object' || value === null) return false;
+  const message = value as Record<string, unknown>;
+  return (
+    message.channel === 'duetsub' &&
+    message.version === 1 &&
+    message.direction === 'isolated-to-main' &&
+    message.type === 'max-observer-ready' &&
+    message.siteId === 'max' &&
+    typeof message.contentIdentity === 'string' &&
+    /^\/video\/watch\/[A-Za-z0-9-]{1,128}$/.test(
+      message.contentIdentity,
+    )
+  );
+}
+
+function patchFetch(
+  forward: (target: MaxObservation, raw: string) => void,
+): void {
   const originalFetch = window.fetch;
 
   window.fetch = function duetSubMaxFetch(
     input: RequestInfo | URL,
     init?: RequestInit,
   ): Promise<Response> {
-    const result = originalFetch.call(this, input, init);
     const requestedUrl = requestUrl(input);
     const requestedTarget =
       requestedUrl === undefined
         ? undefined
         : observationTarget(requestedUrl);
+    const requestStartedAtMs = performance.timeOrigin + performance.now();
+    const result = originalFetch.call(this, input, init);
 
     void result.then(
       (response) => {
@@ -38,7 +97,10 @@ function patchFetch(): void {
           requestedTarget ??
           observationTarget(response.url);
         if (target !== undefined) {
-          void observeFetchResponse(response, target);
+          void observeFetchResponse(response, {
+            ...target,
+            requestStartedAtMs,
+          }, forward);
         }
       },
       () => undefined,
@@ -47,7 +109,9 @@ function patchFetch(): void {
   };
 }
 
-function patchXmlHttpRequest(): void {
+function patchXmlHttpRequest(
+  forward: (target: MaxObservation, raw: string) => void,
+): void {
   const originalOpen = XMLHttpRequest.prototype.open;
   const originalSend = XMLHttpRequest.prototype.send;
 
@@ -73,10 +137,14 @@ function patchXmlHttpRequest(): void {
   ): void {
     const target = xhrTargets.get(this);
     if (target !== undefined) {
+      const observation: MaxObservation = {
+        ...target,
+        requestStartedAtMs: performance.timeOrigin + performance.now(),
+      };
       this.addEventListener(
         'load',
         () => {
-          void observeXhrResponse(this, target);
+          void observeXhrResponse(this, observation, forward);
         },
         { once: true },
       );
@@ -87,11 +155,12 @@ function patchXmlHttpRequest(): void {
 
 async function observeFetchResponse(
   response: Response,
-  target: MaxObservationTarget,
+  target: MaxObservation,
+  forward: (target: MaxObservation, raw: string) => void,
 ): Promise<void> {
   try {
     if (!response.ok) return;
-    forwardRawResponse(target, await response.clone().text());
+    forward(target, await response.clone().text());
   } catch {
     // Observing must never affect the page's original response.
   }
@@ -99,12 +168,13 @@ async function observeFetchResponse(
 
 async function observeXhrResponse(
   xhr: XMLHttpRequest,
-  target: MaxObservationTarget,
+  target: MaxObservation,
+  forward: (target: MaxObservation, raw: string) => void,
 ): Promise<void> {
   try {
     if (xhr.status < 200 || xhr.status >= 300) return;
     const raw = await readXhrBody(xhr);
-    if (raw !== undefined) forwardRawResponse(target, raw);
+    if (raw !== undefined) forward(target, raw);
   } catch {
     // Observing must never affect the page's original response.
   }
@@ -119,21 +189,20 @@ function readXhrBody(xhr: XMLHttpRequest): string | Promise<string> | undefined 
   return undefined;
 }
 
-function forwardRawResponse(
-  target: MaxObservationTarget,
+function observedResponseMessage(
+  target: MaxObservation,
   raw: string,
-): void {
-  if (raw.length === 0 || raw.length > 5_000_000) return;
+): MaxSubtitleResponseMessage | undefined {
+  if (raw.length === 0 || raw.length > 5_000_000) return undefined;
   const contentIdentity = readMaxContentIdentity(window.location.href);
-  if (contentIdentity === undefined) return;
-  postDuetSubMessage(
-    maxSubtitleResponseMessage(
-      crypto.randomUUID(),
-      target.kind,
-      target.url,
-      raw,
-      contentIdentity,
-    ),
+  if (contentIdentity === undefined) return undefined;
+  return maxSubtitleResponseMessage(
+    crypto.randomUUID(),
+    target.kind,
+    target.url,
+    raw,
+    contentIdentity,
+    target.requestStartedAtMs,
   );
 }
 

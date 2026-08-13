@@ -4,7 +4,7 @@ import {
   type PlaybackGeneration,
 } from '../core/lifecycle';
 import {
-  mapMaxTrackResources,
+  mapMaxTrackResourceSelection,
   readMaxPlaybackManifestUrl,
   sameMaxManifestUrl,
   type MaxTrackMappingInput,
@@ -17,6 +17,7 @@ export type MaxResponseKind = 'playback-info' | 'manifest' | 'vtt';
 
 export interface MaxResponseObservation {
   readonly responseId: string;
+  readonly requestStartedAtMs: number;
   readonly kind: MaxResponseKind;
   readonly contentIdentity: string;
   readonly url: string;
@@ -69,17 +70,22 @@ export interface MaxTrackResourceResolution {
   readonly manifestUrl: string;
 }
 
+export interface MaxTrackResolutionOptions {
+  readonly observedVttUrls?: readonly string[];
+  readonly parser?: MaxTrackMappingInput['parser'];
+}
+
 export function resolveMaxTrackResources(
   inbox: MaxResponseInbox,
   tracks: readonly TrackInfo[],
   generation: PlaybackGeneration,
-  parser?: MaxTrackMappingInput['parser'],
+  options: MaxTrackResolutionOptions = {},
 ): MaxTrackResourceMap {
   return resolveMaxTrackResourceSelection(
     inbox,
     tracks,
     generation,
-    parser,
+    options,
   )?.resources ?? {};
 }
 
@@ -87,7 +93,7 @@ export function resolveMaxTrackResourceSelection(
   inbox: MaxResponseInbox,
   tracks: readonly TrackInfo[],
   generation: PlaybackGeneration,
-  parser?: MaxTrackMappingInput['parser'],
+  options: MaxTrackResolutionOptions = {},
 ): MaxTrackResourceResolution | undefined {
   const current = inbox.filter((response) =>
     sameGeneration(response.generation, generation),
@@ -98,18 +104,18 @@ export function resolveMaxTrackResourceSelection(
   const manifests = current
     .filter(({ kind }) => kind === 'manifest')
     .toReversed();
-
   for (const playback of playbackResponses) {
     for (const manifest of manifests) {
-      const mapped = mapMaxTrackResources({
+      const mapped = mapMaxTrackResourceSelection({
         tracks,
         playbackInfoRaw: playback.raw,
         manifestUrl: manifest.url,
         manifestRaw: manifest.raw,
-        parser,
+        observedVttUrls: options.observedVttUrls,
+        parser: options.parser,
       });
-      if (Object.keys(mapped).length > 0) {
-        return { resources: mapped, manifestUrl: manifest.url };
+      if (mapped.metadataComplete) {
+        return { resources: mapped.resources, manifestUrl: manifest.url };
       }
     }
   }

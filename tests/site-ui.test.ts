@@ -205,6 +205,10 @@ describe('Disney+ site UI', () => {
     Object.defineProperty(mute, 'localName', { value: 'toggle-mute-button' });
     Object.defineProperty(controls, 'children', { value: [mute] });
     const controlsOverlay = element(disneyUi);
+    const gestureLayer = element(player);
+    Object.defineProperty(controlsOverlay, 'style', {
+      value: { zIndex: '' },
+    });
     Object.defineProperty(controlsOverlay, 'shadowRoot', {
       value: {
         querySelectorAll: () => [controls],
@@ -234,15 +238,19 @@ describe('Disney+ site UI', () => {
       querySelector: (selector: string) => {
         if (selector === 'disney-web-player') return player;
         if (selector === 'disney-web-player-ui') return disneyUi;
+        if (selector === 'pointer-actions') return gestureLayer;
         return null;
       },
     });
-    vi.stubGlobal('getComputedStyle', () => ({
-      display: 'flex',
-      visibility: 'visible',
-    }));
+    vi.stubGlobal('getComputedStyle', (target: HTMLElement) =>
+      target === gestureLayer
+        ? { display: 'block', visibility: 'visible', zIndex: '1000' }
+        : { display: 'flex', visibility: 'visible', zIndex: 'auto' }
+    );
 
-    expect(findSiteUiTarget('disneyplus')).toMatchObject({
+    const target = findSiteUiTarget('disneyplus');
+
+    expect(target).toMatchObject({
       video,
       player,
       controls,
@@ -253,6 +261,7 @@ describe('Disney+ site UI', () => {
       contentIdentity: '/play/12345678-1234-1234-1234-123456789abc',
       nativeCueVideos: [inactiveVideo, video],
     });
+    expect(Number(controlsOverlay.style.zIndex)).toBeGreaterThan(1000);
   });
 });
 

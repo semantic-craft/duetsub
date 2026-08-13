@@ -1,5 +1,5 @@
 const MAX_WATCH_PATH =
-  /^\/video\/watch\/[A-Za-z0-9-]{1,128}\/[A-Za-z0-9-]{1,128}$/;
+  /^\/video\/watch\/[A-Za-z0-9-]{1,128}$/;
 
 export function readMaxContentIdentity(
   value: string | URL,

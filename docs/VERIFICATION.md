@@ -1,6 +1,6 @@
 # Verification ledger
 
-Last updated: August 9, 2026
+Last updated: August 14, 2026
 
 Gate labels are strict:
 
@@ -21,6 +21,47 @@ Run `npm run release:build`. It must pass:
 - archive checks excluding source maps, environment files, and private keys.
 
 The command output for the release commit is the authoritative count; this document does not freeze a stale test total.
+
+## `v0.2.2` release candidate
+
+- **PASS — automated release archive:** on the authority checkout,
+  `npm run release:build` passed 58 test files / 299 tests with one opt-in live
+  suite skipped, TypeScript checking, Chrome MV3 packaging, stable-ID
+  verification, archive-content checks, and the least-privilege host boundary.
+  The 27-file archive SHA-256 is
+  `bae02e4a843138b2966bc79b3da23b869e9b2dbec7b1402e4ec7bd7945f2c7f2`.
+- **PASS — automated store archive:** `npm run store:build` passed the same
+  behavior and type gates. The 27-file Store package omits `manifest.key`, uses
+  the Store-assigned identity boundary, and has SHA-256
+  `34d5508c7c5690dd94e3cc8687c0836bd12cc69c1da1bbb950e8a5e31b46cbe2`.
+- **PASS — dependency and diff checks:** `npm audit --omit=dev` reported zero
+  vulnerabilities; `git diff --check` passed; no `[DEBUG-...]` instrumentation
+  remains.
+- **PASS — source-equivalent logged-in Disney+ gate:** the Disney+ runtime
+  change in this candidate is unchanged from the previously completed logged-in
+  regression. Raising the native controls above `pointer-actions` restored real
+  pointer clicks without moving the DuetSub controls out of the player.
+- **PASS — source-equivalent logged-in Max gates:** direct navigation to the
+  current single-ID Max watch URL loaded official English and Traditional
+  Chinese subtitles without an SPA workaround. Enabling DuetSub hid the exact
+  matching Max native cue; disabling it restored the native captions; enabling
+  it again restored the bilingual renderer. Back/forward ten seconds, multiple
+  cue transitions, and show-page navigation followed by video replacement all
+  retained a ready picture, synchronized cues, and correct native-caption
+  ownership.
+- **PASS — current black-picture regression:** the Max compositor picture
+  remained visible across multiple cue changes and navigation. The earlier
+  intermittent symptom was not reproduced, so its historical root cause is not
+  claimed as identified.
+- **NOT RUN — exact `0.2.2` archive playback replay:** the version and release
+  text were added after the source-equivalent logged-in gates; the exact
+  packaged candidate was not reloaded for a redundant playback replay.
+- **NOT RUN — commercial advertisement playback:** no commercial ad was
+  encountered during the Max acceptance run.
+- **READY — Chrome Web Store update:** the live dashboard reports version
+  `0.2.1` as **Published - public**. The verified `0.2.2` Store candidate is
+  ready for upload to item `gacjhmmjoinbahljhhnbimhdmpafhdkg`; no submission
+  status is claimed before the dashboard accepts it.
 
 ## `v0.2.1` release candidate
 
