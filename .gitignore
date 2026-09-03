@@ -50,3 +50,7 @@ research/proprietary/*
 /.copilot/skills
 /.opencode/skills
 # <<< dev-link <<<
+
+# agent-skill scaffolding kept local (AGENTS.md + docs/agents/, 2026-08-04)
+/AGENTS.md
+/docs/agents/
