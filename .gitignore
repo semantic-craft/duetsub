@@ -51,6 +51,5 @@ research/proprietary/*
 /.opencode/skills
 # <<< dev-link <<<
 
-# agent-skill scaffolding kept local (AGENTS.md + docs/agents/, 2026-08-04)
-/AGENTS.md
+# Machine-local agent scaffolding; the shared AGENTS.md entry is tracked.
 /docs/agents/
